@@ -1,9 +1,10 @@
 # FEATURES.md — Özellik ve Fonksiyon Referansı
 
-## Sayfalar (7 sayfa + Modal'lar)
+## Sayfalar (8 sayfa + Modal'lar)
 
-> Alt navigasyonda 5 buton var: Harita, Rota, Plan, Özet, Katalog.
-> Adresler ve Borçlar sayfaları mevcut ama nav'da yok — diğer sayfalardan erişilir.
+> Alt navigasyonda 6 buton var: Harita, Rota, Plan, Özet, Katalog, Diğer.
+> "Diğer" butonundan Adresler ve Borçlar sayfalarına erişilir.
+> Profil sayfasına Adresler listesinden müşteri adına tıklayarak erişilir.
 
 ---
 
@@ -21,16 +22,16 @@ Leaflet.js ile interaktif harita.
 
 **İlgili fonksiyonlar:**
 ```js
-initMap()                    // Leaflet haritayı başlat (satır 1223)
-makeIcon(stop)               // Renkli marker ikonu oluştur (satır 1234)
-makePopup(stop)              // Marker popup HTML'i (satır 1253)
-addOrUpdateMarker(stop)      // Marker ekle veya güncelle (satır 1266)
-refreshAllMarkers()          // Tüm markerları yenile (satır 1281)
-setMapFilter(f)              // 'all'|'A'|'B' filtresi (satır 1290)
-renderMapLegend()            // Alt renk legend (satır 1298)
-startGeo()                   // Geocoding kuyruğunu başlat (satır 1311)
-processGeo()                 // Geocoding işle (satır 1323)
-openAssignMap(stopId)        // Haritadan assign modal aç (satır 1285)
+initMap()                    // Leaflet haritayı başlat (satır 1306)
+makeIcon(stop)               // Renkli marker ikonu oluştur (satır 1317)
+makePopup(stop)              // Marker popup HTML'i (satır 1336)
+addOrUpdateMarker(stop)      // Marker ekle veya güncelle (satır 1349)
+refreshAllMarkers()          // Tüm markerları yenile (satır 1364)
+setMapFilter(f)              // 'all'|'A'|'B' filtresi (satır 1373)
+renderMapLegend()            // Alt renk legend (satır 1381)
+startGeo()                   // Geocoding kuyruğunu başlat (satır 1394)
+processGeo()                 // Geocoding işle (satır 1406)
+openAssignMap(stopId)        // Haritadan assign modal aç (satır 1368)
 ```
 
 ---
@@ -53,18 +54,18 @@ Günlük ziyaret takibi.
 
 **İlgili fonksiyonlar:**
 ```js
-renderRota()                 // Tüm rota sayfasını render (satır 1441)
-renderRotaTabs()             // Gün sekmeleri (satır 1449)
-renderRotaBody()             // Stop kartları listesi (satır 1466)
-renderUnassigned(el)         // Atanmamış stoplar bölümü (satır 1519)
-updateRotaBar()              // Alt bar güncelle (satır 1538)
-setRotaWeek(w)               // 'A'|'B' hafta seç (satır 1420)
-setRotaDay(id)               // Gün seç (wA0 vb.) (satır 1427)
-onRotaSearch(v)              // Arama filtrele (satır 1429)
-clearRotaSearch()            // Arama temizle (satır 1434)
-resetRotaDay()               // Günü sıfırla (satır 1553)
-zoomTo(stopId)               // Haritada stop'a zoom (satır 1559)
-exportExcel()                // Rota Excel export (siparişlerle) (satır 2164)
+renderRota()                 // Tüm rota sayfasını render (satır 1524)
+renderRotaTabs()             // Gün sekmeleri (satır 1532)
+renderRotaBody()             // Stop kartları listesi (satır 1548)
+renderUnassigned(el)         // Atanmamış stoplar bölümü (satır 1602)
+updateRotaBar()              // Alt bar güncelle (satır 1621)
+setRotaWeek(w)               // 'A'|'B' hafta seç (satır 1503)
+setRotaDay(id)               // Gün seç (wA0 vb.) (satır 1510)
+onRotaSearch(v)              // Arama filtrele (satır 1512)
+clearRotaSearch()            // Arama temizle (satır 1517)
+resetRotaDay()               // Günü sıfırla (satır 1636)
+zoomTo(stopId)               // Haritada stop'a zoom (satır 1642)
+exportExcel()                // Rota Excel export (siparişlerle) (satır 2246)
 ```
 
 ---
@@ -85,41 +86,42 @@ Günlük sipariş ve ödeme takibi.
 
 **İlgili fonksiyonlar:**
 ```js
-renderPlan()                 // Tüm plan sayfası (satır 1581)
-renderPlanTabs()             // Gün sekmeleri (satır 1588)
-renderPlanBody()             // Stop kartları (satır 1650)
-renderPlanUnsched(el)        // Plansız stoplar (satır 1693)
-renderDaySummary(dayId)      // Gün özet bar (satır 1611)
-payBadgeHtml(stopId)         // Ödeme badge HTML'i (satır 1631)
-setPlanWeek(w)               // Hafta seç (satır 1572)
-setPlanDay(id)               // Gün seç (satır 1579)
-bindPlanEvents()             // Event'leri bağla (satır 1707)
-initDrag()                   // Drag-drop başlat (satır 1764)
-reorder(dayId, from, to)     // Sıra değiştir (satır 1813)
-openMove(fromDayId, stopId)  // Taşıma modal aç (satır 1722)
-execMove(destId)             // Taşımayı uygula (satır 1738)
-closeMove()                  // Taşıma modal kapat (satır 1760)
-openPlanImport()             // Import modal aç (satır 2627)
-applyPlanImport()            // Import verisini uygula (satır 2716)
+renderPlan()                 // Tüm plan sayfası (satır 1664)
+renderPlanTabs()             // Gün sekmeleri (satır 1671)
+renderPlanBody()             // Stop kartları (satır 1733)
+renderPlanUnsched(el)        // Plansız stoplar (satır 1776)
+renderDaySummary(dayId)      // Gün özet bar (satır 1694)
+payBadgeHtml(stopId)         // Ödeme badge HTML'i (satır 1714)
+setPlanWeek(w)               // Hafta seç (satır 1655)
+setPlanDay(id)               // Gün seç (satır 1662)
+bindPlanEvents()             // Event'leri bağla (satır 1790)
+initDrag()                   // Drag-drop başlat (satır 1844)
+reorder(dayId, from, to)     // Sıra değiştir (satır 1896)
+openMove(fromDayId, stopId)  // Taşıma modal aç (satır 1802)
+execMove(destId)             // Taşımayı uygula (satır 1818)
+closeMove()                  // Taşıma modal kapat (satır 1840)
+openPlanImport()             // Import modal aç (satır 2829)
+applyPlanImport()            // Import verisini uygula (satır 2918)
 ```
 
 **Sipariş Modalı (ordOv):**
 ```js
-openOrd(stopId, dayId)       // Modalı aç (satır 2447)
-closeOrd()                   // Modalı kapat (satır 2062)
-saveOrder()                  // Siparişi kaydet + vis işaretle (satır 2396)
-renderOrdItems()             // Sipariş kalemlerini göster (satır 2068)
-renderOrdTotal()             // Toplam göster (satır 2110)
-addOrderItem()               // Manuel ürün ekle (satır 2097)
-addFromCatalog(name, price)  // Katalogdan ürün ekle (satır 2606)
-changeQty(idx, delta)        // Miktar değiştir (satır 2087)
-removeItem(idx)              // Kalemi kaldır (satır 2092)
-selectPay(method)            // Ödeme yöntemi seç (satır 2123)
-calcChange()                 // Para üstü hesapla (satır 2138)
-applyDebtPayment()           // Borç ödemesi uygula (satır 2431)
-toggleDebtPay()              // Borç ödeme alanını aç/kapat (satır 2158)
-toggleCatPick()              // Katalog chip'lerini aç/kapat (satır 2575)
-renderCatChips()             // Katalog chip'lerini render (satır 2584)
+openOrd(stopId, dayId)       // Modalı aç (satır 2531)
+closeOrd()                   // Modalı kapat (satır 2145)
+saveOrder()                  // Siparişi kaydet + vis işaretle (satır 2480)
+renderOrdItems()             // Sipariş kalemlerini göster (satır 2150)
+renderOrdTotal()             // Toplam göster (satır 2192)
+addOrderItem()               // Manuel ürün ekle (satır 2179)
+addFromCatalog(name, price)  // Katalogdan ürün ekle (satır 2688)
+changeQty(idx, delta)        // Miktar değiştir (satır 2169)
+removeItem(idx)              // Kalemi kaldır (satır 2174)
+selectPay(method)            // Ödeme yöntemi seç (satır 2205)
+calcChange()                 // Para üstü hesapla (satır 2220)
+applyDebtPayment()           // Borç ödemesi uygula (satır 2515)
+toggleDebtPay()              // Borç ödeme alanını aç/kapat (satır 2240)
+toggleCatPick()              // Katalog chip'lerini aç/kapat (satır 2657)
+renderCatChips()             // Katalog chip'lerini render (satır 2666)
+openStopCatFromOrd()         // Sipariş modalından özel fiyat UI aç (satır 2821)
 ```
 
 ---
@@ -137,15 +139,24 @@ Satış analizi ve raporlama.
 - Günlük durum bar'ları
 - Top 5 borçlu → Borç sayfasına link ("Tümünü Gör →")
 - Notlu müşteriler listesi
+- **📥 Excel Rapor** butonu → 4 sheet'li detaylı rapor export
 
 **İlgili fonksiyonlar:**
 ```js
-renderDash()                 // Tüm dashboard (satır 2792)
-setDashWeek(w)               // Hafta filtresi (satır 2747)
-setDashPeriod(p)             // 'day'|'month' period (satır 2754)
-getAllOrdersForPeriod(p)      // Period'a göre siparişleri topla (satır 2762)
-buildProductStats(orderList) // Ürün bazlı istatistik hesapla (satır 2777)
+renderDash()                 // Tüm dashboard (satır 3006)
+setDashWeek(w)               // Hafta filtresi (satır 2961)
+setDashPeriod(p)             // 'day'|'month' period (satır 2968)
+getAllOrdersForPeriod(p)      // Period'a göre siparişleri topla (satır 2976)
+buildProductStats(orderList) // Ürün bazlı istatistik hesapla (satır 2991)
+exportDashReport()           // 4-sheet'li Excel rapor export (satır 3320)
 ```
+
+**Excel Rapor Detayı (exportDashReport):**
+4 sheet içerir:
+1. **Özet** — period, toplam ciro, ödeme dağılımı, ziyaret yüzdesi
+2. **Ürün Satışları** — ürün adı, miktar, toplam ciro (çok satandan aza)
+3. **Müşteriler** — müşteri adı, sipariş sayısı, toplam harcama, ortalama
+4. **Borçlar** — borçlu müşteriler, borç tutarı
 
 ---
 
@@ -162,17 +173,17 @@ buildProductStats(orderList) // Ürün bazlı istatistik hesapla (satır 2777)
 
 **İlgili fonksiyonlar:**
 ```js
-renderKatalog()              // Katalog sayfası (satır 2492)
-openAddCat()                 // Yeni ürün modal (satır 2527)
-openEditCat(id)              // Düzenle modal (satır 2537)
-saveCatItem()                // Kaydet (ekle/güncelle) (satır 2550)
-deleteCatItem(id)            // Sil (satır 2566)
-closeCat()                   // Modal kapat (satır 2548)
+renderKatalog()              // Katalog sayfası (satır 2575)
+openAddCat()                 // Yeni ürün modal (satır 2610)
+openEditCat(id)              // Düzenle modal (satır 2620)
+saveCatItem()                // Kaydet (ekle/güncelle) (satır 2633)
+deleteCatItem(id)            // Sil (satır 2649)
+closeCat()                   // Modal kapat (satır 2631)
 ```
 
 ---
 
-### Adresler (`page-adresler`) — Nav'da yok
+### Adresler (`page-adresler`) — "Diğer" menüsünden erişilir
 Müşteri/stop yönetimi.
 
 **Özellikler:**
@@ -183,27 +194,29 @@ Müşteri/stop yönetimi.
 - Her kartta: atandığı gün badge'i, posta kodu rengi, geocode durumu ikonu
 - Akıllı header algılama (import sırasında)
 - Tekrar eklemeyi önleme (isim + posta kodu kontrolü)
+- **📋 Fiyat** butonu → müşteriye özel fiyat modalı (stopCatOv)
+- Müşteri adına tıkla → Profil sayfasına git
 
 **İlgili fonksiyonlar:**
 ```js
-renderAdresler()             // Liste render (satır 1872)
-renderAdrList()              // Filtrelenmiş liste (satır 1877)
-onAdrSearch(v)               // Arama (satır 1860)
-clearAdrSearch()             // Arama temizle (satır 1865)
-openAddStop()                // Yeni stop ekle (satır 1918)
-saveAdd()                    // Eklemeyi kaydet (satır 1924)
-openEdit(stopId)             // Düzenleme modal (satır 1825)
-saveEdit()                   // Düzenlemeyi kaydet (satır 1835)
-openDel(stopId)              // Silme onay modal (satır 1947)
-confirmDel()                 // Silmeyi uygula (satır 1954)
-closeDel()                   // Silme modal kapat (satır 1953)
-exportAdrExcel()             // Excel export (satır 1979)
-handleImport(input)          // Excel/CSV import işle (satır 1994)
+renderAdresler()             // Liste render (satır 1954)
+renderAdrList()              // Filtrelenmiş liste (satır 1959)
+onAdrSearch(v)               // Arama (satır 1943)
+clearAdrSearch()             // Arama temizle (satır 1948)
+openAddStop()                // Yeni stop ekle (satır 2001)
+saveAdd()                    // Eklemeyi kaydet (satır 2007)
+openEdit(stopId)             // Düzenleme modal (satır 1907)
+saveEdit()                   // Düzenlemeyi kaydet (satır 1917)
+openDel(stopId)              // Silme onay modal (satır 2030)
+confirmDel()                 // Silmeyi uygula (satır 2037)
+closeDel()                   // Silme modal kapat (satır 2036)
+exportAdrExcel()             // Excel export (satır 2061)
+handleImport(input)          // Excel/CSV import işle (satır 2076)
 ```
 
 ---
 
-### Borç Geçmişi (`page-borclar`) — Nav'da yok
+### Borç Geçmişi (`page-borclar`) — "Diğer" menüsünden erişilir
 Borç yönetimi ve işlem geçmişi.
 
 **Özellikler:**
@@ -218,13 +231,13 @@ Borç yönetimi ve işlem geçmişi.
 
 **İlgili fonksiyonlar:**
 ```js
-renderBorclar()              // Borç listesi (satır 2300)
-toggleBdg(stopId)            // Kart aç/kapat (satır 2367)
-quickPayDebt(stopId)         // Hızlı ödeme (satır 2372)
-clearDebt(stopId)            // Borcu tamamen sil (satır 2384)
-addDebtHistory(stopId, type, amount, note)  // Geçmişe ekle (satır 2275)
-onBorcSearch(v)              // Arama (satır 2288)
-clearBorcSearch()            // Arama temizle (satır 2293)
+renderBorclar()              // Borç listesi (satır 2383)
+toggleBdg(stopId)            // Kart aç/kapat (satır 2450)
+quickPayDebt(stopId)         // Hızlı ödeme (satır 2455)
+clearDebt(stopId)            // Borcu tamamen sil (satır 2467)
+addDebtHistory(stopId, type, amount, note)  // Geçmişe ekle (satır 2358)
+onBorcSearch(v)              // Arama (satır 2371)
+clearBorcSearch()            // Arama temizle (satır 2376)
 ```
 
 ---
@@ -233,11 +246,53 @@ clearBorcSearch()            // Arama temizle (satır 2293)
 Müşteriye özel kalıcı notlar (order modal'da "📌" butonu).
 
 ```js
-openCnote(stopId)            // Not modal aç (satır 2230)
-openCnoteFromOrd()           // Sipariş modal içinden aç (satır 2239)
-saveCnote()                  // Notu kaydet (satır 2250)
-closeCnote()                 // Modal kapat (satır 2245)
-refreshOrdCnoteBanner(stopId) // Order modal'da not banner'ı güncelle (satır 2261)
+openCnote(stopId)            // Not modal aç (satır 2314)
+openCnoteFromOrd()           // Sipariş modal içinden aç (satır 2323)
+saveCnote()                  // Notu kaydet (satır 2334)
+closeCnote()                 // Modal kapat (satır 2329)
+refreshOrdCnoteBanner(stopId) // Order modal'da not banner'ı güncelle (satır 2345)
+```
+
+---
+
+### Müşteri Profil Sayfası (`page-profil`)
+Her müşteri için detaylı istatistik ve geçmiş sayfası. Adresler'den müşteri adına tıklayarak açılır.
+
+**Özellikler:**
+- Müşteri bilgileri (adres, şehir, posta kodu)
+- Atandığı gün badge'i
+- Kalıcı müşteri notu
+- Toplam sipariş sayısı, toplam harcama, ortalama sipariş tutarı
+- En çok sipariş edilen ürünler (top 5)
+- Sipariş geçmişi listesi (tarih, tutar, ödeme yöntemi, ürünler)
+- Borç durumu ve borç geçmişi
+- "Geri" butonu ile önceki sayfaya dönüş
+
+```js
+openProfil(stopId, backPage) // Profil sayfasını aç (satır 3153)
+renderProfil()               // Profil sayfasını render et (satır 3159)
+// profilStopId, profilBack — state değişkenleri
+```
+
+---
+
+### Müşteriye Özel Fiyat (stopCatOv Modal)
+Müşteriye özel fiyat tanımlama arayüzü. `S.stopCatalog[stopId]` verisi üzerinden çalışır.
+
+**Erişim:**
+- Adresler sayfasında "📋 Fiyat" butonu
+- Sipariş modalında "Bu müşteriye özel fiyat ayarla →" linki
+
+```js
+openStopCat(stopId)          // Modal aç (satır 2703)
+closeStopCat()               // Modal kapat (satır 2714)
+renderStopCatItems()         // Override listesini render (satır 2720)
+updateScPrice(name, v, gp)   // Fiyat güncelle (satır 2747)
+updateScOnlyPrice(name, v)   // Sadece fiyat güncelle (satır 2756)
+removeScOverride(name)       // Override kaldır (satır 2762)
+addStopCatItem()             // Yeni override ekle (satır 2772)
+saveStopCat()                // Değişiklikleri kaydet (satır 2798)
+openStopCatFromOrd()         // Sipariş modalından aç (satır 2821)
 ```
 
 ---
@@ -246,14 +301,14 @@ refreshOrdCnoteBanner(stopId) // Order modal'da not banner'ı güncelle (satır 
 Harita'daki sync noktasına tıkla → aç.
 
 ```js
-openSbSetup()                // Modal aç (satır 2936)
-closeSbSetup()               // Modal kapat (satır 2946)
-saveSbConfig()               // URL + Key kaydet → reload (satır 2960)
-testSbConnection()           // Bağlantı testi (satır 2971)
-updateSbStatusBanner()       // Durum banner'ı güncelle (satır 2948)
-pushAllToSupabase()          // Tüm LS → Supabase (satır 1118)
-syncFromSupabase()           // Supabase → LS → re-render (satır 1075)
-setSyncStatus(status)        // 'ok'|'syncing'|'error'|'offline' (satır 1131)
+openSbSetup()                // Modal aç (satır 3410)
+closeSbSetup()               // Modal kapat (satır 3420)
+saveSbConfig()               // URL + Key kaydet → reload (satır 3434)
+testSbConnection()           // Bağlantı testi (satır 3445)
+updateSbStatusBanner()       // Durum banner'ı güncelle (satır 3422)
+pushAllToSupabase()          // Tüm LS → Supabase (satır 1185)
+syncFromSupabase()           // Supabase → LS → re-render (satır 1141)
+setSyncStatus(status)        // 'ok'|'syncing'|'error'|'offline' (satır 1198)
 ```
 
 ---
@@ -262,9 +317,9 @@ setSyncStatus(status)        // 'ok'|'syncing'|'error'|'offline' (satır 1131)
 Stop'u bir güne ata veya atamayı kaldır.
 
 ```js
-openAssign(stop)             // Modal aç (satır 1363)
-doAssign(stopId, dayId)      // Atamayı uygula (satır 1386)
-closeAssign()                // Modal kapat (satır 1410)
+openAssign(stop)             // Modal aç (satır 1445)
+doAssign(stopId, dayId)      // Atamayı uygula (satır 1468)
+closeAssign()                // Modal kapat (satır 1493)
 ```
 
 ---
@@ -273,16 +328,23 @@ closeAssign()                // Modal kapat (satır 1410)
 
 | Modal ID | Açıklama | Açan Fonksiyon | Satır |
 |----------|----------|----------------|-------|
-| `assignOv` | Gün atama | `openAssign()` | 660 |
-| `editOv` | Stop düzenle | `openEdit()` | 708 |
-| `addOv` | Stop ekle | `openAddStop()` | 744 |
-| `delOv` | Stop sil | `openDel()` | 780 |
-| `ordOv` | Sipariş/ödeme | `openOrd()` | 801 |
-| `cnoteOv` | Müşteri notu | `openCnote()` | 673 |
-| `moveOv` | Stop taşı | `openMove()` | 695 |
-| `planImportOv` | Plan import | `openPlanImport()` | 510 |
-| `catOv` | Ürün ekle/düzenle | `openAddCat()` / `openEditCat()` | 555 |
-| `sbSetupOv` | Supabase kurulum | `openSbSetup()` | 609 |
+| `planImportOv` | Plan import | `openPlanImport()` | 525 |
+| `catOv` | Ürün ekle/düzenle | `openAddCat()` / `openEditCat()` | 570 |
+| `stopCatOv` | Müşteriye özel fiyat | `openStopCat()` | 602 |
+| `sbSetupOv` | Supabase kurulum | `openSbSetup()` | 672 |
+| `assignOv` | Gün atama | `openAssign()` | 723 |
+| `cnoteOv` | Müşteri notu | `openCnote()` | 736 |
+| `moveOv` | Stop taşı | `openMove()` | 758 |
+| `editOv` | Stop düzenle | `openEdit()` | 771 |
+| `addOv` | Stop ekle | `openAddStop()` | 807 |
+| `delOv` | Stop sil | `openDel()` | 843 |
+| `ordOv` | Sipariş/ödeme | `openOrd()` | 864 |
+
+### Diğer UI Elemanları
+
+| ID | Açıklama | Satır |
+|----|----------|-------|
+| `morePopup` | "Diğer" popup menüsü (Adresler + Borçlar) | 659 |
 
 ---
 

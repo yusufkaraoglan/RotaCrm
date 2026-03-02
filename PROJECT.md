@@ -15,47 +15,52 @@ Costadoro Coffee'nin Kent ve Londra bölgelerinde ~101 kafede kahve dağıtımı
 ## Teknik Mimari
 
 ```
-index.html (tek dosya, ~3013 satır)
+index.html (tek dosya, ~3487 satır)
 ├── <style>           CSS (satır 9–350)
-├── <body>            HTML sayfaları (satır 352–897)
+├── <body>            HTML sayfaları + modallar (satır 352–963)
 │   ├── page-map      Leaflet harita (satır 355)
 │   ├── page-rota     Günlük rota listesi / ziyaret takibi (satır 384)
 │   ├── page-plan     Haftalık plan / sipariş/ödeme (satır 416)
-│   ├── page-adresler Müşteri/adres CRUD (satır 432) — nav'da yok
+│   ├── page-adresler Müşteri/adres CRUD (satır 432) — "Diğer" menüsünden
 │   ├── page-dash     Dashboard / özet + ürün analizi (satır 463)
-│   ├── page-borclar  Borç geçmişi (satır 480) — nav'da yok
-│   └── page-katalog  Ürün kataloğu yönetimi (satır 498)
-├── Modallar          planImportOv, catOv, nav, sbSetupOv, assignOv,
-│                     cnoteOv, moveOv, editOv, addOv, delOv, ordOv
-├── CDN Scripts       XLSX (satır 898), Leaflet (satır 899)
-└── <script>          JavaScript (satır 900–3013)
-    ├── DATA           STOPS_DEFAULT (101 stop), DAYS (10 gün) (satır 901–1019)
-    ├── SUPABASE CFG   SB_URL, SB_KEY sabitleri (satır 1021–1026)
-    ├── HYBRID STORAGE Supabase hybrid storage katmanı (satır 1027–1143)
-    ├── STATE          S objesi + save objesi (satır 1144–1197)
-    ├── NAVIGATION     showPage() (satır 1199–1216)
-    ├── MAP            Leaflet init, markers, geocoding (satır 1218–1357)
-    ├── ASSIGN MODAL   Gün atama (satır 1358–1414)
-    ├── ROTA           Günlük ziyaret takibi (satır 1415–1568)
-    ├── PLAN           Sipariş/ödeme, sürükle-bırak sıralama (satır 1569–1820)
-    ├── EDIT MODAL     Stop düzenleme (satır 1821–1854)
-    ├── ADRESLER       CRUD, Excel/CSV import/export (satır 1855–2053)
-    ├── ORDER/PAYMENT  Sipariş & ödeme sistemi (satır 2054–2224)
-    ├── NOTES          Kalıcı müşteri notları (satır 2225–2271)
-    ├── DEBT HISTORY   Borç takibi ve geçmiş (satır 2272–2392)
-    ├── SAVE ORDER     Sipariş kaydet + borç + openOrd (satır 2393–2486)
-    ├── KATALOG        Global ürün kataloğu + müşteri override (satır 2487–2613)
-    ├── PLAN IMPORT    Excel/CSV/JSON ile toplu atama (satır 2614–2740)
-    ├── DASHBOARD      Satış analizi, ürün bazlı rapor (satır 2741–2932)
-    ├── SUPABASE UI    Kurulum ve sync arayüzü (satır 2933–2993)
-    └── INIT           Uygulama başlatma (satır 2995–3013)
+│   ├── page-borclar  Borç geçmişi (satır 481) — "Diğer" menüsünden
+│   ├── page-katalog  Ürün kataloğu yönetimi (satır 499)
+│   └── page-profil   Müşteri profil sayfası (satır 511) — Adresler'den erişilir
+├── Modallar          planImportOv, catOv, stopCatOv, nav, morePopup,
+│                     sbSetupOv, assignOv, cnoteOv, moveOv, editOv,
+│                     addOv, delOv, ordOv
+├── CDN Scripts       XLSX (satır 964), Leaflet (satır 965)
+└── <script>          JavaScript (satır 966–3487)
+    ├── DATA           STOPS_DEFAULT (101 stop), DAYS (10 gün) (satır 968–1087)
+    ├── SUPABASE CFG   SB_URL, SB_KEY sabitleri (satır 1088–1093)
+    ├── HYBRID STORAGE Supabase hybrid storage katmanı (satır 1094–1210)
+    ├── STATE          S objesi + save objesi (satır 1211–1265)
+    ├── NAVIGATION     showPage(), toggleMore(), closeMore() (satır 1266–1300)
+    ├── MAP            Leaflet init, markers, geocoding (satır 1301–1440)
+    ├── ASSIGN MODAL   Gün atama (satır 1441–1497)
+    ├── ROTA           Günlük ziyaret takibi (satır 1498–1651)
+    ├── PLAN           Sipariş/ödeme, sürükle-bırak sıralama (satır 1652–1903)
+    ├── EDIT MODAL     Stop düzenleme (satır 1904–1937)
+    ├── ADRESLER       CRUD, Excel/CSV import/export (satır 1938–2137)
+    ├── ORDER/PAYMENT  Sipariş & ödeme sistemi (satır 2138–2308)
+    ├── NOTES          Kalıcı müşteri notları (satır 2309–2355)
+    ├── DEBT HISTORY   Borç takibi ve geçmiş (satır 2356–2476)
+    ├── SAVE ORDER     Sipariş kaydet + borç + openOrd (satır 2477–2570)
+    ├── KATALOG        Global ürün kataloğu (satır 2571–2697)
+    ├── STOP CATALOG   Müşteriye özel fiyat UI (satır 2698–2828)
+    ├── PLAN IMPORT    Excel/CSV/JSON ile toplu atama (satır 2829–2955)
+    ├── DASHBOARD      Satış analizi, ürün bazlı rapor (satır 2956–3147)
+    ├── MÜŞTERİ PROFİL Müşteri profil sayfası (satır 3148–3317)
+    ├── DASH EXPORT    Dashboard Excel rapor export (satır 3318–3407)
+    ├── SUPABASE UI    Kurulum ve sync arayüzü (satır 3408–3469)
+    └── INIT           Uygulama başlatma (satır 3470–3487)
 ```
 
 ---
 
 ## Navigasyon Yapısı
 
-### Alt Nav Bar (5 buton)
+### Alt Nav Bar (6 buton)
 | Buton | Sayfa | İkon |
 |-------|-------|------|
 | Harita | `page-map` | Harita SVG |
@@ -63,12 +68,18 @@ index.html (tek dosya, ~3013 satır)
 | Plan | `page-plan` | Takvim SVG |
 | Özet | `page-dash` | Grid SVG |
 | Katalog | `page-katalog` | Çanta SVG |
+| Diğer | Popup menü | ⋯ (üç nokta) |
 
-### Nav'da Olmayan Sayfalar
+### "Diğer" Popup Menüsü
 | Sayfa | Erişim Yolu |
 |-------|-------------|
-| `page-adresler` | Kod içinden `showPage('adresler')` ile erişilir |
-| `page-borclar` | Dashboard'dan "Tümünü Gör →" linki ile erişilir |
+| `page-adresler` | "Diğer" popup → "📍 Adresler" |
+| `page-borclar` | "Diğer" popup → "💰 Borçlar" (+ Dashboard'dan "Tümünü Gör →" linki) |
+
+### Profil Sayfası
+| Sayfa | Erişim Yolu |
+|-------|-------------|
+| `page-profil` | Adresler listesinde müşteri adına tıklayarak erişilir |
 
 ---
 
@@ -184,7 +195,9 @@ Her state key'i tek bir Supabase satırına karşılık gelir. Örn: `orders` ke
 
 ### Navigasyon
 ```js
-showPage(name)  // 'map'|'rota'|'plan'|'adresler'|'dash'|'borclar'|'katalog'
+showPage(name)  // 'map'|'rota'|'plan'|'adresler'|'dash'|'borclar'|'katalog'|'profil'
+toggleMore(e)    // "Diğer" popup menüsünü aç/kapat
+closeMore()      // "Diğer" popup menüsünü kapat
 ```
 
 ### Sipariş Anahtarı
@@ -268,4 +281,4 @@ processGeo()         // OpenStreetMap Nominatim ile toplu geocode
 3. **Offline ilk açılış** — internet yoksa Supabase sync olmaz, sadece localStorage çalışır
 4. **Geocoding** — OpenStreetMap Nominatim rate-limit var (~1.1 sn/istek aralık)
 5. **Excel export** — SheetJS CDN gerektirir, offline'da çalışmaz
-6. **Adresler sayfasına erişim** — Alt navigasyonda butonu yok, sadece kod ile erişilir
+6. **~~Adresler sayfasına erişim~~** — Çözüldü: "Diğer" popup menüsü ile erişim sağlandı

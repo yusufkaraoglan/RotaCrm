@@ -15,15 +15,15 @@
 
 **Tek dosya mimarisi** — her şey `index.html` içinde:
 - CSS (satır 9–350)
-- HTML sayfaları (satır 352–897)
-- JavaScript (satır 900–3013)
+- HTML sayfaları + modallar (satır 352–963)
+- JavaScript (satır 966–3487)
 
 ---
 
 ## Dosya Yapısı
 
 ```
-index.html              ← Tek kaynak dosya, tüm uygulama burada (~3013 satır)
+index.html              ← Tek kaynak dosya, tüm uygulama burada (~3487 satır)
 CLAUDE.md               ← Bu dosya (Claude Code talimatları)
 PROJECT.md              ← Proje detayları, mimari, veri yapıları
 FEATURES.md             ← Tüm özellikler ve fonksiyon referansı
@@ -65,7 +65,7 @@ Yeni sayfa eklerken 3 şeyi güncelle:
 2. `showPage()` fonksiyonuna `if(name==='ISIM') renderISIM();` ekle
 3. Nav'a `<button class="ni" id="nav-ISIM">` ekle (eğer ana navigasyona dahil edilecekse)
 
-**Not:** Şu an sadece 5 sayfa ana navigasyonda: map, rota, plan, dash, katalog. Adresler ve borçlar sayfaları mevcut ama alt nav'da butonu yok — diğer sayfalardan link ile erişilir.
+**Not:** Şu an 6 buton ana navigasyonda: map, rota, plan, dash, katalog, diğer. "Diğer" butonu popup menü açar ve adresler + borçlar sayfalarına erişim sağlar. Profil sayfası (`page-profil`) adresler listesinden müşteri adına tıklayarak açılır.
 
 ### 6. Türkçe UI
 Tüm kullanıcıya görünen metinler Türkçe olmalı. Kod yorumları İngilizce veya Türkçe olabilir.

@@ -40,11 +40,20 @@
 - [x] Günlük durum bar'ları
 - [x] Ürün bazlı satış sıralaması (top 15)
 - [x] Bugün / Aylık period filtresi
+- [x] Dashboard Excel rapor export (4 sheet)
+
+### Navigasyon
+- [x] "Diğer" popup menüsü (Adresler + Borçlar erişimi)
+
+### Müşteri
+- [x] Müşteri Profil sayfası (sipariş geçmişi, top ürünler, borç durumu)
+- [x] Sipariş geçmişi (profil sayfasında tarih bazlı listeleme)
 
 ### Katalog
 - [x] Global ürün kataloğu
-- [x] Müşteriye özel fiyat override (stopCatalog) — altyapı mevcut
+- [x] Müşteriye özel fiyat override (stopCatalog) — altyapı + UI
 - [x] Order modal'da katalog chip'leri
+- [x] Müşteriye özel fiyat UI (stopCatOv modal)
 
 ### Plan Import
 - [x] Excel (.xlsx/.xls) import
@@ -66,26 +75,16 @@
 
 ### Yüksek Öncelik
 
-#### 1. Sipariş Geçmişi Sayfası
-Şu an siparişler sadece "bugün" için kaydediliyor (`todayKey()`). Geçmiş günlerin siparişlerine bakılamıyor.
-
-**Yapılacak:**
-- Orders objesindeki tüm tarihleri listele
-- Tarih → siparişler görünümü
-- Müşteri bazında geçmiş sipariş özeti
-- Grafik: haftalık/aylık ciro trendi
-
-**Teknik not:** `S.orders` zaten `YYYY-MM-DD_stopId` formatında saklanıyor. Sadece UI gerekiyor.
+#### ~~1. Sipariş Geçmişi Sayfası~~ ✅ Tamamlandı
+Müşteri Profil sayfasında (`page-profil`) sipariş geçmişi tarih bazlı listeleniyor.
 
 ---
 
-#### 2. Müşteri Bazlı Stop Override UI
-`S.stopCatalog[stopId]` altyapısı var ama UI yok. Şu an sadece kod üzerinden ayarlanabiliyor.
-
-**Yapılacak:**
-- Adresler sayfasında veya ayrı bir yerden "Özel Fiyatlar" butonu
-- Modal: global katalog üzerinden override ekle/kaldır
-- Order modal'da mor chip'ler (stop-override) gösterimi (kod hazır)
+#### ~~2. Müşteri Bazlı Stop Override UI~~ ✅ Tamamlandı
+`stopCatOv` modalı ile müşteriye özel fiyat tanımlama UI eklendi.
+- Adresler sayfasında "📋 Fiyat" butonu
+- Sipariş modalında "Bu müşteriye özel fiyat ayarla →" linki
+- Global katalogdan ürün seçip fiyat override tanımlama
 
 ---
 
@@ -110,13 +109,8 @@ Dashboard'da sayılar var ama görsel grafik yok.
 
 ### Orta Öncelik
 
-#### 5. Adresler Sayfasına Nav Erişimi
-Şu an Adresler ve Borçlar sayfalarına alt navigasyondan erişilemiyor.
-
-**Seçenekler:**
-- Nav bar'a 7. buton ekle (alan kısıtlı)
-- "Daha Fazla" butonu ile alt menü aç
-- Katalog veya Dashboard içinden link
+#### ~~5. Adresler Sayfasına Nav Erişimi~~ ✅ Tamamlandı
+"Diğer" (⋯) popup menüsü ile Adresler ve Borçlar sayfalarına erişim sağlandı.
 
 ---
 
@@ -137,24 +131,18 @@ Uygulamayı telefona "yükle" özelliği.
 
 ---
 
-#### 8. Aylık Kapanış Raporu
-Ay sonunda PDF/Excel raporu: toplam ciro, ürün bazlı özet, borç durumu.
-
-**Yapılacak:**
-- "Rapor Al" butonu → SheetJS ile Excel export
-- Veya HTML → PDF (print CSS)
+#### ~~8. Aylık Kapanış Raporu~~ ✅ Tamamlandı
+Dashboard'da "📥 Excel" butonu ile 4 sheet'li rapor export eklendi:
+- Özet, Ürün Satışları, Müşteriler, Borçlar
 
 ---
 
-#### 9. Müşteri Profil Sayfası
-Her müşteri için detay sayfası.
-
-**İçerik:**
-- Toplam sipariş geçmişi
-- Ortalama sipariş tutarı
-- Tercih ettiği ürünler
-- Borç geçmişi grafiği
-- Notlar
+#### ~~9. Müşteri Profil Sayfası~~ ✅ Tamamlandı
+`page-profil` sayfası eklendi.
+- Toplam sipariş geçmişi, ortalama sipariş tutarı
+- Tercih ettiği ürünler (top 5)
+- Borç durumu ve geçmişi
+- Kalıcı notlar
 
 ---
 
@@ -198,10 +186,10 @@ Mevcut posta kodu pill renkleri var ama coğrafi gruplama yok.
 - [ ] **Geocoding retry** — başarısız geocode'lar için retry mekanizması
 - [ ] **Batch Supabase writes** — her `save.X()` ayrı HTTP isteği yapıyor. Debounce ile batch'le
 - [ ] **Search performance** — 101 stop küçük, sorun değil; büyüyünce index gerekebilir
-- [ ] **Adresler/Borçlar navigasyon** — Bu sayfalara nav bar'dan veya daha belirgin şekilde erişim
+- [x] **~~Adresler/Borçlar navigasyon~~** — "Diğer" popup menüsü ile çözüldü
 
 ### Düşük Öncelik
-- [ ] **Kod organizasyonu** — 3000+ satır tek dosya okunması zor. Comment section'ları iyi ama idealde modüler
+- [ ] **Kod organizasyonu** — 3500+ satır tek dosya okunması zor. Comment section'ları iyi ama idealde modüler
 - [ ] **CSS cleanup** — bazı inline style'lar CSS class'a taşınabilir
 - [ ] **TypeScript** — tip güvenliği için; ama tek HTML dosyası mimarisini bozar
 
