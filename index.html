@@ -582,6 +582,37 @@ html,body{height:100dvh;overflow:hidden;font-family:'Inter',system-ui,sans-serif
     <div style="height:8px"></div>
   </div>
 </div>
+
+<!-- STOP CATALOG OVERRIDE MODAL -->
+<div class="overlay" id="stopCatOv" onclick="if(event.target===this)closeStopCat()">
+  <div class="modal" style="max-height:90dvh;overflow-y:auto">
+    <div class="mbar"></div>
+    <div class="mhead">
+      <div class="mtitle">📋 Özel Fiyatlar</div>
+      <div class="msub" id="scStopName">—</div>
+    </div>
+    <div style="padding:12px 16px">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--sub);line-height:1.5;margin-bottom:10px">
+        Bu müşteri için özel fiyat belirleyin. Geçersiz kılınan ürünler sipariş modalında <span style="color:#53178F;font-weight:700">mor</span> olarak görünür.
+      </div>
+      <div id="scItems"></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Yeni Özel Ürün</div>
+        <div style="display:flex;gap:6px">
+          <input class="ef-input" id="sc-new-name" placeholder="Ürün adı" style="flex:2;padding:8px 10px;font-size:13px">
+          <input class="ef-input" id="sc-new-price" type="number" min="0" step="0.01" placeholder="£" style="width:70px;padding:8px 10px;font-size:13px">
+          <button onclick="addStopCatItem()" style="height:38px;padding:0 12px;border-radius:8px;border:none;background:var(--text);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">+ Ekle</button>
+        </div>
+      </div>
+    </div>
+    <div class="ef-btns">
+      <button class="ef-cancel" onclick="closeStopCat()">İptal</button>
+      <button class="ef-save" onclick="saveStopCat()">Kaydet</button>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+</div>
+
 <nav class="nav">
   <button class="ni on" id="nav-map" onclick="showPage('map')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
@@ -837,7 +868,10 @@ ALTER TABLE cr4_store DISABLE ROW LEVEL SECURITY;</div>
       </div>
       <!-- Catalog quick-pick chips -->
       <div id="catPickArea" style="display:none;margin-bottom:8px">
-        <div class="cat-chips" id="catChips"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+          <div class="cat-chips" id="catChips" style="flex:1"></div>
+        </div>
+        <button onclick="openStopCatFromOrd()" style="font-size:10px;font-weight:600;color:#53178F;background:none;border:none;cursor:pointer;font-family:'Inter',sans-serif;padding:2px 0">⚙️ Bu müşteriye özel fiyat ayarla →</button>
       </div>
       <div class="ord-items" id="ordItems"></div>
       <div style="display:flex;gap:6px;margin-top:8px">
@@ -1906,6 +1940,7 @@ function renderAdrList(){
       </div>
       <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
         <button onclick="openEdit(${s.id})" style="height:28px;width:52px;border-radius:6px;border:1px solid var(--border2);background:var(--bg);font-size:11px;font-weight:600;cursor:pointer;color:var(--sub);font-family:'Inter',sans-serif">✏️ Düz</button>
+        <button onclick="openStopCat(${s.id})" style="height:28px;width:52px;border-radius:6px;border:1px solid ${(S.stopCatalog[s.id]||[]).length?'#9E77ED':'var(--border2)'};background:${(S.stopCatalog[s.id]||[]).length?'#FDF4FF':'var(--bg)'};font-size:11px;font-weight:600;cursor:pointer;color:${(S.stopCatalog[s.id]||[]).length?'#53178F':'var(--sub)'};font-family:'Inter',sans-serif">📋 Fiyat</button>
         <button onclick="openDel(${s.id})" style="height:28px;width:52px;border-radius:6px;border:1px solid #FECDCA;background:#FEF3F2;font-size:11px;font-weight:600;cursor:pointer;color:#D92D20;font-family:'Inter',sans-serif">🗑 Sil</button>
       </div>
     </div>`;
@@ -2609,6 +2644,137 @@ function addFromCatalog(name, price) {
   if (existing) { existing.qty++; }
   else { ordItems.push({ name, qty: 1, price: parseFloat(price) }); }
   renderOrdItems(); renderOrdTotal(); calcChange();
+}
+
+// ══════════════════════════════════════════════════════════════
+// STOP CATALOG OVERRIDE UI (Müşteriye özel fiyatlar)
+// ══════════════════════════════════════════════════════════════
+let scStopId = null;
+let scOverrides = [];
+
+function openStopCat(stopId) {
+  scStopId = stopId;
+  const stop = STOPS.find(s => s.id === stopId);
+  document.getElementById('scStopName').textContent = stop.n;
+  scOverrides = JSON.parse(JSON.stringify(S.stopCatalog[stopId] || []));
+  renderStopCatItems();
+  document.getElementById('stopCatOv').classList.add('on');
+}
+
+function closeStopCat() {
+  document.getElementById('stopCatOv').classList.remove('on');
+  scStopId = null;
+  scOverrides = [];
+}
+
+function renderStopCatItems() {
+  const el = document.getElementById('scItems');
+  const global = S.catalog;
+
+  if (!global.length && !scOverrides.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 0">Katalog boş. Önce global katalogdan ürün ekleyin.</div>';
+    return;
+  }
+
+  let h = '';
+
+  // Global catalog items
+  if (global.length) {
+    h += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Global Katalog</div>';
+    global.forEach(item => {
+      const ov = scOverrides.find(o => o.name === item.name);
+      const has = !!ov;
+      const eName = item.name.replace(/'/g,"\\'");
+      h += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:${has ? '#FDF4FF' : 'var(--bg)'};border:1px solid ${has ? '#E9D7FE' : 'var(--border)'};border-radius:8px;margin-bottom:5px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.name}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:1px">${item.category || 'Genel'} · Global: £${(+item.price).toFixed(2)}</div>
+        </div>
+        <input type="number" min="0" step="0.01" value="${has ? ov.price : ''}" placeholder="£${(+item.price).toFixed(2)}"
+          onchange="updateScPrice('${eName}',this.value,${item.price})"
+          style="width:72px;border:1px solid ${has ? '#9E77ED' : 'var(--border2)'};border-radius:6px;padding:6px 8px;font-family:'Inter',monospace;font-size:13px;font-weight:700;background:${has ? '#fff' : 'var(--bg)'};outline:none;color:var(--text);text-align:right">
+        ${has ? `<button onclick="removeScOverride('${eName}')" style="width:28px;height:28px;border-radius:6px;border:none;background:transparent;color:#D92D20;cursor:pointer;font-size:14px;flex-shrink:0" title="Özel fiyatı kaldır">✕</button>` : '<div style="width:28px"></div>'}
+      </div>`;
+    });
+  }
+
+  // Stop-only items (not in global catalog)
+  const stopOnly = scOverrides.filter(ov => !global.find(g => g.name === ov.name));
+  if (stopOnly.length) {
+    h += '<div style="font-size:10px;font-weight:700;color:#53178F;text-transform:uppercase;letter-spacing:.4px;margin:10px 0 6px">Sadece Bu Müşteri</div>';
+    stopOnly.forEach(ov => {
+      const eName = ov.name.replace(/'/g,"\\'");
+      h += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#FDF4FF;border:1px solid #E9D7FE;border-radius:8px;margin-bottom:5px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;color:#53178F">${ov.name}</div>
+        </div>
+        <input type="number" min="0" step="0.01" value="${ov.price}"
+          onchange="updateScOnlyPrice('${eName}',this.value)"
+          style="width:72px;border:1px solid #9E77ED;border-radius:6px;padding:6px 8px;font-family:'Inter',monospace;font-size:13px;font-weight:700;background:#fff;outline:none;color:var(--text);text-align:right">
+        <button onclick="removeScOverride('${eName}')" style="width:28px;height:28px;border-radius:6px;border:none;background:transparent;color:#D92D20;cursor:pointer;font-size:14px;flex-shrink:0" title="Kaldır">✕</button>
+      </div>`;
+    });
+  }
+
+  el.innerHTML = h;
+}
+
+function updateScPrice(name, value, globalPrice) {
+  const price = parseFloat(value);
+  if (!value || isNaN(price)) {
+    scOverrides = scOverrides.filter(o => o.name !== name);
+  } else {
+    const existing = scOverrides.find(o => o.name === name);
+    if (existing) { existing.price = price; }
+    else { scOverrides.push({ name, price }); }
+  }
+  renderStopCatItems();
+}
+
+function updateScOnlyPrice(name, value) {
+  const price = parseFloat(value);
+  if (isNaN(price) || price < 0) return;
+  const existing = scOverrides.find(o => o.name === name);
+  if (existing) existing.price = price;
+}
+
+function removeScOverride(name) {
+  scOverrides = scOverrides.filter(o => o.name !== name);
+  renderStopCatItems();
+}
+
+function addStopCatItem() {
+  const name = document.getElementById('sc-new-name').value.trim();
+  const price = parseFloat(document.getElementById('sc-new-price').value) || 0;
+  if (!name) { document.getElementById('sc-new-name').focus(); return; }
+  if (scOverrides.find(o => o.name === name) || S.catalog.find(c => c.name === name)) {
+    alert('Bu ürün zaten mevcut. Fiyatını değiştirmek için yukarıdan düzenleyin.');
+    return;
+  }
+  scOverrides.push({ name, price });
+  document.getElementById('sc-new-name').value = '';
+  document.getElementById('sc-new-price').value = '';
+  renderStopCatItems();
+}
+
+function saveStopCat() {
+  if (scStopId === null) return;
+  if (scOverrides.length) {
+    S.stopCatalog[scStopId] = scOverrides;
+  } else {
+    delete S.stopCatalog[scStopId];
+  }
+  save.stopCatalog();
+  closeStopCat();
+  if (curPage === 'plan') renderPlan();
+  if (curPage === 'adresler') renderAdresler();
+}
+
+function openStopCatFromOrd() {
+  if (ordStopId === null) return;
+  const sid = ordStopId;
+  closeOrd();
+  setTimeout(() => openStopCat(sid), 100);
 }
 
 // ══════════════════════════════════════════════════════════════
