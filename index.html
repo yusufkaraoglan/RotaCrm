@@ -1,0 +1,3013 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Costadoro Routes</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#F7F8FA;
+  --card:#FFFFFF;
+  --border:#EAECF0;
+  --border2:#D0D5DD;
+  --text:#101828;
+  --sub:#475467;
+  --muted:#98A2B3;
+  --nav:#101828;
+
+  --c0:#E85D3A; /* Hafta A Pzt */
+  --c1:#F0A500; /* Hafta A Sal */
+  --c2:#12B76A; /* Hafta A Çar */
+  --c3:#2E90FA; /* Hafta A Per */
+  --c4:#9E77ED; /* Hafta A Cum */
+  --c5:#F63D68; /* Hafta B Pzt */
+  --c6:#06AED4; /* Hafta B Sal */
+  --c7:#DC6803; /* Hafta B Çar */
+  --c8:#6172F3; /* Hafta B Per */
+  --c9:#2D9D6B; /* Hafta B Cum */
+}
+html,body{height:100dvh;overflow:hidden;font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+
+/* PAGES */
+.page{position:absolute;inset:0;display:none;flex-direction:column}
+.page.on{display:flex}
+
+/* NAV */
+.nav{position:fixed;bottom:0;left:0;right:0;z-index:999;height:60px;background:var(--nav);display:flex;padding-bottom:env(safe-area-inset-bottom,0px)}
+.ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;color:rgba(255,255,255,.4);font-family:'Inter',sans-serif;font-size:10px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;cursor:pointer;transition:.15s;padding:6px 4px}
+.ni.on{color:#fff}
+.ni svg{width:20px;height:20px;flex-shrink:0}
+
+/* TOPBAR */
+.topbar{background:var(--card);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;position:sticky;top:0;z-index:100}
+.tb-title{font-size:15px;font-weight:700;flex:1;letter-spacing:-.2px}
+.tb-sub{font-size:11px;color:var(--muted);margin-top:1px}
+
+/* WEEK TOGGLE */
+.wtog{display:flex;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:2px;gap:2px;flex-shrink:0}
+.wb{font-family:'Inter',sans-serif;font-size:11px;font-weight:600;padding:5px 11px;border-radius:6px;border:none;cursor:pointer;color:var(--sub);background:transparent;transition:.15s;white-space:nowrap}
+.wb.on{background:var(--nav);color:#fff}
+
+/* DAY TABS */
+.dtabs{background:var(--card);border-bottom:1px solid var(--border);display:flex;overflow-x:auto;flex-shrink:0;scrollbar-width:none}
+.dtabs::-webkit-scrollbar{display:none}
+.dt{flex-shrink:0;padding:10px 14px 9px;font-size:12px;font-weight:600;color:var(--muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:.15s;white-space:nowrap;display:flex;align-items:center;gap:5px;font-family:'Inter',sans-serif}
+.dt.on{color:var(--text);border-bottom-color:var(--text)}
+.dt-dot{width:7px;height:7px;border-radius:50%}
+.dt-n{font-size:10px;font-weight:700;font-family:'Inter',monospace;color:var(--muted)}
+.dt.on .dt-n{color:var(--text)}
+
+/* SCROLL BODY */
+.body{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:calc(60px + env(safe-area-inset-bottom,0px) + 16px)}
+
+/* PROGRESS */
+.prog-wrap{padding:14px 16px 8px}
+.prog-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.prog-label{font-size:12px;font-weight:600;color:var(--sub)}
+.prog-pct{font-size:12px;font-weight:700}
+.prog-track{height:5px;background:var(--border);border-radius:99px;overflow:hidden}
+.prog-fill{height:100%;border-radius:99px;transition:width .3s ease}
+
+/* STOP CARD */
+.slist{display:flex;flex-direction:column;gap:6px;padding:8px 12px 12px}
+.sc{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;transition:.12s}
+.sc.done{background:#F9FFF9;border-color:#B2EBD0}
+.sc.done .sname{text-decoration:line-through;color:var(--muted)}
+.sc-num{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:'Inter',monospace;border:1.5px solid;transition:.12s}
+.sc-body{flex:1;min-width:0;cursor:pointer}
+.sname{font-size:12px;font-weight:600;line-height:1.3;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.saddr{font-size:10px;color:var(--sub);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spc{display:inline-block;margin-top:3px;font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;font-family:'Inter',monospace}
+.sc-right{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.chk{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border2);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s;font-size:13px;color:var(--muted);flex-shrink:0}
+.chk:active{transform:scale(.88)}
+.sc.done .chk{color:#fff;border-color:transparent}
+.asgn-btn{height:26px;padding:0 8px;border-radius:6px;border:1px solid var(--border2);background:var(--bg);font-size:10px;font-weight:600;cursor:pointer;color:var(--sub);font-family:'Inter',sans-serif;transition:.15s;white-space:nowrap;flex-shrink:0}
+.asgn-btn.set{border-width:0;color:#fff;font-weight:700}
+.grip{width:22px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--border2);cursor:grab;flex-shrink:0;touch-action:none}
+.grip svg{width:14px;height:14px}
+.sc.dragging{opacity:.2}
+.sc.drag-over{border-color:#2E90FA;background:#EFF8FF}
+
+/* BOTTOM BAR */
+.bbar{background:var(--card);border-top:1px solid var(--border);display:flex;padding:8px 12px;gap:4px;flex-shrink:0}
+.bs{flex:1;text-align:center;padding:4px 0}
+.bv{font-size:20px;font-weight:800;line-height:1;font-family:'Inter',monospace}
+.bl{font-size:9px;color:var(--muted);margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.bdiv{width:1px;background:var(--border);margin:4px 0}
+.reset-btn{padding:0 10px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--sub);font-size:11px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:.15s}
+.reset-btn:active{border-color:#F04438;color:#F04438}
+
+/* UNASSIGNED */
+.ubanner{margin:12px 12px 6px;background:#FFFAEB;border:1px solid #FEC84B;border-radius:10px;padding:12px 14px}
+.ubanner h3{font-size:13px;font-weight:700;color:#B54708;margin-bottom:2px}
+.ubanner p{font-size:11px;color:#93370D;line-height:1.5}
+.uc{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:.12s;margin:0 12px 6px}
+.uc:active{background:#EFF8FF}
+.uc-num{width:28px;height:28px;border-radius:50%;background:#FFFAEB;border:1.5px solid #FEC84B;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#B54708;flex-shrink:0}
+
+/* EMPTY */
+.empty{padding:50px 20px;text-align:center;color:var(--muted)}
+.empty-icon{font-size:32px;margin-bottom:10px}
+.empty p{font-size:13px;font-weight:500;line-height:1.6}
+
+/* SEARCH */
+.sbar{padding:8px 12px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.sbar-inner{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:0 10px;transition:.15s}
+.sbar-inner:focus-within{border-color:#2E90FA;background:#fff}
+.sbar-inner svg{width:14px;height:14px;color:var(--muted);flex-shrink:0}
+.sbar-inner input{flex:1;border:none;background:transparent;font-family:'Inter',sans-serif;font-size:15px;color:var(--text);padding:9px 0;outline:none}
+.sbar-inner input::placeholder{color:var(--muted);font-size:14px}
+.sbar-clear{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;display:none;line-height:1}
+.sbar-clear.show{display:block}
+
+/* MAP */
+#map{width:100%;height:100%;z-index:1}
+.map-wrap{flex:1;position:relative;overflow:hidden}
+.map-topbar{background:var(--card);border-bottom:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.map-status{font-size:10px;color:var(--muted);font-family:'Inter',monospace;flex:1}
+.map-legend{display:flex;flex-wrap:wrap;gap:5px 10px;padding:8px 12px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.leg{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:var(--sub)}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.map-loader{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:10;pointer-events:none}
+.map-loader-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 28px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.08);pointer-events:all}
+.map-loader-card p{font-size:13px;font-weight:700;margin-bottom:3px}
+.map-loader-card small{font-size:11px;color:var(--muted);font-family:'Inter',monospace}
+.ml-track{height:4px;background:var(--border);border-radius:99px;margin-top:12px;overflow:hidden;width:160px}
+.ml-fill{height:100%;background:var(--text);border-radius:99px;transition:width .25s}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;z-index:2000;background:rgba(16,24,40,.5);display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)}
+.overlay.on{display:flex}
+.modal{background:var(--card);border-radius:16px 16px 0 0;width:100%;max-width:500px;padding:0 0 max(20px,env(safe-area-inset-bottom)) 0;animation:su .2s cubic-bezier(.32,.72,0,1)}
+@keyframes su{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.mbar{width:32px;height:4px;background:var(--border2);border-radius:4px;margin:10px auto 12px}
+.mhead{padding:0 16px 12px;border-bottom:1px solid var(--border)}
+.mtitle{font-size:14px;font-weight:700;margin-bottom:2px}
+.msub{font-size:11px;color:var(--sub);font-family:'Inter',monospace}
+.mlist{padding:8px 12px;display:flex;flex-direction:column;gap:5px;max-height:55vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.mitem{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);cursor:pointer;transition:.12s;-webkit-user-select:none}
+.mitem:active{background:#EFF8FF;border-color:#2E90FA}
+.mitem.cur{border-color:var(--text);background:var(--card)}
+.mitem.del{border-color:#FECDCA}
+.mitem.del:active{background:#FEF3F2}
+.mc{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.mb{flex:1;min-width:0}
+.mb strong{font-size:13px;font-weight:600;display:block;line-height:1.2}
+.mb span{font-size:10px;color:var(--sub)}
+.mn{font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:var(--border);color:var(--sub);font-family:'Inter',monospace;flex-shrink:0}
+.mweek{padding:5px 4px 3px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.mcancel{margin:4px 12px 0;width:calc(100% - 24px);padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;font-size:13px;font-weight:600;color:var(--sub);cursor:pointer;font-family:'Inter',sans-serif}
+.mcancel:active{color:#F04438;border-color:#FECDCA}
+
+/* EDIT MODAL */
+.edit-form{padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+.ef-label{font-size:11px;font-weight:600;color:var(--sub);margin-bottom:4px;display:block;text-transform:uppercase;letter-spacing:.4px}
+.ef-input{width:100%;border:1px solid var(--border2);border-radius:8px;padding:10px 12px;font-family:'Inter',sans-serif;font-size:14px;color:var(--text);background:var(--bg);outline:none;transition:.15s}
+.ef-input:focus{border-color:#2E90FA;background:#fff}
+.ef-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ef-btns{display:flex;gap:8px;padding:0 16px 0;margin-top:4px}
+.ef-save{flex:1;padding:11px;border-radius:8px;border:none;background:var(--text);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:.15s}
+.ef-save:active{opacity:.85}
+.ef-cancel{flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--sub);font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif}
+
+/* POPUP */
+.leaflet-popup-content-wrapper{border-radius:10px!important;box-shadow:0 4px 16px rgba(0,0,0,.12)!important;border:1px solid var(--border)!important;font-family:'Inter',sans-serif!important;padding:0!important}
+.leaflet-popup-content{margin:0!important;font-family:'Inter',sans-serif!important;min-width:180px}
+.leaflet-popup-tip-container{display:none}
+.pp{padding:12px 14px}
+.pp-name{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.pp-addr{font-size:10px;color:var(--sub);margin-bottom:8px;line-height:1.4}
+.pp-tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;display:inline-block;margin-bottom:8px}
+.pp-btn{display:block;width:100%;padding:8px;background:var(--text);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:.15s}
+.pp-btn:active{opacity:.8}
+
+/* POSTCODE COLORS */
+.pSE{background:#EFF8FF;color:#1849A9}.pDA{background:#ECFDF3;color:#054F31}
+.pME{background:#FDF4FF;color:#53178F}.pBR{background:#EDE9FE;color:#3E1C96}
+.pCR{background:#FFFAEB;color:#7A2E0E}.pSM{background:#EEF4FF;color:#2D3282}
+.pCT{background:#F0FDF4;color:#064E3B}.pTN{background:#FFF6ED;color:#7E2410}
+.pKT{background:#F0FDF4;color:#054F31}.pRH{background:#FFF1F3;color:#881B2D}
+.pGU{background:#FDF4FF;color:#53178F}.pOT{background:#F2F4F7;color:#344054}
+
+/* ── DASHBOARD ── */
+.dash-hero{background:linear-gradient(135deg,#101828 0%,#1D2939 100%);color:#fff;padding:20px 16px 16px;flex-shrink:0}
+.dash-hero-title{font-size:11px;font-weight:600;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+.dash-hero-val{font-size:36px;font-weight:800;font-family:'Inter',monospace;line-height:1}
+.dash-hero-sub{font-size:12px;color:rgba(255,255,255,.5);margin-top:4px}
+.dash-pills{display:flex;gap:8px;margin-top:14px;overflow-x:auto;scrollbar-width:none}
+.dash-pills::-webkit-scrollbar{display:none}
+.dash-pill{background:rgba(255,255,255,.1);border-radius:8px;padding:10px 14px;flex-shrink:0;min-width:90px}
+.dash-pill-val{font-size:18px;font-weight:800;font-family:'Inter',monospace;line-height:1}
+.dash-pill-lbl{font-size:9px;font-weight:600;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+.dash-section{padding:12px 16px 6px;flex-shrink:0}
+.dash-sec-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.dash-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.dash-card-val{font-size:22px;font-weight:800;font-family:'Inter',monospace;line-height:1;margin-bottom:3px}
+.dash-card-lbl{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.dash-card.green .dash-card-val{color:#027A48}
+.dash-card.blue  .dash-card-val{color:#175CD3}
+.dash-card.red   .dash-card-val{color:#B42318}
+.dash-card.amber .dash-card-val{color:#B54708}
+.dash-week-row{display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none}
+.dash-week-row::-webkit-scrollbar{display:none}
+.dwc{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;flex-shrink:0;min-width:130px}
+.dwc-title{font-size:10px;font-weight:700;color:var(--muted);margin-bottom:4px}
+.dwc-val{font-size:14px;font-weight:800;font-family:'Inter',monospace}
+.dwc-bar{height:4px;background:var(--border);border-radius:99px;margin-top:6px;overflow:hidden}
+.dwc-bar-fill{height:100%;border-radius:99px;transition:width .4s}
+/* Top debtors */
+.debt-item{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.debt-item-name{flex:1;font-size:13px;font-weight:600;line-height:1.3}
+.debt-item-amt{font-size:16px;font-weight:800;color:#B42318;font-family:'Inter',monospace;flex-shrink:0}
+
+/* ── BORÇ GEÇMİŞİ PAGE ── */
+.bdg-card{background:var(--card);border:1px solid var(--border);border-radius:10px;margin:0 12px 8px;overflow:hidden}
+.bdg-head{padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer}
+.bdg-name{flex:1;font-size:13px;font-weight:700}
+.bdg-total{font-size:15px;font-weight:800;color:#B42318;font-family:'Inter',monospace;flex-shrink:0}
+.bdg-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;background:#FEF3F2;color:#B42318;flex-shrink:0}
+.bdg-body{border-top:1px solid var(--border);padding:10px 14px;display:none}
+.bdg-body.open{display:block}
+.bdg-hist{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.bdg-hist-row{display:flex;gap:8px;align-items:center;font-size:11px}
+.bdg-hist-date{color:var(--muted);font-family:'Inter',monospace;flex-shrink:0;width:72px}
+.bdg-hist-desc{flex:1;color:var(--sub)}
+.bdg-hist-amt{font-weight:700;font-family:'Inter',monospace;flex-shrink:0}
+.bdg-hist-amt.pos{color:#D92D20}
+.bdg-hist-amt.neg{color:#027A48}
+.bdg-clear-btn{width:100%;padding:8px;border-radius:8px;border:1px solid #FECDCA;background:#FEF3F2;color:#D92D20;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif}
+
+/* ── CATALOG QUICK-PICK ── */
+.cat-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.cat-chip{padding:5px 10px;border-radius:99px;border:1.5px solid var(--border2);background:var(--bg);font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:.12s;white-space:nowrap;color:var(--sub)}
+.cat-chip:active{background:#EFF8FF;border-color:#2E90FA;color:#175CD3}
+.cat-chip.stop-override{border-color:#9E77ED;color:#53178F;background:#FDF4FF}
+
+/* ── CATALOG MANAGEMENT PAGE ── */
+.cat-item{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.cat-item-name{flex:1;font-size:13px;font-weight:600}
+.cat-item-price{font-size:13px;font-weight:800;font-family:'Inter',monospace;color:var(--sub);min-width:50px;text-align:right;flex-shrink:0}
+.cat-item-actions{display:flex;gap:5px;flex-shrink:0}
+.cat-act-btn{height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;font-size:11px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;color:var(--sub)}
+
+/* ── PLAN IMPORT ── */
+.pimport-drop{background:var(--card);border:2px dashed var(--border2);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:.15s;margin:0 12px 8px}
+.pimport-drop:hover,.pimport-drop.drag{border-color:#2E90FA;background:#EFF8FF}
+.pimport-drop p{font-size:13px;font-weight:600;color:var(--sub);margin-top:6px}
+.pimport-drop small{font-size:10px;color:var(--muted)}
+
+/* ── PRODUCT ANALYTICS ── */
+.prod-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.prod-row:last-child{border-bottom:none}
+.prod-rank{width:20px;font-size:11px;font-weight:800;color:var(--muted);font-family:'Inter',monospace;flex-shrink:0;text-align:center}
+.prod-name{flex:1;font-size:12px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prod-stats{text-align:right;flex-shrink:0}
+.prod-ciro{font-size:13px;font-weight:800;font-family:'Inter',monospace}
+.prod-qty{font-size:9px;color:var(--muted);font-weight:600;margin-top:1px}
+.prod-bar{height:3px;background:var(--border);border-radius:99px;overflow:hidden;margin-top:4px;width:60px}
+.prod-bar-fill{height:100%;border-radius:99px;background:#2E90FA}
+
+/* ── DASH PERIOD TOGGLE ── */
+.period-tog{display:flex;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:2px;gap:2px;flex-shrink:0}
+.pt-btn{flex:1;padding:5px 8px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--sub);background:transparent;font-family:'Inter',sans-serif;transition:.15s;white-space:nowrap}
+.pt-btn.on{background:var(--nav);color:#fff}
+
+/* PAYMENT BADGE on stop card */
+.pay-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;margin-top:3px}
+.pay-cash{background:#ECFDF3;color:#027A48}
+.pay-bank{background:#EFF8FF;color:#175CD3}
+.pay-unpaid{background:#FEF3F2;color:#B42318}
+.pay-debt{background:#FFF6ED;color:#B54708}
+
+/* PLAN CARD with order info */
+.sc-order-row{display:flex;align-items:center;gap:5px;margin-top:4px;flex-wrap:wrap}
+
+/* ORDER MODAL */
+.ord-modal{max-height:92dvh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.ord-section{padding:12px 16px;border-bottom:1px solid var(--border)}
+.ord-section:last-child{border-bottom:none}
+.ord-sec-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.ord-items{display:flex;flex-direction:column;gap:6px}
+.ord-item-row{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.ord-item-name{flex:1;font-size:13px;font-weight:600;min-width:0}
+.ord-qty-wrap{display:flex;align-items:center;gap:6px}
+.ord-qty-btn{width:28px;height:28px;border-radius:6px;border:1px solid var(--border2);background:var(--card);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--sub);flex-shrink:0}
+.ord-qty{width:32px;text-align:center;font-size:13px;font-weight:700;font-family:'Inter',monospace}
+.ord-price{font-size:12px;font-weight:700;color:var(--text);width:50px;text-align:right;font-family:'Inter',monospace}
+.ord-del{width:28px;height:28px;border-radius:6px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ord-del:active{color:#D92D20}
+.add-item-row{display:flex;gap:6px;margin-top:6px}
+.add-item-row input{flex:1;border:1px dashed var(--border2);border-radius:8px;padding:8px 10px;font-family:'Inter',sans-serif;font-size:13px;background:var(--bg);outline:none;color:var(--text);min-width:0}
+.add-item-row input:focus{border-color:#2E90FA;background:#fff;border-style:solid}
+.add-item-row .price-inp{width:70px;flex:none}
+.add-item-btn{height:36px;padding:0 12px;border-radius:8px;border:none;background:var(--text);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0}
+
+/* TOTAL ROW */
+.ord-total{display:flex;justify-content:space-between;align-items:center;padding:10px 0 4px}
+.ord-total-label{font-size:13px;font-weight:700}
+.ord-total-val{font-size:20px;font-weight:800;font-family:'Inter',monospace}
+
+/* PAYMENT SELECTOR */
+.pay-opts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.pay-opt{padding:10px 6px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);cursor:pointer;text-align:center;transition:.15s;font-family:'Inter',sans-serif}
+.pay-opt.sel{border-width:2px}
+.pay-opt .po-icon{font-size:20px;margin-bottom:3px}
+.pay-opt .po-label{font-size:11px;font-weight:700;display:block}
+.cash-inp-wrap{margin-top:8px;display:none}
+.cash-inp-wrap.show{display:block}
+.cash-inp-wrap input{width:100%;border:1px solid var(--border2);border-radius:8px;padding:10px 12px;font-family:'Inter',monospace;font-size:18px;font-weight:700;background:var(--bg);outline:none;color:var(--text)}
+.cash-inp-wrap input:focus{border-color:#12B76A;background:#fff}
+.cash-change{margin-top:5px;font-size:12px;font-weight:600;color:#027A48;padding:6px 10px;background:#ECFDF3;border-radius:6px;display:none}
+.cash-change.show{display:block}
+
+/* DEBT SECTION */
+.debt-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#FFF6ED;border:1px solid #FEC84B;border-radius:8px}
+.debt-lbl{flex:1;font-size:12px;font-weight:600;color:#B54708}
+.debt-amt{font-size:16px;font-weight:800;color:#B54708;font-family:'Inter',monospace}
+.debt-pay-btn{height:30px;padding:0 10px;border-radius:6px;border:none;background:#B54708;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap}
+.debt-inp-row{display:flex;gap:6px;margin-top:6px}
+.debt-inp{flex:1;border:1px solid var(--border2);border-radius:8px;padding:8px 10px;font-family:'Inter',monospace;font-size:14px;font-weight:700;background:var(--bg);outline:none;color:var(--text)}
+.debt-inp:focus{border-color:#DC6803;background:#fff}
+
+/* NOTE */
+.note-inp{width:100%;border:1px solid var(--border2);border-radius:8px;padding:9px 12px;font-family:'Inter',sans-serif;font-size:13px;background:var(--bg);outline:none;color:var(--text);resize:none;height:64px}
+.note-inp:focus{border-color:#2E90FA;background:#fff}
+
+/* DAY SUMMARY BAR */
+.day-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px 12px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.ds-cell{text-align:center;padding:6px 4px;border-radius:8px;background:var(--bg)}
+.ds-val{font-size:14px;font-weight:800;font-family:'Inter',monospace;line-height:1}
+.ds-lbl{font-size:8px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+.ds-cell.cash .ds-val{color:#027A48}
+.ds-cell.bank .ds-val{color:#175CD3}
+.ds-cell.unpaid .ds-val{color:#B42318}
+.ds-cell.debt .ds-val{color:#B54708}
+</style>
+</head>
+<body>
+
+<!-- PAGE: MAP -->
+<div class="page on" id="page-map">
+  <div class="map-topbar">
+    <div style="flex:1">
+      <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:7px">
+        Harita
+        <span id="syncDot" title="Sync durumu" onclick="openSbSetup()" style="width:9px;height:9px;border-radius:50%;background:#98A2B3;display:inline-block;cursor:pointer;flex-shrink:0;transition:.3s"></span>
+      </div>
+      <div class="map-status" id="mapStatus">Yükleniyor…</div>
+    </div>
+    <div class="wtog" id="mapWtog">
+      <button class="wb on" onclick="setMapFilter('all')">Tümü</button>
+      <button class="wb" onclick="setMapFilter('A')">Hafta A</button>
+      <button class="wb" onclick="setMapFilter('B')">Hafta B</button>
+    </div>
+  </div>
+  <div class="map-legend" id="mapLegend"></div>
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="map-loader" id="mapLoader">
+      <div class="map-loader-card">
+        <p>Adresler yükleniyor</p>
+        <small id="loadTxt">0 / 101</small>
+        <div class="ml-track"><div class="ml-fill" id="loadFill" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: ROTA -->
+<div class="page" id="page-rota">
+  <div class="topbar">
+    <div style="flex:1">
+      <div class="tb-title">Rota</div>
+    </div>
+    <button onclick="exportExcel()" style="height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg);font-size:11px;font-weight:700;cursor:pointer;color:var(--sub);font-family:'Inter',sans-serif;white-space:nowrap;margin-right:6px" title="Excel İndir">📥 Excel</button>
+    <div class="wtog">
+      <button class="wb on" id="rWA" onclick="setRotaWeek('A')">Hafta A</button>
+      <button class="wb" id="rWB" onclick="setRotaWeek('B')">Hafta B</button>
+    </div>
+  </div>
+  <div class="sbar">
+    <div class="sbar-inner">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="6"/><path d="m15 15 3 3"/></svg>
+      <input type="search" id="rotaSearch" placeholder="Cafe, adres veya posta kodu…" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onRotaSearch(this.value)">
+      <button class="sbar-clear" id="rotaClear" onclick="clearRotaSearch()">✕</button>
+    </div>
+  </div>
+  <div class="dtabs" id="rotaTabs"></div>
+  <div class="body" id="rotaBody"></div>
+  <div class="bbar">
+    <div class="bs"><div class="bv" id="rv">—</div><div class="bl">Ziyaret</div></div>
+    <div class="bdiv"></div>
+    <div class="bs"><div class="bv" id="rt">0</div><div class="bl">Toplam</div></div>
+    <div class="bdiv"></div>
+    <div class="bs"><div class="bv" id="rr">—</div><div class="bl">Kalan</div></div>
+    <div class="bdiv"></div>
+    <button class="reset-btn" onclick="resetRotaDay()">↺ Sıfırla</button>
+  </div>
+</div>
+
+<!-- PAGE: PLAN -->
+<div class="page" id="page-plan">
+  <div class="topbar">
+    <div style="flex:1">
+      <div class="tb-title">Günlük Plan</div>
+    </div>
+    <button onclick="openPlanImport()" style="height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg);font-size:11px;font-weight:700;cursor:pointer;color:var(--sub);font-family:'Inter',sans-serif;margin-right:6px">📂 Import</button>
+    <div class="wtog">
+      <button class="wb on" id="pWA" onclick="setPlanWeek('A')">Hafta A</button>
+      <button class="wb" id="pWB" onclick="setPlanWeek('B')">Hafta B</button>
+    </div>
+  </div>
+  <div class="dtabs" id="planTabs"></div>
+  <div class="body" id="planBody"></div>
+</div>
+
+<!-- PAGE: ADRESLER -->
+<div class="page" id="page-adresler">
+  <div class="topbar">
+    <div style="flex:1">
+      <div class="tb-title">Adresler</div>
+      <div class="tb-sub" id="adrCount"></div>
+    </div>
+    <button onclick="openAddStop()" style="width:34px;height:34px;border-radius:8px;border:none;background:var(--text);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+  </div>
+  <div class="sbar">
+    <div class="sbar-inner">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="6"/><path d="m15 15 3 3"/></svg>
+      <input type="search" id="adrSearch" placeholder="Cafe, adres veya posta kodu…" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onAdrSearch(this.value)">
+      <button class="sbar-clear" id="adrClear" onclick="clearAdrSearch()">✕</button>
+    </div>
+  </div>
+  <!-- Import / Export bar -->
+  <div style="display:flex;gap:8px;padding:8px 12px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0">
+    <button onclick="document.getElementById('xlsxImport').click()" style="flex:1;height:34px;border-radius:8px;border:1px solid var(--border2);background:var(--bg);font-size:11px;font-weight:700;cursor:pointer;color:var(--sub);font-family:'Inter',sans-serif">📂 Excel/CSV İmport</button>
+    <button onclick="exportAdrExcel()" style="flex:1;height:34px;border-radius:8px;border:1px solid var(--border2);background:var(--bg);font-size:11px;font-weight:700;cursor:pointer;color:var(--sub);font-family:'Inter',sans-serif">📥 Excel Export</button>
+    <input type="file" id="xlsxImport" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleImport(this)">
+  </div>
+  <!-- Import template hint -->
+  <div style="padding:8px 12px 0;flex-shrink:0">
+    <div style="background:#EFF8FF;border:1px solid #B2DDFF;border-radius:8px;padding:8px 12px;font-size:11px;color:#175CD3;line-height:1.5">
+      <strong>Import formatı:</strong> Excel/CSV — sütunlar: <code style="background:#DBEAFE;padding:1px 4px;border-radius:3px">Cafe Adı | Adres | Şehir | Posta Kodu</code>
+    </div>
+  </div>
+  <div class="body" id="adrBody"></div>
+</div>
+
+<!-- PAGE: DASHBOARD -->
+<div class="page" id="page-dash">
+  <div class="topbar">
+    <div class="tb-title" style="flex:1">Özet</div>
+    <div class="period-tog" style="margin-right:8px">
+      <button class="pt-btn on" id="dp-day" onclick="setDashPeriod('day')">Bugün</button>
+      <button class="pt-btn" id="dp-month" onclick="setDashPeriod('month')">Ay</button>
+    </div>
+    <div class="wtog">
+      <button class="wb on" id="dWA" onclick="setDashWeek('A')">Hafta A</button>
+      <button class="wb" id="dWB" onclick="setDashWeek('B')">Hafta B</button>
+      <button class="wb" id="dWall" onclick="setDashWeek('all')">Tümü</button>
+    </div>
+  </div>
+  <div class="body" id="dashBody"></div>
+</div>
+
+<!-- PAGE: BORÇ GEÇMİŞİ -->
+<div class="page" id="page-borclar">
+  <div class="topbar">
+    <div style="flex:1">
+      <div class="tb-title">Borç Geçmişi</div>
+      <div class="tb-sub" id="borcSub"></div>
+    </div>
+  </div>
+  <div class="sbar">
+    <div class="sbar-inner">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="6"/><path d="m15 15 3 3"/></svg>
+      <input type="search" id="borcSearch" placeholder="Cafe ara…" autocomplete="off" oninput="onBorcSearch(this.value)">
+      <button class="sbar-clear" id="borcClear" onclick="clearBorcSearch()">✕</button>
+    </div>
+  </div>
+  <div class="body" id="borcBody"></div>
+</div>
+
+<!-- PAGE: KATALOG -->
+<div class="page" id="page-katalog">
+  <div class="topbar">
+    <div style="flex:1">
+      <div class="tb-title">Ürün Kataloğu</div>
+      <div class="tb-sub" id="katSub"></div>
+    </div>
+    <button onclick="openAddCat()" style="width:34px;height:34px;border-radius:8px;border:none;background:var(--text);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+  </div>
+  <div class="body" id="katBody" style="padding:12px"></div>
+</div>
+
+<!-- PLAN IMPORT MODAL -->
+<div class="overlay" id="planImportOv" onclick="if(event.target===this)closePlanImport()">
+  <div class="modal" style="max-height:88dvh;overflow-y:auto">
+    <div class="mbar"></div>
+    <div class="mhead">
+      <div class="mtitle">📂 Plan İmport</div>
+      <div class="msub">Excel, CSV veya JSON — café → gün ataması</div>
+    </div>
+    <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+      <!-- Drop zone -->
+      <div class="pimport-drop" id="pimportDrop" onclick="document.getElementById('planImportFile').click()"
+           ondragover="event.preventDefault();this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="handlePlanImportDrop(event)">
+        <div style="font-size:28px">📁</div>
+        <p>Dosya seç veya buraya sürükle</p>
+        <small>Excel (.xlsx / .xls) · CSV · JSON</small>
+      </div>
+      <input type="file" id="planImportFile" accept=".xlsx,.xls,.csv,.json" style="display:none" onchange="handlePlanImportFile(this)">
+
+      <!-- Format info tabs -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--sub);line-height:1.8">
+        <strong style="color:var(--text)">Beklenen sütunlar (Excel/CSV):</strong><br>
+        <code style="background:#E9D7FE;color:#53178F;padding:1px 5px;border-radius:3px">Cafe Adı</code> &nbsp;
+        <code style="background:#E9D7FE;color:#53178F;padding:1px 5px;border-radius:3px">Hafta</code> (A/B) &nbsp;
+        <code style="background:#E9D7FE;color:#53178F;padding:1px 5px;border-radius:3px">Gün</code> (Pazartesi…) &nbsp;
+        <code style="background:#E9D7FE;color:#53178F;padding:1px 5px;border-radius:3px">Sıra</code> (opsiyonel)<br>
+        <strong style="color:var(--text)">JSON formatı:</strong> <code style="background:#E9D7FE;color:#53178F;padding:1px 5px;border-radius:3px">[{"cafe":"...", "week":"A", "day":"Pazartesi", "order":1}]</code>
+      </div>
+
+      <!-- Preview -->
+      <div id="pimportPreview" style="display:none">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Önizleme</div>
+        <div id="pimportPreviewList" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px"></div>
+        <div id="pimportSummary" style="font-size:12px;font-weight:600;color:var(--sub);margin-top:8px"></div>
+      </div>
+    </div>
+    <div class="ef-btns">
+      <button class="ef-cancel" onclick="closePlanImport()">İptal</button>
+      <button class="ef-save" id="pimportApplyBtn" onclick="applyPlanImport()" disabled style="opacity:.4">Uygula</button>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+</div>
+
+<!-- ADD/EDIT CATALOG ITEM MODAL -->
+<div class="overlay" id="catOv" onclick="if(event.target===this)closeCat()">
+  <div class="modal">
+    <div class="mbar"></div>
+    <div class="mhead">
+      <div class="mtitle" id="catModalTitle">Ürün Ekle</div>
+      <div class="msub">Global katalog</div>
+    </div>
+    <div class="edit-form">
+      <div>
+        <label class="ef-label">Ürün Adı *</label>
+        <input class="ef-input" id="cat-name" placeholder="Örn: Costadoro Espresso 1kg">
+      </div>
+      <div class="ef-row">
+        <div>
+          <label class="ef-label">Fiyat (£) *</label>
+          <input class="ef-input" id="cat-price" type="number" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div>
+          <label class="ef-label">Kategori</label>
+          <input class="ef-input" id="cat-cat" placeholder="Kahve, Aksesuar…">
+        </div>
+      </div>
+    </div>
+    <div class="ef-btns">
+      <button class="ef-cancel" onclick="closeCat()">İptal</button>
+      <button class="ef-save" onclick="saveCatItem()">Kaydet</button>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+</div>
+<nav class="nav">
+  <button class="ni on" id="nav-map" onclick="showPage('map')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+    Harita
+  </button>
+  <button class="ni" id="nav-rota" onclick="showPage('rota')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    Rota
+  </button>
+  <button class="ni" id="nav-plan" onclick="showPage('plan')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="m16 8 2 2 4-4"/><path d="M1 20l4-4"/><path d="M1 20h8"/><path d="M9 20 5 16"/></svg>
+    Plan
+  </button>
+  <button class="ni" id="nav-dash" onclick="showPage('dash')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Özet
+  </button>
+  <button class="ni" id="nav-katalog" onclick="showPage('katalog')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+    Katalog
+  </button>
+</nav>
+
+<!-- SUPABASE SETUP MODAL -->
+<div class="overlay" id="sbSetupOv" onclick="if(event.target===this)closeSbSetup()">
+  <div class="modal">
+    <div class="mbar"></div>
+    <div class="mhead">
+      <div class="mtitle">☁️ Supabase Sync</div>
+      <div class="msub">Telefon + bilgisayar arası otomatik senkronizasyon</div>
+    </div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <!-- Status banner -->
+      <div id="sbStatusBanner" style="padding:10px 12px;border-radius:8px;font-size:12px;font-weight:600;line-height:1.5"></div>
+      <!-- URL -->
+      <div>
+        <label class="ef-label">Supabase Project URL</label>
+        <input class="ef-input" id="sb-url" placeholder="https://xxxxxxxxxxxxxx.supabase.co" autocomplete="off" spellcheck="false">
+      </div>
+      <!-- Key -->
+      <div>
+        <label class="ef-label">Anon Public Key</label>
+        <input class="ef-input" id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIs…" autocomplete="off" spellcheck="false">
+      </div>
+      <!-- Info box -->
+      <div style="background:#EFF8FF;border:1px solid #B2DDFF;border-radius:8px;padding:10px 12px;font-size:11px;color:#175CD3;line-height:1.7">
+        <strong>Nasıl alınır?</strong><br>
+        1. <a href="https://supabase.com" target="_blank" style="color:#175CD3">supabase.com</a> → Yeni proje oluştur (ücretsiz)<br>
+        2. Settings → API → <strong>Project URL</strong> ve <strong>anon public key</strong> kopyala<br>
+        3. SQL Editor'da aşağıdaki tabloyu oluştur:
+        <div style="background:#101828;color:#6CE9A6;border-radius:6px;padding:8px;margin-top:6px;font-family:monospace;font-size:10px;line-height:1.6;white-space:pre-wrap">CREATE TABLE cr4_store (
+  key TEXT PRIMARY KEY,
+  value JSONB,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Herkese açık okuma/yazma (RLS kapalı):
+ALTER TABLE cr4_store DISABLE ROW LEVEL SECURITY;</div>
+      </div>
+      <!-- Actions -->
+      <div style="display:flex;gap:8px">
+        <button onclick="testSbConnection()" style="flex:1;height:38px;border-radius:8px;border:1px solid var(--border2);background:var(--bg);font-size:12px;font-weight:700;cursor:pointer;color:var(--sub);font-family:'Inter',sans-serif">🔌 Test Et</button>
+        <button onclick="pushAllToSupabase()" style="flex:1;height:38px;border-radius:8px;border:none;background:#2E90FA;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">⬆️ Veriyi Yükle</button>
+        <button onclick="syncFromSupabase()" style="flex:1;height:38px;border-radius:8px;border:none;background:#12B76A;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">⬇️ Sync Al</button>
+      </div>
+    </div>
+    <div class="ef-btns">
+      <button class="ef-cancel" onclick="closeSbSetup()">İptal</button>
+      <button class="ef-save" onclick="saveSbConfig()">Kaydet</button>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+</div>
+
+<!-- ASSIGN MODAL -->
+<div class="overlay" id="assignOv" onclick="if(event.target===this)closeAssign()">
+  <div class="modal">
+    <div class="mbar"></div>
+    <div class="mhead">
+      <div class="mtitle" id="aTitle">—</div>
+      <div class="msub" id="aSub">—</div>
+    </div>
+    <div class="mlist" id="aList"></div>
+    <button class="mcancel" onclick="closeAssign()">İptal</button>
+  </div>
+</div>
+
+<!-- CUSTOMER NOTE MODAL -->
+<div class="overlay" id="cnoteOv" onclick="if(event.target===this)closeCnote()">
+  <div class="modal">
+    <div class="mbar"></div>
+    <div class="mhead">
+      <div class="mtitle">📌 Müşteri Notu</div>
+      <div class="msub" id="cnoteStopName">—</div>
+    </div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;color:var(--sub);line-height:1.5;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+        Bu not her ziyarette görünür. "Nakit istemiyor", "Kapıda ödeme", "Salı öğleden sonra kapalı" gibi kalıcı bilgiler için kullanın.
+      </div>
+      <textarea id="cnoteText" placeholder="Kalıcı not girin…" style="width:100%;border:1px solid var(--border2);border-radius:8px;padding:10px 12px;font-family:'Inter',sans-serif;font-size:14px;background:var(--bg);outline:none;color:var(--text);resize:none;height:100px;transition:.15s"></textarea>
+    </div>
+    <div class="ef-btns">
+      <button class="ef-cancel" onclick="closeCnote()">İptal</button>
+      <button class="ef-save" onclick="saveCnote()">Kaydet</button>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+</div>
+
+<!-- MOVE MODAL (Plan) -->
+<div class="overlay" id="moveOv" onclick="if(event.target===this)closeMove()">
+  <div class="modal">
+    <div class="mbar"></div>
+    <div class="mhead">
+      <div class="mtitle" id="mvTitle">—</div>
+      <div class="msub">Hangi güne taşınsın?</div>
+    </div>
+    <div class="mlist" id="mvList"></div>
+    <button class="mcancel" onclick="closeMove()">İptal</button>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="overlay" id="editOv" onclick="if(event.target===this)closeEdit()">
+  <div class="modal">
+    <div class="mbar"></div>
+    <div class="mhead">
+      <div class="mtitle">Adres Düzenle</div>
+      <div class="msub" id="editSub">—</div>
+    </div>
+    <div class="edit-form">
+      <div>
+        <label class="ef-label">Cafe Adı</label>
+        <input class="ef-input" id="ef-n" placeholder="Cafe adı">
+      </div>
+      <div>
+        <label class="ef-label">Adres</label>
+        <input class="ef-input" id="ef-a" placeholder="Sokak adresi">
+      </div>
+      <div class="ef-row">
+        <div>
+          <label class="ef-label">Şehir</label>
+          <input class="ef-input" id="ef-c" placeholder="Şehir">
+        </div>
+        <div>
+          <label class="ef-label">Posta Kodu</label>
+          <input class="ef-input" id="ef-p" placeholder="Postcode">
+        </div>
+      </div>
+    </div>
+    <div class="ef-btns">
+      <button class="ef-cancel" onclick="closeEdit()">İptal</button>
+      <button class="ef-save" onclick="saveEdit()">Kaydet</button>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+</div>
+
+<!-- NEW STOP MODAL -->
+<div class="overlay" id="addOv" onclick="if(event.target===this)closeAdd()">
+  <div class="modal">
+    <div class="mbar"></div>
+    <div class="mhead">
+      <div class="mtitle">Yeni Durak Ekle</div>
+      <div class="msub">Tüm alanları doldurun</div>
+    </div>
+    <div class="edit-form">
+      <div>
+        <label class="ef-label">Cafe Adı *</label>
+        <input class="ef-input" id="add-n" placeholder="Örn: COSTA COFFEE">
+      </div>
+      <div>
+        <label class="ef-label">Adres *</label>
+        <input class="ef-input" id="add-a" placeholder="Örn: 45 High Street">
+      </div>
+      <div class="ef-row">
+        <div>
+          <label class="ef-label">Şehir *</label>
+          <input class="ef-input" id="add-c" placeholder="Örn: London">
+        </div>
+        <div>
+          <label class="ef-label">Posta Kodu *</label>
+          <input class="ef-input" id="add-p" placeholder="Örn: SE1 2AB">
+        </div>
+      </div>
+    </div>
+    <div class="ef-btns">
+      <button class="ef-cancel" onclick="closeAdd()">İptal</button>
+      <button class="ef-save" onclick="saveAdd()">Ekle</button>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="overlay" id="delOv" onclick="if(event.target===this)closeDel()">
+  <div class="modal">
+    <div class="mbar"></div>
+    <div class="mhead">
+      <div class="mtitle" style="color:#D92D20">Durağı Sil</div>
+      <div class="msub" id="delName">—</div>
+    </div>
+    <div style="padding:12px 16px">
+      <div style="background:#FEF3F2;border:1px solid #FECDCA;border-radius:8px;padding:12px 14px;font-size:12px;color:#912018;line-height:1.6">
+        Bu durak <strong>kalıcı olarak silinecek</strong>. Rota ataması da kaldırılacak. Bu işlem geri alınamaz.
+      </div>
+    </div>
+    <div class="ef-btns">
+      <button class="ef-cancel" onclick="closeDel()">İptal</button>
+      <button class="ef-save" style="background:#D92D20" onclick="confirmDel()">Evet, Sil</button>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+</div>
+
+<!-- ORDER / PAYMENT MODAL -->
+<div class="overlay" id="ordOv" onclick="if(event.target===this)closeOrd()">
+  <div class="modal ord-modal" id="ordModal">
+    <div class="mbar"></div>
+    <div class="mhead" style="display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1">
+        <div class="mtitle" id="ordTitle">—</div>
+        <div class="msub" id="ordSub">—</div>
+      </div>
+      <button onclick="openCnoteFromOrd()" title="Kalıcı müşteri notu" style="border:1px solid var(--border2);background:var(--bg);border-radius:7px;padding:5px 8px;font-size:14px;cursor:pointer;line-height:1">📌</button>
+      <button onclick="closeOrd()" style="border:none;background:none;font-size:22px;color:var(--muted);cursor:pointer;padding:0;line-height:1">×</button>
+    </div>
+    <!-- Permanent note banner -->
+    <div id="ordCnoteBanner" style="display:none;margin:0 16px 0;padding:8px 12px;background:#FFFAEB;border:1px solid #FEC84B;border-radius:8px;font-size:11px;color:#B54708;line-height:1.5;cursor:pointer" onclick="openCnoteFromOrd()"></div>
+
+    <!-- DEBT -->
+    <div class="ord-section" id="ordDebtSection" style="display:none">
+      <div class="ord-sec-title">⚠️ Geçmiş Borç</div>
+      <div class="debt-row">
+        <div class="debt-lbl">Mevcut borç</div>
+        <div class="debt-amt" id="ordDebtAmt">£0.00</div>
+        <button class="debt-pay-btn" onclick="toggleDebtPay()">Ödeme Yap</button>
+      </div>
+      <div id="debtPayRow" style="display:none;margin-top:8px">
+        <div class="debt-inp-row">
+          <input class="debt-inp" id="debtPayInp" type="number" min="0" step="0.01" placeholder="Ödeme tutarı £">
+          <button onclick="applyDebtPayment()" style="height:38px;padding:0 14px;border-radius:8px;border:none;background:#B54708;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">Uygula</button>
+        </div>
+        <div id="debtPayResult" style="font-size:11px;color:var(--sub);margin-top:5px"></div>
+      </div>
+    </div>
+
+    <!-- ITEMS -->
+    <div class="ord-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div class="ord-sec-title" style="margin:0">📦 Sipariş Kalemleri</div>
+        <button onclick="toggleCatPick()" id="catPickToggle" style="font-size:10px;font-weight:700;color:#2E90FA;background:none;border:none;cursor:pointer;font-family:'Inter',sans-serif">📋 Katalogdan Seç</button>
+      </div>
+      <!-- Catalog quick-pick chips -->
+      <div id="catPickArea" style="display:none;margin-bottom:8px">
+        <div class="cat-chips" id="catChips"></div>
+      </div>
+      <div class="ord-items" id="ordItems"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input class="ef-input" id="newItemName" placeholder="Ürün adı" style="flex:2;padding:8px 10px;font-size:13px">
+        <input class="ef-input" id="newItemQty" type="number" min="1" value="1" placeholder="Qty" style="width:52px;padding:8px 8px;font-size:13px;text-align:center">
+        <input class="ef-input" id="newItemPrice" type="number" min="0" step="0.01" placeholder="£" style="width:64px;padding:8px 8px;font-size:13px">
+        <button class="add-item-btn" onclick="addOrderItem()">+ Ekle</button>
+      </div>
+    </div>
+
+    <!-- TOTAL -->
+    <div class="ord-section" style="padding:10px 16px">
+      <div class="ord-total">
+        <span class="ord-total-label">Sipariş Toplam</span>
+        <span class="ord-total-val" id="ordTotal">£0.00</span>
+      </div>
+      <div id="ordOutstandingRow" style="display:none;display:flex;justify-content:space-between;align-items:center;padding-top:6px">
+        <span style="font-size:12px;font-weight:600;color:#B42318">Kalan (ödenmedi)</span>
+        <span style="font-size:14px;font-weight:800;color:#B42318;font-family:'Inter',monospace" id="ordOutstanding">£0.00</span>
+      </div>
+    </div>
+
+    <!-- PAYMENT -->
+    <div class="ord-section">
+      <div class="ord-sec-title">💳 Ödeme Yöntemi</div>
+      <div class="pay-opts">
+        <div class="pay-opt" id="popt-cash" onclick="selectPay('cash')">
+          <div class="po-icon">💵</div><span class="po-label">Cash</span>
+        </div>
+        <div class="pay-opt" id="popt-bank" onclick="selectPay('bank')">
+          <div class="po-icon">🏦</div><span class="po-label">Banka</span>
+        </div>
+        <div class="pay-opt" id="popt-unpaid" onclick="selectPay('unpaid')">
+          <div class="po-icon">⏳</div><span class="po-label">Ödenmedi</span>
+        </div>
+      </div>
+      <div id="cashWrap" style="display:none;margin-top:10px">
+        <div style="font-size:11px;font-weight:600;color:var(--sub);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Alınan Cash</div>
+        <input type="number" id="cashReceived" min="0" step="0.01" placeholder="0.00" oninput="calcChange()" style="width:100%;border:1px solid var(--border2);border-radius:8px;padding:11px 12px;font-family:'Inter',monospace;font-size:20px;font-weight:700;background:var(--bg);outline:none;color:var(--text)">
+        <div id="cashChange" style="display:none;margin-top:6px;font-size:13px;font-weight:700;color:#027A48;padding:8px 12px;background:#ECFDF3;border-radius:8px"></div>
+      </div>
+    </div>
+
+    <!-- NOTE -->
+    <div class="ord-section">
+      <div class="ord-sec-title">📝 Not</div>
+      <textarea id="ordNote" placeholder="Müşteri notu, özel istek…" style="width:100%;border:1px solid var(--border2);border-radius:8px;padding:9px 12px;font-family:'Inter',sans-serif;font-size:13px;background:var(--bg);outline:none;color:var(--text);resize:none;height:60px;transition:.15s"></textarea>
+    </div>
+
+    <div style="padding:8px 16px 4px;display:flex;gap:8px">
+      <button class="ef-cancel" onclick="closeOrd()">İptal</button>
+      <button class="ef-save" onclick="saveOrder()">Kaydet ✓</button>
+    </div>
+    <div style="height:6px"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════════════════════════
+const STOPS_DEFAULT = [
+  {id:0,n:"ABBEY CAFE",a:"183 Abbey Wood Road",c:"Abbey Wood",p:"SE2 9DZ"},
+  {id:1,n:"ROYAL CAFE (ABBEY WOOD)",a:"261 Wickham Lane",c:"Plumstead",p:"SE2 0NX"},
+  {id:2,n:"OXLEAS WOOD CAFE",a:"Crown Woods Lane",c:"Shooters Hill",p:"SE18 3JA"},
+  {id:3,n:"KAZ CAFE",a:"85 Woolwich New Road",c:"Woolwich",p:"SE18 6ED"},
+  {id:4,n:"THE DOG & BELL",a:"116 Prince Street",c:"Deptford",p:"SE8 3JD"},
+  {id:5,n:"THE MANOR CAFE",a:"178 Manor Lane",c:"Lee",p:"SE12 8LP"},
+  {id:6,n:"STATION CAFE (LEWISHAM)",a:"23 Staplehurst Road",c:"Lewisham",p:"SE13 5ND"},
+  {id:7,n:"KEM'S CAFE",a:"398 Lewisham High Street",c:"Lewisham",p:"SE13 6LJ"},
+  {id:8,n:"TOP CHEF CAFE",a:"28 Eltham High Street",c:"Eltham",p:"SE9 1DA"},
+  {id:9,n:"EXPERTS CAFE",a:"162 Bexley Road",c:"Eltham",p:"SE9 2PH"},
+  {id:10,n:"ELTHAM CAFE & RESTAURANT",a:"61 Well Hall Road",c:"Eltham",p:"SE9 6SZ"},
+  {id:11,n:"MARMARIS CAFE (ELTHAM)",a:"144 Well Hall Road",c:"Eltham",p:"SE9 6SN"},
+  {id:12,n:"SUNSHINE CAFE (BELVEDERE)",a:"104A Parsonage Manorway",c:"Belvedere",p:"DA17 6LY"},
+  {id:13,n:"VILLAGE CAFE (BEXLEY)",a:"70 Bexley High Street",c:"Bexley",p:"DA5 1AJ"},
+  {id:14,n:"CAFFE CINOS (BEXLEY)",a:"34B Steynton Avenue",c:"Bexley",p:"DA5 3HG"},
+  {id:15,n:"LONG LANE CAFE",a:"142 Long Lane",c:"Bexleyheath",p:"DA7 5AH"},
+  {id:16,n:"BEANO'S CAFE (BEXLEY)",a:"164 Mayplace Road East",c:"Bexleyheath",p:"DA7 6EJ"},
+  {id:17,n:"HONEYDALE FARM",a:"217 Maidstone Road",c:"Sidcup",p:"DA14 5AW"},
+  {id:18,n:"STAR CAFE (SIDCUP)",a:"13 Sidcup High Street",c:"Sidcup",p:"DA14 6EN"},
+  {id:19,n:"COAST BAR & GRILL",a:"12 Sidcup High Street",c:"Sidcup",p:"DA14 6EZ"},
+  {id:20,n:"BAGZIES",a:"2 Sidcup Hill",c:"Sidcup",p:"DA14 6HH"},
+  {id:21,n:"THE PLAZA CAFE",a:"109 Station Road",c:"Sidcup",p:"DA15 7ES"},
+  {id:22,n:"CACIO E PEPE",a:"160 Halfway Street",c:"Sidcup",p:"DA15 8DG"},
+  {id:23,n:"CROSSWAYS CAFE",a:"101 Regus House Victory Way",c:"Dartford",p:"DA2 6QD"},
+  {id:24,n:"DOLLY'S DINER",a:"81 Station Road",c:"Longfield",p:"DA3 7QA"},
+  {id:25,n:"NANCY'S SANDWICH BAR",a:"37A Station Road",c:"Longfield",p:"DA3 7QD"},
+  {id:26,n:"CAFE INN",a:"66-67 New Road",c:"Gravesend",p:"DA11 0AE"},
+  {id:27,n:"C BARISTA",a:"57-58 High Street",c:"Gravesend",p:"DA11 0BB"},
+  {id:28,n:"KINGS DINER CAFE",a:"193A Parrock Street",c:"Gravesend",p:"DA12 1EW"},
+  {id:29,n:"J.K'S CAFE",a:"1 The Alma Leander Drive",c:"Gravesend",p:"DA12 4NG"},
+  {id:30,n:"THE QUILLS",a:"30-32 High Street",c:"Rochester",p:"ME1 1LD"},
+  {id:31,n:"ERNESTOS",a:"Unit 60-61 Dockside Outlet",c:"Chatham",p:"ME4 3ED"},
+  {id:32,n:"HENRY'S BAR",a:"Medcare North Gillingham Biz Pk",c:"Gillingham",p:"ME8 0SB"},
+  {id:33,n:"LEAH'S BISTRO 2",a:"20 Rainham Shopping Centre",c:"Gillingham",p:"ME8 7HW"},
+  {id:34,n:"CAFE ROSE (MAIDSTONE)",a:"51-52 Church Street",c:"Maidstone",p:"ME14 1DS"},
+  {id:35,n:"LEAH'S BISTRO LTD",a:"18 High Street",c:"Maidstone",p:"ME14 1HT"},
+  {id:36,n:"YEOMAN BEARSTEAD REST.",a:"139 Ashford Road",c:"Maidstone",p:"ME14 4BT"},
+  {id:37,n:"GOOD VIBES",a:"13 Mill Street",c:"Maidstone",p:"ME15 6XW"},
+  {id:38,n:"FRANCO'S",a:"362 Dukes Walk The Mall",c:"Maidstone",p:"ME15 6AS"},
+  {id:39,n:"OLD POST OFFICE COFFEE",a:"Unit 2 High Street",c:"Marden",p:"TN12 9DP"},
+  {id:40,n:"THE GORGE",a:"19 High Street",c:"Ashford",p:"TN24 8TH"},
+  {id:41,n:"SUNRISE CAFE (CANTERBURY)",a:"256 Sturry Road",c:"Canterbury",p:"CT1 1HQ"},
+  {id:42,n:"BEANOS CAFE (HERNE BAY)",a:"150 Mortimer Street",c:"Herne Bay",p:"CT6 5DX"},
+  {id:43,n:"KARDELEN CAFE",a:"103 Mortimer Street",c:"Herne Bay",p:"CT6 5ER"},
+  {id:44,n:"THE BEANO CAFE",a:"372 Cheriton Road",c:"Folkestone",p:"CT19 4DX"},
+  {id:45,n:"BLACK BULL CAFE",a:"49 Black Bull Road",c:"Folkestone",p:"CT19 5QT"},
+  {id:46,n:"JIMMY GS AMUSEMENTS",a:"Unit H Concept Court",c:"Folkestone",p:"CT19 4RG"},
+  {id:47,n:"SORBETTO",a:"Unit H Concept Court",c:"Folkestone",p:"CT19 4RG"},
+  {id:48,n:"PALACE AMUSEMENTS",a:"Unit H Concept Court",c:"Folkestone",p:"CT19 4RG"},
+  {id:49,n:"CHAPLIN'S CAFE",a:"171 Widmore Road",c:"Bromley",p:"BR1 3AX"},
+  {id:50,n:"CAFFE CINOS (BROMLEY)",a:"5 Old Bromley Road",c:"Bromley",p:"BR1 4LB"},
+  {id:51,n:"GEORGE'S CAFE LTD",a:"491A Bromley Road",c:"Bromley",p:"BR1 4PQ"},
+  {id:52,n:"PIE & MASH",a:"139 Hastings Road",c:"Bromley",p:"BR2 8NQ"},
+  {id:53,n:"BELLA ROMA BECKENHAM",a:"141-143 Croydon Road",c:"Beckenham",p:"BR3 3RB"},
+  {id:54,n:"SUNRISE CAFE (BECKENHAM)",a:"115 Croydon Road",c:"Beckenham",p:"BR3 3RA"},
+  {id:55,n:"ELMERS END BAKERY",a:"125 Croydon Road",c:"Elmers End",p:"BR3 3RA"},
+  {id:56,n:"TROY RESTAURANT",a:"101 Queensway",c:"Petts Wood",p:"BR5 1DQ"},
+  {id:57,n:"CAFE EXPRESS (ORPINGTON)",a:"365 Chipperfield Road",c:"Orpington",p:"BR5 2LJ"},
+  {id:58,n:"CARLTON PARADE CAFE",a:"12 Carlton Parade",c:"Orpington",p:"BR6 0JB"},
+  {id:59,n:"SWELL CAFE",a:"162 High Street",c:"Orpington",p:"BR6 0JR"},
+  {id:60,n:"LITTLE BIG TREATS LTD",a:"23 Windsor Drive",c:"Orpington",p:"BR6 6EY"},
+  {id:61,n:"THE BANK RESTAURANT",a:"354 Crofton Road",c:"Orpington",p:"BR6 8NN"},
+  {id:62,n:"TWINS CAFE",a:"328 Court Road",c:"Orpington",p:"BR6 9DA"},
+  {id:63,n:"NONAME CAFE",a:"4 Crescent Way",c:"Orpington",p:"BR6 9LP"},
+  {id:64,n:"NENE CAFE & BISTRO",a:"111 High Street",c:"Chislehurst",p:"BR7 5AG"},
+  {id:65,n:"MOTTIES",a:"34 Swanley Lane",c:"Swanley",p:"BR8 7TL"},
+  {id:66,n:"THE COSY CAFE",a:"696 London Road North Cheam",c:"Sutton",p:"SM3 9BY"},
+  {id:67,n:"H'S CAFE",a:"111 Wrythe Lane",c:"Carshalton",p:"SM5 2RR"},
+  {id:68,n:"SASSI IN THE GROVE",a:"Grove Park 1 High Street",c:"Carshalton",p:"SM5 3BB"},
+  {id:69,n:"EATWELL CAFE (WALLINGTON)",a:"169 Stafford Road",c:"Wallington",p:"SM6 9BT"},
+  {id:70,n:"BANSTEAD CAFE LTD",a:"6 High Street",c:"Banstead",p:"SM7 2LJ"},
+  {id:71,n:"ARAN'S CAFE",a:"268 Stamford Hill",c:"Stoke Newington",p:"N16 6TU"},
+  {id:72,n:"PARK SIDE CAFE",a:"127 High Street South",c:"East Ham",p:"E6 3PA"},
+  {id:73,n:"POPLAR CAFE",a:"251-253 Poplar High Street",c:"Poplar",p:"E14 0BE"},
+  {id:74,n:"BRITANNIA CAFE RAINHAM",a:"53 Upminster Road South",c:"Rainham",p:"RM13 9YS"},
+  {id:75,n:"CAFFE PISTACHIO LTD",a:"239 Lower Road",c:"Rotherhithe",p:"SE16 2LW"},
+  {id:76,n:"ROSE'S CAFE (BERMONDSEY)",a:"125 Jamaica Road",c:"London",p:"SE16 4SH"},
+  {id:77,n:"COSY CAFETERIA",a:"24 Randlesdown Road",c:"Bellingham",p:"SE6 3BT"},
+  {id:78,n:"EMA 68 LTD",a:"95 Rosendale Road",c:"West Dulwich",p:"SE21 8EZ"},
+  {id:79,n:"LOVE DULWICH BISTRO",a:"89 Lordship Lane",c:"Dulwich",p:"SE22 8EP"},
+  {id:80,n:"MARTIL CAFE (NORWOOD)",a:"280 Norwood Road",c:"West Norwood",p:"SE27 9AJ"},
+  {id:81,n:"FIRIN",a:"179 High Street",c:"Penge",p:"SE20 7PF"},
+  {id:82,n:"CAFE DE NIRO",a:"273 South Norwood Hill",c:"London",p:"SE25 6DP"},
+  {id:83,n:"GOLDEN CHEFS CAFE",a:"18 London Road",c:"Croydon",p:"CR0 2TA"},
+  {id:84,n:"ADAMS CAFE",a:"152 London Road",c:"Croydon",p:"CR0 2TD"},
+  {id:85,n:"THE TRAM STOP",a:"231 Lower Addiscombe Road",c:"Croydon",p:"CR0 6RD"},
+  {id:86,n:"MARTIL CAFE (CROYDON)",a:"273 Morland Road",c:"Croydon",p:"CR0 6HE"},
+  {id:87,n:"ELLY'S CAFE",a:"288A Brighton Road",c:"South Croydon",p:"CR2 6AG"},
+  {id:88,n:"DOOLALIS BAR & RESTAURANT",a:"318 Limpsfield Road",c:"Hamsey Green",p:"CR2 9BX"},
+  {id:89,n:"THE OLIVE BRANCH",a:"324 Limpsfield Road",c:"Warlingham",p:"CR6 9BX"},
+  {id:90,n:"PORTOVENERE",a:"1 Godstone Road",c:"Caterham",p:"CR3 6RE"},
+  {id:91,n:"THE CLASS CAFE",a:"48 High Street",c:"Purley",p:"CR8 2AA"},
+  {id:92,n:"RHONA'S CAFE",a:"3 North Parade",c:"Chessington",p:"KT9 1QL"},
+  {id:93,n:"BLUE CAFE",a:"52-56 Church Street",c:"Leatherhead",p:"KT22 8DW"},
+  {id:94,n:"WOODHATCH CAFE LTD",a:"4 Dovers Green Road",c:"Reigate",p:"RH2 8BS"},
+  {id:95,n:"TULLEYS TEA ROOM",a:"Tulley Farm Turners Hill Road",c:"Crawley",p:"RH10 4PE"},
+  {id:96,n:"BLUEBELLS CAFE",a:"110 London Road",c:"East Grinstead",p:"RH19 1EP"},
+  {id:97,n:"ANDIAMO",a:"174A London Road",c:"East Grinstead",p:"RH19 1ES"},
+  {id:98,n:"RIALTO",a:"31 High Street",c:"East Grinstead",p:"RH19 3AF"},
+  {id:99,n:"CASA VOSTRA",a:"91 High Street",c:"Edenbridge",p:"TN8 5AU"},
+  {id:100,n:"VILLAGE CAFE (GRAYSHOTT)",a:"1-2 The Square Headley Road",c:"Hindhead",p:"GU26 6LQ"},
+];
+
+const DAYS = [
+  {id:'wA0',label:'Pazartesi',week:'A',color:'#E85D3A',ci:0},
+  {id:'wA1',label:'Salı',     week:'A',color:'#F0A500',ci:1},
+  {id:'wA2',label:'Çarşamba', week:'A',color:'#12B76A',ci:2},
+  {id:'wA3',label:'Perşembe', week:'A',color:'#2E90FA',ci:3},
+  {id:'wA4',label:'Cuma',     week:'A',color:'#9E77ED',ci:4},
+  {id:'wB0',label:'Pazartesi',week:'B',color:'#F63D68',ci:5},
+  {id:'wB1',label:'Salı',     week:'B',color:'#06AED4',ci:6},
+  {id:'wB2',label:'Çarşamba', week:'B',color:'#DC6803',ci:7},
+  {id:'wB3',label:'Perşembe', week:'B',color:'#6172F3',ci:8},
+  {id:'wB4',label:'Cuma',     week:'B',color:'#2D9D6B',ci:9},
+];
+
+// ══════════════════════════════════════════════════════════════
+// ⚙️  SUPABASE CONFIG
+// ══════════════════════════════════════════════════════════════
+const SB_URL = localStorage.getItem('cr4_sb_url') || 'https://mvvvqloqwjimlbqeotsd.supabase.co';
+const SB_KEY = localStorage.getItem('cr4_sb_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12dnZxbG9xd2ppbWxicWVvdHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNTYxMDAsImV4cCI6MjA4NzkzMjEwMH0.tKSiEJouyr9dhs_vIAPUbX9NqtAsFAslZroNKtG2mBk';
+
+// ══════════════════════════════════════════════════════════════
+// HYBRID STORAGE  (localStorage önbellek + Supabase sync)
+// ── Offline çalışır, online olunca otomatik sync eder ────────
+// ══════════════════════════════════════════════════════════════
+const SB_CONFIGURED = SB_URL !== 'YOUR_SUPABASE_URL' && SB_KEY !== 'YOUR_ANON_KEY';
+
+// localStorage — anlık okuma/yazma (hız için)
+function lsGet(k, d) {
+  try { const v = localStorage.getItem('cr4_' + k); return v !== null ? JSON.parse(v) : d; } catch { return d; }
+}
+function lsSaveLocal(k, v) {
+  try { localStorage.setItem('cr4_' + k, JSON.stringify(v)); } catch {}
+}
+
+// Supabase REST helpers (CDN'e gerek yok — fetch yeterli)
+async function sbGet(key) {
+  if (!SB_CONFIGURED) return null;
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/cr4_store?key=eq.${encodeURIComponent(key)}&select=value`, {
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+    });
+    const data = await r.json();
+    return data?.[0]?.value ?? null;
+  } catch { return null; }
+}
+
+async function sbSet(key, value) {
+  if (!SB_CONFIGURED) return;
+  try {
+    await fetch(`${SB_URL}/rest/v1/cr4_store`, {
+      method: 'POST',
+      headers: {
+        apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({ key, value, updated_at: new Date().toISOString() })
+    });
+  } catch {}
+}
+
+// Ana kaydetme fonksiyonu — hem LS hem Supabase
+function lsSave(k, v) {
+  lsSaveLocal(k, v);
+  sbSet(k, v); // fire-and-forget
+}
+
+// Supabase'den tüm veriyi çek, LS'i güncelle, sayfayı yeniden render et
+async function syncFromSupabase() {
+  if (!SB_CONFIGURED) return;
+  setSyncStatus('syncing');
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/cr4_store?select=key,value`, {
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const rows = await r.json();
+    if (!Array.isArray(rows)) throw new Error('Geçersiz yanıt');
+    // Supabase JSONB → value already parsed object/array/string
+    // lsSaveLocal expects raw JS value (will JSON.stringify it)
+    rows.forEach(row => {
+      try { localStorage.setItem('cr4_' + row.key, JSON.stringify(row.value)); } catch {}
+    });
+    // Reload state from LS
+    STOPS         = lsGet('stops', STOPS_DEFAULT);
+    S.assign      = lsGet('assign', {});
+    S.order       = lsGet('order', {});
+    S.vis         = lsGet('vis', {});
+    S.geo         = lsGet('geo', {});
+    S.orders      = lsGet('orders', {});
+    S.debts       = lsGet('debts', {});
+    S.cnotes      = lsGet('cnotes', {});
+    S.debtHistory = lsGet('debtHistory', {});
+    S.catalog     = lsGet('catalog', []);
+    S.stopCatalog = lsGet('stopCatalog', {});
+    // Re-render — guard with try/catch so one broken render doesn't block others
+    try { renderRota(); } catch {}
+    try { renderPlan(); } catch {}
+    try { if (typeof refreshAllMarkers === 'function') refreshAllMarkers(); } catch {}
+    if (curPage === 'dash') try { renderDash(); } catch {}
+    if (curPage === 'adresler') try { renderAdresler(); } catch {}
+    if (curPage === 'katalog') try { renderKatalog(); } catch {}
+    if (curPage === 'borclar') try { renderBorclar(); } catch {}
+    setSyncStatus('ok');
+  } catch (e) {
+    console.warn('Supabase sync error:', e.message);
+    setSyncStatus('error');
+  }
+}
+
+// Tüm LS verisini Supabase'e yükle (ilk kurulum / manuel push)
+async function pushAllToSupabase() {
+  if (!SB_CONFIGURED) { alert('Supabase yapılandırılmamış. Önce SB_URL ve SB_KEY girin.'); return; }
+  setSyncStatus('syncing');
+  const keys = ['stops','assign','order','vis','geo','orders','debts','cnotes','debtHistory','catalog','stopCatalog'];
+  for (const k of keys) {
+    const v = lsGet(k, null);
+    if (v !== null) await sbSet(k, v);
+  }
+  setSyncStatus('ok');
+  alert('✅ Tüm veri Supabase\'e yüklendi!');
+}
+
+// Sync durumu göstergesi
+function setSyncStatus(status) {
+  const el = document.getElementById('syncDot');
+  if (!el) return;
+  const colors = { ok: '#12B76A', syncing: '#F0A500', error: '#F04438', offline: '#98A2B3' };
+  const labels = { ok: 'Sync ✓', syncing: 'Sync…', error: 'Sync Hata', offline: 'Offline' };
+  el.style.background = colors[status] || '#98A2B3';
+  el.title = labels[status] || status;
+}
+
+// Online/offline event'leri
+window.addEventListener('online',  () => { setSyncStatus('syncing'); syncFromSupabase(); });
+window.addEventListener('offline', () => setSyncStatus('offline'));
+
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+
+// Stops are mutable (editable)
+let STOPS = lsGet('stops', STOPS_DEFAULT);
+
+const S = {
+  assign: lsGet('assign',{}),
+  order:  lsGet('order',{}),
+  vis:    lsGet('vis',{}),
+  geo:    lsGet('geo',{}),
+  orders: lsGet('orders',{}),
+  debts:  lsGet('debts',{}),
+  cnotes: lsGet('cnotes',{}),
+  debtHistory: lsGet('debtHistory',{}),
+  catalog: lsGet('catalog',[]),
+  stopCatalog: lsGet('stopCatalog',{}),
+  rotaWeek: lsGet('rWeek','A'),
+  rotaDay:  lsGet('rDay','wA0'),
+  planWeek: lsGet('pWeek','A'),
+  planDay:  lsGet('pDay','wA0'),
+  mapFilter: lsGet('mFilter','all'),
+  dashWeek: lsGet('dWeek','A'),
+  dashPeriod: lsGet('dPeriod','day'),
+};
+
+const save = {
+  stops: () => lsSave('stops', STOPS),
+  assign: () => lsSave('assign', S.assign),
+  order:  () => lsSave('order',  S.order),
+  vis:    () => lsSave('vis',    S.vis),
+  geo:    () => lsSave('geo',    S.geo),
+  orders: () => lsSave('orders', S.orders),
+  debts:  () => lsSave('debts',  S.debts),
+  cnotes: () => lsSave('cnotes', S.cnotes),
+  debtHistory: () => lsSave('debtHistory', S.debtHistory),
+  catalog: () => lsSave('catalog', S.catalog),
+  stopCatalog: () => lsSave('stopCatalog', S.stopCatalog),
+};
+
+function getDay(id){ return DAYS.find(d=>d.id===id); }
+function stopsForDay(dayId){
+  const assigned = STOPS.filter(s => S.assign[s.id] === dayId);
+  const ord = S.order[dayId] || [];
+  const result = [];
+  ord.forEach(sid => { const s = assigned.find(x=>x.id===sid); if(s) result.push(s); });
+  assigned.forEach(s => { if(!result.find(x=>x.id===s.id)) result.push(s); });
+  return result;
+}
+function pcClass(p){
+  const m={SE:'pSE',DA:'pDA',ME:'pME',BR:'pBR',CR:'pCR',SM:'pSM',CT:'pCT',TN:'pTN',KT:'pKT',RH:'pRH',GU:'pGU'};
+  return m[p.slice(0,2)]||'pOT';
+}
+
+// ══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════════
+let curPage = 'map';
+function showPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('on'));
+  document.getElementById('page-'+name).classList.add('on');
+  document.getElementById('nav-'+name)?.classList.add('on');
+  curPage = name;
+  if(name==='map'){ setTimeout(()=>map&&map.invalidateSize(),80); renderMapLegend(); refreshAllMarkers(); }
+  if(name==='rota') renderRota();
+  if(name==='plan') renderPlan();
+  if(name==='adresler') renderAdresler();
+  if(name==='dash') renderDash();
+  if(name==='borclar') renderBorclar();
+  if(name==='katalog') renderKatalog();
+}
+
+// ══════════════════════════════════════════════════════════════
+// MAP
+// ══════════════════════════════════════════════════════════════
+let map, markers = {};
+
+function initMap(){
+  map = L.map('map',{zoomControl:true,attributionControl:true}).setView([51.4,0.15],9);
+  // Use OpenStreetMap directly - most reliable
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom:19
+  }).addTo(map);
+  renderMapLegend();
+  startGeo();
+}
+
+function makeIcon(stop){
+  const dayId = S.assign[stop.id];
+  const day = dayId ? getDay(dayId) : null;
+  const color = day ? day.color : '#98A2B3';
+  const label = day ? `H${day.week} ${day.label.slice(0,3)}` : '';
+  const nm = stop.n.length > 11 ? stop.n.slice(0,10)+'…' : stop.n;
+  return L.divIcon({
+    className:'',
+    html:`<div style="display:flex;flex-direction:column;align-items:center">
+      <div style="width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:2px solid rgba(255,255,255,.7);box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center">
+        <span style="transform:rotate(45deg);font-size:8px;font-weight:800;color:#fff;font-family:Inter,sans-serif;line-height:1">${stop.id+1}</span>
+      </div>
+      ${label?`<div style="margin-top:1px;background:${color};color:#fff;font-size:7px;font-weight:700;padding:1px 4px;border-radius:3px;white-space:nowrap;font-family:Inter,sans-serif">${label}</div>`:''}
+      <div style="background:rgba(16,24,40,.75);color:#fff;font-size:7px;font-weight:600;padding:1px 4px;border-radius:3px;white-space:nowrap;max-width:72px;overflow:hidden;text-overflow:ellipsis;font-family:Inter,sans-serif;margin-top:1px">${nm}</div>
+    </div>`,
+    iconSize:[26,55],iconAnchor:[13,26],popupAnchor:[0,-28]
+  });
+}
+
+function makePopup(stop){
+  const dayId = S.assign[stop.id];
+  const day = dayId ? getDay(dayId) : null;
+  const color = day ? day.color : '#98A2B3';
+  const lbl = day ? `Hafta ${day.week} · ${day.label}` : 'Atanmamış';
+  return `<div class="pp">
+    <div class="pp-name">${stop.n}</div>
+    <div class="pp-addr">${stop.a}, ${stop.c} · <span class="spc ${pcClass(stop.p)}">${stop.p}</span></div>
+    <div class="pp-tag" style="background:${color}20;color:${color};border:1px solid ${color}40">${lbl}</div>
+    <button class="pp-btn" onclick="openAssignMap(${stop.id})">📅 Güne Ata</button>
+  </div>`;
+}
+
+function addOrUpdateMarker(stop){
+  if(!S.geo[stop.id]) return;
+  const {lat,lng} = S.geo[stop.id];
+  const dayId = S.assign[stop.id];
+  const day = dayId ? getDay(dayId) : null;
+  const show = S.mapFilter==='all' ||
+    (S.mapFilter==='A' && day && day.week==='A') ||
+    (S.mapFilter==='B' && day && day.week==='B');
+
+  if(markers[stop.id]){ map.removeLayer(markers[stop.id]); delete markers[stop.id]; }
+  const m = L.marker([lat,lng],{icon:makeIcon(stop)}).bindPopup(makePopup(stop),{maxWidth:220});
+  markers[stop.id] = m;
+  if(show) m.addTo(map);
+}
+
+function refreshAllMarkers(){
+  STOPS.forEach(s=>{ if(S.geo[s.id]) addOrUpdateMarker(s); });
+}
+
+function openAssignMap(stopId){
+  const stop = STOPS.find(s=>s.id===stopId);
+  openAssign(stop);
+}
+
+function setMapFilter(f){
+  S.mapFilter=f; lsSave('mFilter',f);
+  document.querySelectorAll('#mapWtog .wb').forEach((b,i)=>{
+    b.classList.toggle('on',['all','A','B'][i]===f);
+  });
+  refreshAllMarkers();
+}
+
+function renderMapLegend(){
+  const el = document.getElementById('mapLegend');
+  let h = `<div class="leg"><div class="leg-dot" style="background:#98A2B3"></div>Atanmamış (${STOPS.filter(s=>!S.assign[s.id]).length})</div>`;
+  DAYS.forEach(d=>{
+    const cnt = STOPS.filter(s=>S.assign[s.id]===d.id).length;
+    if(cnt>0) h += `<div class="leg"><div class="leg-dot" style="background:${d.color}"></div>H${d.week} ${d.label.slice(0,3)} (${cnt})</div>`;
+  });
+  el.innerHTML = h;
+}
+
+// ── GEOCODING ──────────────────────────────────────────────
+let geoQ=[], geocoding=false;
+
+function startGeo(){
+  const todo = STOPS.filter(s=>!S.geo[s.id]);
+  if(!todo.length){
+    document.getElementById('mapLoader').style.display='none';
+    document.getElementById('mapStatus').textContent=`${STOPS.length} adres haritada`;
+    refreshAllMarkers();
+    return;
+  }
+  geoQ = todo.map(s=>s.id);
+  processGeo();
+}
+
+async function processGeo(){
+  if(geocoding||!geoQ.length) return;
+  geocoding=true;
+  while(geoQ.length){
+    const id = geoQ.shift();
+    const stop = STOPS.find(s=>s.id===id);
+    if(!stop) continue;
+    try{
+      const q = encodeURIComponent(`${stop.a}, ${stop.c}, ${stop.p}, UK`);
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=gb`,{headers:{'Accept-Language':'en','User-Agent':'CostadoroRoutes/1.0'}});
+      const d = await r.json();
+      if(d&&d.length){
+        S.geo[stop.id]={lat:+d[0].lat,lng:+d[0].lon};
+      } else {
+        const r2 = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(stop.p+',UK')}&format=json&limit=1&countrycodes=gb`,{headers:{'Accept-Language':'en','User-Agent':'CostadoroRoutes/1.0'}});
+        const d2 = await r2.json();
+        if(d2&&d2.length) S.geo[stop.id]={lat:+d2[0].lat,lng:+d2[0].lon};
+      }
+    }catch(e){}
+    const done = STOPS.filter(s=>S.geo[s.id]).length;
+    save.geo();
+    document.getElementById('loadTxt').textContent=`${done} / ${STOPS.length}`;
+    document.getElementById('loadFill').style.width=(done/STOPS.length*100)+'%';
+    document.getElementById('mapStatus').textContent=`Yükleniyor: ${done}/${STOPS.length}`;
+    if(S.geo[id]) addOrUpdateMarker(STOPS.find(s=>s.id===id));
+    if(geoQ.length) await delay(1100);
+  }
+  geocoding=false;
+  document.getElementById('mapLoader').style.display='none';
+  document.getElementById('mapStatus').textContent=`${STOPS.filter(s=>S.geo[s.id]).length} adres haritada`;
+  renderMapLegend();
+}
+
+function delay(ms){return new Promise(r=>setTimeout(r,ms));}
+
+// ══════════════════════════════════════════════════════════════
+// ASSIGN MODAL
+// ══════════════════════════════════════════════════════════════
+let assignId = null;
+
+function openAssign(stop){
+  assignId = stop.id;
+  document.getElementById('aTitle').textContent = stop.n;
+  document.getElementById('aSub').textContent = `${stop.a}, ${stop.c} · ${stop.p}`;
+  const cur = S.assign[stop.id];
+  let h='';
+  if(cur) h += `<div class="mitem del" onclick="doAssign(${stop.id},null)"><div class="mc" style="background:#FEE4E2"></div><div class="mb"><strong style="color:#D92D20">Atamayı Kaldır</strong><span>Plansız listesine döner</span></div></div>`;
+  ['A','B'].forEach(w=>{
+    h += `<div class="mweek">Hafta ${w}</div>`;
+    DAYS.filter(d=>d.week===w).forEach(d=>{
+      const cnt = stopsForDay(d.id).length;
+      const isCur = d.id===cur;
+      h += `<div class="mitem${isCur?' cur':''}" onclick="doAssign(${stop.id},'${d.id}')">
+        <div class="mc" style="background:${d.color}"></div>
+        <div class="mb"><strong>${d.label}</strong><span>Hafta ${d.week}</span></div>
+        <div class="mn">${cnt}${isCur?' ✓':''}</div>
+      </div>`;
+    });
+  });
+  document.getElementById('aList').innerHTML=h;
+  document.getElementById('assignOv').classList.add('on');
+}
+
+function doAssign(stopId, dayId){
+  if(dayId===null){
+    delete S.assign[stopId];
+    Object.keys(S.order).forEach(did=>{
+      if(S.order[did]) S.order[did]=S.order[did].filter(id=>id!==stopId);
+    });
+  } else {
+    S.assign[stopId]=dayId;
+    if(!S.order[dayId]) S.order[dayId]=[];
+    if(!S.order[dayId].includes(stopId)) S.order[dayId].push(stopId);
+  }
+  save.assign(); save.order();
+  closeAssign();
+  // Anında marker güncelle
+  const stop = STOPS.find(s=>s.id===stopId);
+  if(stop && S.geo[stop.id]){
+    addOrUpdateMarker(stop);
+    if(markers[stopId]) markers[stopId].setPopupContent(makePopup(stop));
+  }
+  renderMapLegend();
+  if(curPage==='rota') renderRota();
+  if(curPage==='plan') renderPlan();
+}
+
+function closeAssign(){
+  document.getElementById('assignOv').classList.remove('on');
+  assignId=null;
+}
+
+// ══════════════════════════════════════════════════════════════
+// ROTA PAGE
+// ══════════════════════════════════════════════════════════════
+let rotaSearch='';
+
+function setRotaWeek(w){
+  S.rotaWeek=w; lsSave('rWeek',w);
+  S.rotaDay=DAYS.find(d=>d.week===w).id; lsSave('rDay',S.rotaDay);
+  document.getElementById('rWA').classList.toggle('on',w==='A');
+  document.getElementById('rWB').classList.toggle('on',w==='B');
+  renderRota();
+}
+function setRotaDay(id){ S.rotaDay=id; lsSave('rDay',id); renderRota(); }
+
+function onRotaSearch(v){
+  rotaSearch=v.toLowerCase();
+  document.getElementById('rotaClear').classList.toggle('show',v.length>0);
+  renderRotaBody();
+}
+function clearRotaSearch(){
+  document.getElementById('rotaSearch').value='';
+  rotaSearch='';
+  document.getElementById('rotaClear').classList.remove('show');
+  renderRotaBody();
+}
+
+function renderRota(){
+  document.getElementById('rWA').classList.toggle('on',S.rotaWeek==='A');
+  document.getElementById('rWB').classList.toggle('on',S.rotaWeek==='B');
+  renderRotaTabs();
+  renderRotaBody();
+  updateRotaBar();
+}
+
+function renderRotaTabs(){
+  const days=DAYS.filter(d=>d.week===S.rotaWeek);
+  const unCnt = STOPS.filter(s=>!S.assign[s.id]).length;
+  document.getElementById('rotaTabs').innerHTML =
+    days.map(d=>{
+      const stops=stopsForDay(d.id);
+      const vis=stops.filter(s=>S.vis[d.id+'_'+s.id]).length;
+      return `<button class="dt${d.id===S.rotaDay?' on':''}" onclick="setRotaDay('${d.id}')">
+        <div class="dt-dot" style="background:${d.color}"></div>
+        ${d.label} <span class="dt-n">${vis}/${stops.length}</span>
+      </button>`;
+    }).join('') +
+    `<button class="dt${S.rotaDay==='uns'?' on':''}" onclick="setRotaDay('uns')">
+      Atanmamış <span class="dt-n">${unCnt}</span>
+    </button>`;
+}
+
+function renderRotaBody(){
+  const el = document.getElementById('rotaBody');
+  if(S.rotaDay==='uns'){ renderUnassigned(el); updateRotaBar(); return; }
+  const day = getDay(S.rotaDay);
+  if(!day) return;
+  let stops = stopsForDay(S.rotaDay);
+  if(rotaSearch) stops=stops.filter(s=>(s.n+s.a+s.c+s.p).toLowerCase().includes(rotaSearch));
+
+  const allStops = stopsForDay(S.rotaDay);
+  const vis = allStops.filter(s=>S.vis[S.rotaDay+'_'+s.id]).length;
+  const pct = allStops.length ? Math.round(vis/allStops.length*100) : 0;
+
+  if(!stops.length){
+    el.innerHTML=`<div class="prog-wrap"><div class="prog-row"><span class="prog-label">${day.label} — Hafta ${day.week}</span><span class="prog-pct" style="color:${day.color}">${vis}/${allStops.length} · %${pct}</span></div><div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${day.color}"></div></div></div><div class="empty"><div class="empty-icon">📭</div><p>${rotaSearch?'Sonuç bulunamadı':'Bu güne henüz durak atanmamış'}</p></div>`;
+    updateRotaBar(); return;
+  }
+
+  let h = `<div class="prog-wrap">
+    <div class="prog-row"><span class="prog-label">${day.label} — Hafta ${day.week}</span><span class="prog-pct" style="color:${day.color}">${vis}/${allStops.length} · %${pct}</span></div>
+    <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${day.color}"></div></div>
+  </div><div class="slist">`;
+
+  stops.forEach((s,i)=>{
+    const isV=!!S.vis[S.rotaDay+'_'+s.id];
+    h+=`<div class="sc${isV?' done':''}">
+      <div class="sc-num" style="border-color:${day.color};background:${isV?day.color:'transparent'};color:${isV?'#fff':day.color}">${isV?'✓':(i+1)}</div>
+      <div class="sc-body" onclick="zoomTo(${s.id})">
+        <div class="sname">${s.n}</div>
+        <div class="saddr">${s.a}, ${s.c}</div>
+        <span class="spc ${pcClass(s.p)}">${s.p}</span>
+      </div>
+      <div class="sc-right">
+        <button class="chk rchk" data-did="${S.rotaDay}" data-sid="${s.id}" style="${isV?'background:'+day.color+';border-color:'+day.color+';color:#fff':''}">${isV?'✓':'○'}</button>
+        <button class="asgn-btn" onclick="event.stopPropagation();openAssign(STOPS.find(x=>x.id===${s.id}))">↗</button>
+        <button class="asgn-btn" onclick="event.stopPropagation();openEdit(${s.id})" style="padding:0 6px" title="Düzenle">✏️</button>
+      </div>
+    </div>`;
+  });
+  h+=`</div>`;
+  el.innerHTML=h;
+  updateRotaBar();
+  // Bind check buttons
+  el.querySelectorAll('.rchk').forEach(btn=>{
+    btn.addEventListener('click',e=>{
+      e.stopPropagation();
+      const key=btn.dataset.did+'_'+btn.dataset.sid;
+      S.vis[key]=!S.vis[key]; save.vis();
+      renderRota();
+      if(curPage==='plan') renderPlan();
+    });
+  });
+}
+
+function renderUnassigned(el){
+  const stops=STOPS.filter(s=>!S.assign[s.id]);
+  if(!stops.length){el.innerHTML=`<div class="empty"><div class="empty-icon">🎉</div><p>Tüm duraklar atandı!</p></div>`;return;}
+  let h=`<div class="ubanner"><h3>Atanmamış — ${stops.length} durak</h3><p>Bir durağa tıklayarak güne atayın.</p></div>`;
+  stops.forEach((s,i)=>{
+    h+=`<div class="uc" onclick="openAssign(STOPS.find(x=>x.id===${s.id}))">
+      <div class="uc-num">${i+1}</div>
+      <div class="sc-body">
+        <div class="sname">${s.n}</div>
+        <div class="saddr">${s.a}, ${s.c}</div>
+        <span class="spc ${pcClass(s.p)}">${s.p}</span>
+      </div>
+      <svg style="color:#B54708;flex-shrink:0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+      <button class="asgn-btn" onclick="event.stopPropagation();openEdit(${s.id})" style="padding:0 6px" title="Düzenle">✏️</button>
+    </div>`;
+  });
+  el.innerHTML=h;
+}
+
+function updateRotaBar(){
+  if(S.rotaDay==='uns'){
+    const cnt=STOPS.filter(s=>!S.assign[s.id]).length;
+    document.getElementById('rv').textContent='—';
+    document.getElementById('rt').textContent=cnt;
+    document.getElementById('rr').textContent='—';
+    return;
+  }
+  const stops=stopsForDay(S.rotaDay);
+  const vis=stops.filter(s=>S.vis[S.rotaDay+'_'+s.id]).length;
+  document.getElementById('rv').textContent=vis;
+  document.getElementById('rt').textContent=stops.length;
+  document.getElementById('rr').textContent=stops.length-vis;
+}
+
+function resetRotaDay(){
+  if(S.rotaDay==='uns') return;
+  stopsForDay(S.rotaDay).forEach(s=>delete S.vis[S.rotaDay+'_'+s.id]);
+  save.vis(); renderRota();
+}
+
+function zoomTo(stopId){
+  if(!S.geo[stopId]) return;
+  const {lat,lng}=S.geo[stopId];
+  showPage('map');
+  setTimeout(()=>{
+    map.setView([lat,lng],16,{animate:true});
+    if(markers[stopId]) markers[stopId].openPopup();
+  },120);
+}
+
+// ══════════════════════════════════════════════════════════════
+// PLAN PAGE
+// ══════════════════════════════════════════════════════════════
+function setPlanWeek(w){
+  S.planWeek=w; lsSave('pWeek',w);
+  S.planDay=DAYS.find(d=>d.week===w).id; lsSave('pDay',S.planDay);
+  document.getElementById('pWA').classList.toggle('on',w==='A');
+  document.getElementById('pWB').classList.toggle('on',w==='B');
+  renderPlan();
+}
+function setPlanDay(id){ S.planDay=id; lsSave('pDay',id); renderPlan(); }
+
+function renderPlan(){
+  document.getElementById('pWA').classList.toggle('on',S.planWeek==='A');
+  document.getElementById('pWB').classList.toggle('on',S.planWeek==='B');
+  renderPlanTabs();
+  renderPlanBody();
+}
+
+function renderPlanTabs(){
+  const days=DAYS.filter(d=>d.week===S.planWeek);
+  const unCnt=STOPS.filter(s=>!S.assign[s.id]).length;
+  document.getElementById('planTabs').innerHTML=
+    days.map(d=>{
+      const stops=stopsForDay(d.id);
+      const vis=stops.filter(s=>S.vis[d.id+'_'+s.id]).length;
+      return `<button class="dt${d.id===S.planDay?' on':''}" onclick="setPlanDay('${d.id}')">
+        <div class="dt-dot" style="background:${d.color}"></div>
+        ${d.label} <span class="dt-n">${vis}/${stops.length}</span>
+      </button>`;
+    }).join('') +
+    `<button class="dt${S.planDay==='puns'?' on':''}" onclick="setPlanDay('puns')">
+      Plansız <span class="dt-n">${unCnt}</span>
+    </button>`;
+}
+
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+function ordKey(stopId){ return todayKey()+'_'+stopId; }
+function getOrd(stopId){ return S.orders[ordKey(stopId)] || null; }
+function fmt(n){ return '£'+(+n||0).toFixed(2); }
+function ordTotal(ord){ return ord ? ord.items.reduce((s,i)=>s+(i.qty*i.price),0) : 0; }
+
+function renderDaySummary(dayId){
+  const stops = stopsForDay(dayId);
+  let cash=0, bank=0, unpaid=0, debtPaid=0;
+  stops.forEach(s=>{
+    const ord = getOrd(s.id);
+    if(!ord) return;
+    const tot = ordTotal(ord);
+    if(ord.payMethod==='cash') cash += parseFloat(ord.cashReceived||tot);
+    else if(ord.payMethod==='bank') bank += tot;
+    else if(ord.payMethod==='unpaid') unpaid += tot;
+    if(ord.debtPaid) debtPaid += parseFloat(ord.debtPaid||0);
+  });
+  return `<div class="day-summary">
+    <div class="ds-cell cash"><div class="ds-val">${fmt(cash)}</div><div class="ds-lbl">Cash</div></div>
+    <div class="ds-cell bank"><div class="ds-val">${fmt(bank)}</div><div class="ds-lbl">Banka</div></div>
+    <div class="ds-cell unpaid"><div class="ds-val">${fmt(unpaid)}</div><div class="ds-lbl">Ödenmedi</div></div>
+    <div class="ds-cell debt"><div class="ds-val">${fmt(debtPaid)}</div><div class="ds-lbl">Borç Ödendi</div></div>
+  </div>`;
+}
+
+function payBadgeHtml(stopId){
+  const ord = getOrd(stopId);
+  const cnote = S.cnotes[stopId];
+  const debtBadge = (S.debts[stopId]>0) ? `<span class="pay-badge pay-debt">⚠ Borç ${fmt(S.debts[stopId])}</span>` : '';
+  const cnoteBadge = cnote ? `<span style="font-size:9px;font-weight:600;color:#B54708;background:#FFFAEB;border:1px solid #FEC84B;padding:1px 6px;border-radius:99px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block">📌 ${cnote}</span>` : '';
+  if(!ord && !debtBadge && !cnoteBadge) return '';
+  const tot = ord ? ordTotal(ord) : 0;
+  const payMap = {cash:'pay-cash',bank:'pay-bank',unpaid:'pay-unpaid'};
+  const payLabel = {cash:`Cash ${fmt(ord?.cashReceived||tot)}`,bank:`Banka ${fmt(tot)}`,unpaid:`Ödenmedi ${fmt(tot)}`};
+  const cls = ord ? (payMap[ord.payMethod]||'pay-unpaid') : '';
+  const lbl = ord ? (payLabel[ord.payMethod]||'') : '';
+  return `<div class="sc-order-row">
+    ${ord ? `<span class="pay-badge ${cls}">${lbl}</span>` : ''}
+    ${ord?.items?.length ? `<span style="font-size:9px;color:var(--muted);font-weight:600">${ord.items.length} kalem · ${fmt(tot)}</span>` : ''}
+    ${debtBadge}
+    ${cnoteBadge}
+  </div>`;
+}
+
+function renderPlanBody(){
+  const el=document.getElementById('planBody');
+  if(S.planDay==='puns'){ renderPlanUnsched(el); return; }
+  const day=getDay(S.planDay); if(!day) return;
+  const stops=stopsForDay(S.planDay);
+  const vis=stops.filter(s=>S.vis[S.planDay+'_'+s.id]).length;
+  const pct=stops.length?Math.round(vis/stops.length*100):0;
+
+  if(!stops.length){
+    el.innerHTML=`<div class="prog-wrap"><div class="prog-row"><span class="prog-label">${day.label} — Hafta ${day.week}</span><span class="prog-pct">0/0</span></div><div class="prog-track"><div class="prog-fill" style="width:0%;background:${day.color}"></div></div></div><div class="empty"><div class="empty-icon">📭</div><p>Bu güne durak atanmamış.<br>Rota sayfasından ekleyin.</p></div>`;
+    return;
+  }
+
+  let h = renderDaySummary(S.planDay);
+  h += `<div class="prog-wrap">
+    <div class="prog-row"><span class="prog-label">${day.label} — Hafta ${day.week}</span><span class="prog-pct" style="color:${day.color}">${vis}/${stops.length} · %${pct}</span></div>
+    <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${day.color}"></div></div>
+  </div><div class="slist" id="planList">`;
+
+  stops.forEach((s,i)=>{
+    const isV=!!S.vis[S.planDay+'_'+s.id];
+    const ord = getOrd(s.id);
+    const hasDebt = (S.debts[s.id]||0) > 0;
+    const borderStyle = hasDebt ? 'border-color:#FEC84B' : (isV ? '' : '');
+    h+=`<div class="sc${isV?' done':''}" data-did="${S.planDay}" data-sid="${s.id}" data-idx="${i}" style="${borderStyle};cursor:pointer" onclick="openOrd(${s.id},'${S.planDay}')">
+      <div class="sc-num" style="border-color:${day.color};background:${isV?day.color:'transparent'};color:${isV?'#fff':day.color};flex-shrink:0">${isV?'✓':(i+1)}</div>
+      <div class="sc-body" style="cursor:pointer">
+        <div class="sname">${s.n}</div>
+        <div class="saddr">${s.a}, ${s.c}</div>
+        ${payBadgeHtml(s.id)}
+      </div>
+      <div class="sc-right" onclick="event.stopPropagation()">
+        <button class="chk pchk" data-did="${S.planDay}" data-sid="${s.id}" style="${isV?'background:'+day.color+';border-color:'+day.color+';color:#fff':''}">${isV?'✓':'○'}</button>
+        <button class="asgn-btn" onclick="openMove('${S.planDay}',${s.id})">↗</button>
+        <div class="grip" data-grip="1"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h10M2 7h10M2 10h10"/></svg></div>
+      </div>
+    </div>`;
+  });
+  h+=`</div>`;
+  el.innerHTML=h;
+  bindPlanEvents();
+}
+
+function renderPlanUnsched(el){
+  const stops=STOPS.filter(s=>!S.assign[s.id]);
+  if(!stops.length){el.innerHTML=`<div class="empty"><div class="empty-icon">🎉</div><p>Tüm duraklar atandı!</p></div>`;return;}
+  let h=`<div class="ubanner"><h3>Plansız — ${stops.length} durak</h3><p>Rota sayfasından günlere atayın.</p></div>`;
+  stops.forEach((s,i)=>{
+    h+=`<div class="uc" onclick="openAssign(STOPS.find(x=>x.id===${s.id}))">
+      <div class="uc-num">${i+1}</div>
+      <div class="sc-body"><div class="sname">${s.n}</div><div class="saddr">${s.a}, ${s.c}</div><span class="spc ${pcClass(s.p)}">${s.p}</span></div>
+      <svg style="color:#B54708;flex-shrink:0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+    </div>`;
+  });
+  el.innerHTML=h;
+}
+
+function bindPlanEvents(){
+  document.querySelectorAll('.pchk').forEach(btn=>{
+    btn.addEventListener('click',e=>{
+      e.stopPropagation();
+      const key=btn.dataset.did+'_'+btn.dataset.sid;
+      S.vis[key]=!S.vis[key]; save.vis();
+      renderPlan();
+      if(curPage==='rota') renderRota();
+    });
+  });
+  initDrag();
+}
+
+// MOVE MODAL
+let moveState=null;
+function openMove(fromDayId, stopId){
+  const stop=STOPS.find(s=>s.id===stopId);
+  moveState={fromDayId,stopId};
+  document.getElementById('mvTitle').textContent=stop.n;
+  let h=`<div class="mitem del" onclick="execMove('unassigned')"><div class="mc" style="background:#FEE4E2"></div><div class="mb"><strong style="color:#D92D20">Plansıza Taşı</strong><span>Günden kaldır</span></div></div>`;
+  ['A','B'].forEach(w=>{
+    h+=`<div class="mweek">Hafta ${w}</div>`;
+    DAYS.filter(d=>d.week===w).forEach(d=>{
+      const isCur=d.id===fromDayId;
+      const cnt=stopsForDay(d.id).length;
+      h+=`<div class="mitem${isCur?' cur':''}" onclick="execMove('${d.id}')"><div class="mc" style="background:${d.color}"></div><div class="mb"><strong>${d.label}</strong><span>Hafta ${d.week}</span></div><div class="mn">${cnt}${isCur?' ✓':''}</div></div>`;
+    });
+  });
+  document.getElementById('mvList').innerHTML=h;
+  document.getElementById('moveOv').classList.add('on');
+}
+function execMove(destId){
+  if(!moveState) return;
+  const {fromDayId,stopId}=moveState;
+  delete S.assign[stopId];
+  if(S.order[fromDayId]) S.order[fromDayId]=S.order[fromDayId].filter(id=>id!==stopId);
+  delete S.vis[fromDayId+'_'+stopId];
+  if(destId!=='unassigned'){
+    S.assign[stopId]=destId;
+    if(!S.order[destId]) S.order[destId]=[];
+    S.order[destId].push(stopId);
+    S.planWeek=destId.startsWith('wA')?'A':'B';
+    S.planDay=destId;
+    lsSave('pWeek',S.planWeek); lsSave('pDay',S.planDay);
+  }
+  save.assign(); save.order(); save.vis();
+  closeMove();
+  const stop=STOPS.find(s=>s.id===stopId);
+  if(stop&&S.geo[stop.id]) addOrUpdateMarker(stop);
+  renderMapLegend();
+  renderPlan();
+  if(curPage==='rota') renderRota();
+}
+function closeMove(){ document.getElementById('moveOv').classList.remove('on'); moveState=null; }
+
+// DRAG REORDER
+let drag={el:null,ghost:null,fromDay:null,fromIdx:-1,startY:0,fingerY:0};
+function initDrag(){
+  document.querySelectorAll('.sc[data-did]').forEach(card=>{
+    card.setAttribute('draggable','true');
+    card.addEventListener('dragstart',e=>{
+      drag.el=card; drag.fromDay=card.dataset.did; drag.fromIdx=+card.dataset.idx;
+      e.dataTransfer.effectAllowed='move';
+      setTimeout(()=>card.classList.add('dragging'),0);
+    });
+    card.addEventListener('dragend',()=>{ card.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over')); });
+    card.addEventListener('dragover',e=>{ e.preventDefault(); if(!drag.el||card===drag.el||card.dataset.did!==drag.fromDay) return; document.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over')); card.classList.add('drag-over'); });
+    card.addEventListener('drop',e=>{ e.preventDefault(); card.classList.remove('drag-over'); if(!drag.el||card.dataset.did!==drag.fromDay) return; reorder(drag.fromDay,drag.fromIdx,+card.dataset.idx); });
+  });
+  document.querySelectorAll('[data-grip]').forEach(g=>{
+    g.addEventListener('touchstart',e=>{
+      e.stopPropagation();
+      const card=g.closest('.sc[data-did]'); if(!card) return;
+      drag.fromDay=card.dataset.did; drag.fromIdx=+card.dataset.idx; drag.el=card;
+      const r=card.getBoundingClientRect(); const t=e.touches[0];
+      drag.ghost=card.cloneNode(true);
+      drag.ghost.style.cssText=`position:fixed;z-index:9999;left:${r.left}px;top:${r.top}px;width:${r.width}px;pointer-events:none;opacity:.85;transform:scale(1.02);box-shadow:0 8px 24px rgba(0,0,0,.15);border-radius:10px;background:#fff`;
+      document.body.appendChild(drag.ghost);
+      card.classList.add('dragging');
+      drag.startY=r.top; drag.fingerY=t.clientY;
+      if(navigator.vibrate) navigator.vibrate(18);
+    },{passive:true});
+  });
+  document.addEventListener('touchmove',e=>{
+    if(!drag.ghost) return; e.preventDefault();
+    const t=e.touches[0];
+    drag.ghost.style.top=(drag.startY+t.clientY-drag.fingerY)+'px';
+    drag.ghost.style.display='none';
+    const under=document.elementFromPoint(t.clientX,t.clientY);
+    drag.ghost.style.display='';
+    const target=under?.closest('.sc[data-did]');
+    document.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over'));
+    if(target&&target!==drag.el&&target.dataset.did===drag.fromDay) target.classList.add('drag-over');
+  },{passive:false});
+  document.addEventListener('touchend',e=>{
+    if(!drag.ghost) return;
+    drag.ghost.remove(); drag.ghost=null;
+    if(drag.el) drag.el.classList.remove('dragging');
+    document.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over'));
+    const t=e.changedTouches[0];
+    const under=document.elementFromPoint(t.clientX,t.clientY);
+    const target=under?.closest('.sc[data-did]');
+    if(target&&target!==drag.el&&target.dataset.did===drag.fromDay) reorder(drag.fromDay,drag.fromIdx,+target.dataset.idx);
+    drag.el=null; drag.fromDay=null; drag.fromIdx=-1;
+  },{passive:true});
+}
+function reorder(dayId,from,to){
+  if(from===to) return;
+  const stops=stopsForDay(dayId);
+  const [mv]=stops.splice(from,1); stops.splice(to,0,mv);
+  S.order[dayId]=stops.map(s=>s.id); save.order();
+  renderPlan();
+}
+
+// ══════════════════════════════════════════════════════════════
+// EDIT MODAL
+// ══════════════════════════════════════════════════════════════
+let editId=null;
+function openEdit(stopId){
+  editId=stopId;
+  const s=STOPS.find(x=>x.id===stopId);
+  document.getElementById('editSub').textContent=`#${stopId+1}`;
+  document.getElementById('ef-n').value=s.n;
+  document.getElementById('ef-a').value=s.a;
+  document.getElementById('ef-c').value=s.c;
+  document.getElementById('ef-p').value=s.p;
+  document.getElementById('editOv').classList.add('on');
+}
+function saveEdit(){
+  const s=STOPS.find(x=>x.id===editId);
+  if(!s) return;
+  s.n=document.getElementById('ef-n').value.trim()||s.n;
+  s.a=document.getElementById('ef-a').value.trim()||s.a;
+  s.c=document.getElementById('ef-c').value.trim()||s.c;
+  const newP=document.getElementById('ef-p').value.trim().toUpperCase();
+  const pcChanged=newP&&newP!==s.p;
+  if(newP) s.p=newP;
+  save.stops();
+  // Re-geocode if postcode changed
+  if(pcChanged){ delete S.geo[s.id]; save.geo(); geoQ=[s.id]; processGeo(); }
+  closeEdit();
+  if(S.geo[s.id]) addOrUpdateMarker(s);
+  renderMapLegend();
+  if(curPage==='rota') renderRota();
+  if(curPage==='plan') renderPlan();
+}
+function closeEdit(){ document.getElementById('editOv').classList.remove('on'); editId=null; }
+
+// ══════════════════════════════════════════════════════════════
+// ADRESLER PAGE
+// ══════════════════════════════════════════════════════════════
+let adrSearch = '';
+
+function onAdrSearch(v){
+  adrSearch = v.toLowerCase();
+  document.getElementById('adrClear').classList.toggle('show', v.length > 0);
+  renderAdrList();
+}
+function clearAdrSearch(){
+  document.getElementById('adrSearch').value = '';
+  adrSearch = '';
+  document.getElementById('adrClear').classList.remove('show');
+  renderAdrList();
+}
+
+function renderAdresler(){
+  document.getElementById('adrCount').textContent = `${STOPS.length} durak`;
+  renderAdrList();
+}
+
+function renderAdrList(){
+  const el = document.getElementById('adrBody');
+  let stops = STOPS.slice().sort((a,b) => a.n.localeCompare(b.n));
+  if(adrSearch) stops = stops.filter(s => (s.n+s.a+s.c+s.p).toLowerCase().includes(adrSearch));
+
+  document.getElementById('adrCount').textContent = `${STOPS.length} durak${adrSearch?' · '+stops.length+' sonuç':''}`;
+
+  if(!stops.length){
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><p>Sonuç bulunamadı</p></div>`;
+    return;
+  }
+
+  let h = `<div class="slist">`;
+  stops.forEach(s => {
+    const dayId = S.assign[s.id];
+    const day = dayId ? getDay(dayId) : null;
+    const geoOk = !!S.geo[s.id];
+    h += `<div class="sc" style="align-items:flex-start">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:2px">
+        <div class="sc-num" style="border-color:${day?day.color:'var(--border2)'};color:${day?day.color:'var(--muted)'};background:transparent;width:26px;height:26px;font-size:9px">${s.id+1}</div>
+        <div style="font-size:8px;color:${geoOk?'#12B76A':'#F04438'}" title="${geoOk?'Haritada':'Haritada yok'}">${geoOk?'📍':'❌'}</div>
+      </div>
+      <div style="flex:1;min-width:0;padding-top:1px">
+        <div class="sname">${s.n}</div>
+        <div class="saddr">${s.a}, ${s.c}</div>
+        <div style="display:flex;align-items:center;gap:5px;margin-top:3px">
+          <span class="spc ${pcClass(s.p)}">${s.p}</span>
+          ${day ? `<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;background:${day.color}20;color:${day.color}">H${day.week} ${day.label.slice(0,3)}</span>` : '<span style="font-size:9px;color:var(--muted)">Atanmamış</span>'}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+        <button onclick="openEdit(${s.id})" style="height:28px;width:52px;border-radius:6px;border:1px solid var(--border2);background:var(--bg);font-size:11px;font-weight:600;cursor:pointer;color:var(--sub);font-family:'Inter',sans-serif">✏️ Düz</button>
+        <button onclick="openDel(${s.id})" style="height:28px;width:52px;border-radius:6px;border:1px solid #FECDCA;background:#FEF3F2;font-size:11px;font-weight:600;cursor:pointer;color:#D92D20;font-family:'Inter',sans-serif">🗑 Sil</button>
+      </div>
+    </div>`;
+  });
+  h += `</div>`;
+  el.innerHTML = h;
+}
+
+// ── ADD NEW STOP ──
+function openAddStop(){
+  ['add-n','add-a','add-c','add-p'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('addOv').classList.add('on');
+  setTimeout(() => document.getElementById('add-n').focus(), 300);
+}
+function closeAdd(){ document.getElementById('addOv').classList.remove('on'); }
+function saveAdd(){
+  const n = document.getElementById('add-n').value.trim().toUpperCase();
+  const a = document.getElementById('add-a').value.trim();
+  const c = document.getElementById('add-c').value.trim();
+  const p = document.getElementById('add-p').value.trim().toUpperCase();
+  if(!n || !a || !c || !p){
+    alert('Lütfen tüm alanları doldurun.');
+    return;
+  }
+  const newId = STOPS.length > 0 ? Math.max(...STOPS.map(s=>s.id)) + 1 : 0;
+  const newStop = {id: newId, n, a, c, p};
+  STOPS.push(newStop);
+  save.stops();
+  // Geocode the new stop
+  geoQ.push(newId);
+  processGeo();
+  closeAdd();
+  renderAdresler();
+  renderMapLegend();
+}
+
+// ── DELETE STOP ──
+let delId = null;
+function openDel(stopId){
+  delId = stopId;
+  const s = STOPS.find(x => x.id === stopId);
+  document.getElementById('delName').textContent = `${s.n} — ${s.a}, ${s.p}`;
+  document.getElementById('delOv').classList.add('on');
+}
+function closeDel(){ document.getElementById('delOv').classList.remove('on'); delId = null; }
+function confirmDel(){
+  if(delId === null) return;
+  const sid = delId;
+  // Remove from STOPS
+  const idx = STOPS.findIndex(s => s.id === sid);
+  if(idx !== -1) STOPS.splice(idx, 1);
+  // Clean state
+  delete S.assign[sid];
+  delete S.geo[sid];
+  delete S.vis[sid];
+  Object.keys(S.order).forEach(did => {
+    if(S.order[did]) S.order[did] = S.order[did].filter(id => id !== sid);
+  });
+  Object.keys(S.vis).forEach(k => { if(k.endsWith('_'+sid)) delete S.vis[k]; });
+  save.stops(); save.assign(); save.order(); save.geo(); save.vis();
+  // Remove map marker
+  if(markers[sid]){ map.removeLayer(markers[sid]); delete markers[sid]; }
+  closeDel();
+  renderAdresler();
+  renderMapLegend();
+  if(curPage==='rota') renderRota();
+  if(curPage==='plan') renderPlan();
+}
+
+// ── EXCEL EXPORT (Adresler) ──
+function exportAdrExcel(){
+  const wb = XLSX.utils.book_new();
+  const rows = [['#','Cafe Adı','Adres','Şehir','Posta Kodu','Atanmış Gün']];
+  STOPS.forEach((s,i) => {
+    const dayId = S.assign[s.id];
+    const day = dayId ? getDay(dayId) : null;
+    rows.push([i+1, s.n, s.a, s.c, s.p, day ? `Hafta ${day.week} ${day.label}` : '']);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:5},{wch:30},{wch:35},{wch:18},{wch:12},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Adresler');
+  XLSX.writeFile(wb, `Costadoro_Adresler_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// ── IMPORT ──
+function handleImport(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'binary'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(rows.length < 2){ alert('Import dosyası boş veya hatalı.'); return; }
+
+      // Detect header row — look for "Cafe" or "Name" or "Adı" in first row
+      const header = rows[0].map(h => String(h).toLowerCase());
+      let nIdx=-1, aIdx=-1, cIdx=-1, pIdx=-1;
+
+      // Try to match columns by header name
+      header.forEach((h,i) => {
+        if(h.includes('cafe') || h.includes('name') || h.includes('adı') || h.includes('isim')) nIdx=i;
+        else if(h.includes('adres') || h.includes('address') || h.includes('street')) aIdx=i;
+        else if(h.includes('şehir') || h.includes('city') || h.includes('town')) cIdx=i;
+        else if(h.includes('posta') || h.includes('post') || h.includes('zip') || h.includes('code')) pIdx=i;
+      });
+
+      // Fallback: assume columns 0,1,2,3
+      if(nIdx===-1) nIdx=0;
+      if(aIdx===-1) aIdx=1;
+      if(cIdx===-1) cIdx=2;
+      if(pIdx===-1) pIdx=3;
+
+      const startRow = rows[0].some(c => typeof c === 'string' && c.length > 0 && !/^\d+$/.test(c)) ? 1 : 0;
+      let added = 0, skipped = 0;
+      let maxId = STOPS.length > 0 ? Math.max(...STOPS.map(s=>s.id)) : -1;
+
+      rows.slice(startRow).forEach(row => {
+        const n = String(row[nIdx]||'').trim().toUpperCase();
+        const a = String(row[aIdx]||'').trim();
+        const c = String(row[cIdx]||'').trim();
+        const p = String(row[pIdx]||'').trim().toUpperCase();
+        if(!n || !p){ skipped++; return; }
+        // Skip duplicates (same name + postcode)
+        if(STOPS.some(s => s.n === n && s.p === p)){ skipped++; return; }
+        maxId++;
+        STOPS.push({id: maxId, n, a: a||'', c: c||'', p});
+        geoQ.push(maxId);
+        added++;
+      });
+
+      save.stops();
+      processGeo();
+      input.value = '';
+      renderAdresler();
+      renderMapLegend();
+      alert(`✅ ${added} durak eklendi${skipped > 0 ? `, ${skipped} satır atlandı (eksik/tekrar)` : ''}.`);
+    } catch(err) {
+      alert('Dosya okunamadı. Excel veya CSV formatında olduğundan emin olun.\n'+err);
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+// ══════════════════════════════════════════════════════════════
+// ORDER & PAYMENT SYSTEM
+// ══════════════════════════════════════════════════════════════
+let ordStopId = null;
+let ordDayId  = null;
+let ordItems  = [];
+let ordPay    = null;
+
+function closeOrd(){
+  document.getElementById('ordOv').classList.remove('on');
+  ordStopId = null; ordDayId = null; ordItems = []; ordPay = null;
+}
+
+// ── ITEMS ──
+function renderOrdItems(){
+  const el = document.getElementById('ordItems');
+  if(!ordItems.length){
+    el.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:6px 0">Henüz kalem eklenmedi</div>`;
+    return;
+  }
+  el.innerHTML = ordItems.map((item,i) => `
+    <div class="ord-item-row">
+      <div class="ord-item-name">${item.name}</div>
+      <div class="ord-qty-wrap">
+        <button class="ord-qty-btn" onclick="changeQty(${i},-1)">−</button>
+        <span class="ord-qty">${item.qty}</span>
+        <button class="ord-qty-btn" onclick="changeQty(${i},1)">+</button>
+      </div>
+      <div class="ord-price">${fmt(item.qty * item.price)}</div>
+      <button class="ord-del" onclick="removeItem(${i})">✕</button>
+    </div>`).join('');
+}
+
+function changeQty(idx, delta){
+  ordItems[idx].qty = Math.max(1, ordItems[idx].qty + delta);
+  renderOrdItems(); renderOrdTotal(); calcChange();
+}
+
+function removeItem(idx){
+  ordItems.splice(idx, 1);
+  renderOrdItems(); renderOrdTotal(); calcChange();
+}
+
+function addOrderItem(){
+  const name  = document.getElementById('newItemName').value.trim();
+  const qty   = parseInt(document.getElementById('newItemQty').value) || 1;
+  const price = parseFloat(document.getElementById('newItemPrice').value) || 0;
+  if(!name){ document.getElementById('newItemName').focus(); return; }
+  ordItems.push({name, qty, price});
+  document.getElementById('newItemName').value  = '';
+  document.getElementById('newItemQty').value   = '1';
+  document.getElementById('newItemPrice').value = '';
+  document.getElementById('newItemName').focus();
+  renderOrdItems(); renderOrdTotal(); calcChange();
+}
+
+function renderOrdTotal(){
+  const tot = ordItems.reduce((s,i) => s + i.qty * i.price, 0);
+  document.getElementById('ordTotal').textContent = fmt(tot);
+  const row = document.getElementById('ordOutstandingRow');
+  if(ordPay === 'unpaid' && tot > 0){
+    row.style.display = 'flex';
+    document.getElementById('ordOutstanding').textContent = fmt(tot);
+  } else {
+    row.style.display = 'none';
+  }
+}
+
+// ── PAYMENT ──
+function selectPay(method){
+  ordPay = method;
+  ['cash','bank','unpaid'].forEach(m => {
+    const el = document.getElementById('popt-'+m);
+    if(!el) return;
+    el.classList.toggle('sel', m === method);
+    const colors = {cash:'#12B76A', bank:'#2E90FA', unpaid:'#F04438'};
+    el.style.borderColor = m === method ? colors[m] : 'var(--border)';
+    el.style.background  = m === method ? colors[m]+'15' : 'var(--bg)';
+  });
+  const cashWrap = document.getElementById('cashWrap');
+  cashWrap.style.display = method === 'cash' ? 'block' : 'none';
+  renderOrdTotal();
+}
+
+function calcChange(){
+  const tot      = ordItems.reduce((s,i) => s + i.qty * i.price, 0);
+  const received = parseFloat(document.getElementById('cashReceived').value) || 0;
+  const changeEl = document.getElementById('cashChange');
+  if(ordPay === 'cash' && received > 0 && tot > 0){
+    const change = received - tot;
+    changeEl.style.display = 'block';
+    if(change >= 0){
+      changeEl.style.background = '#ECFDF3'; changeEl.style.color = '#027A48';
+      changeEl.textContent = `✓ Para üstü: ${fmt(change)}`;
+    } else {
+      changeEl.style.background = '#FEF3F2'; changeEl.style.color = '#B42318';
+      changeEl.textContent = `⚠ Eksik: ${fmt(Math.abs(change))}`;
+    }
+  } else {
+    changeEl.style.display = 'none';
+  }
+}
+
+// ── DEBT TOGGLE in modal ──
+function toggleDebtPay(){
+  const row = document.getElementById('debtPayRow');
+  row.style.display = row.style.display === 'none' ? 'block' : 'none';
+}
+
+// ── EXCEL EXPORT WITH ORDERS ──
+function exportExcel(){
+  const wb = XLSX.utils.book_new();
+
+  // Tüm Rotalar
+  const summaryData = [['Hafta','Gün','Sıra','Cafe Adı','Adres','Şehir','Posta Kodu','Sipariş Toplam','Ödeme','Cash Alındı','Not']];
+  DAYS.forEach(d => {
+    stopsForDay(d.id).forEach((s,i) => {
+      const ord = getOrd(s.id);
+      const tot = ord ? ordTotal(ord) : 0;
+      summaryData.push([
+        `Hafta ${d.week}`, d.label, i+1, s.n, s.a, s.c, s.p,
+        tot > 0 ? tot.toFixed(2) : '',
+        ord ? ord.payMethod : '',
+        ord && ord.payMethod==='cash' ? parseFloat(ord.cashReceived||0).toFixed(2) : '',
+        ord ? (ord.note||'') : ''
+      ]);
+    });
+  });
+  const ws0 = XLSX.utils.aoa_to_sheet(summaryData);
+  ws0['!cols'] = [{wch:8},{wch:12},{wch:5},{wch:28},{wch:30},{wch:16},{wch:10},{wch:10},{wch:10},{wch:10},{wch:25}];
+  XLSX.utils.book_append_sheet(wb, ws0, 'Tüm Rotalar');
+
+  // Günlük sheets
+  DAYS.forEach(d => {
+    const stops = stopsForDay(d.id);
+    if(!stops.length) return;
+    const rows = [['Sıra','Cafe','Adres','Posta','Sipariş','Ödeme','Cash','Para Üstü','Borç','Not']];
+    stops.forEach((s,i) => {
+      const ord = getOrd(s.id);
+      const tot = ord ? ordTotal(ord) : 0;
+      const cash = ord && ord.payMethod==='cash' ? parseFloat(ord.cashReceived||0) : 0;
+      const change = ord && ord.payMethod==='cash' ? cash - tot : 0;
+      rows.push([
+        i+1, s.n, `${s.a}, ${s.c}`, s.p,
+        tot > 0 ? tot.toFixed(2) : '',
+        ord ? ord.payMethod : '',
+        cash > 0 ? cash.toFixed(2) : '',
+        change > 0 ? change.toFixed(2) : '',
+        (S.debts[s.id]||0) > 0 ? (S.debts[s.id]).toFixed(2) : '',
+        ord ? (ord.note||'') : ''
+      ]);
+    });
+    // Totals row
+    const visited = stops.filter(s => getOrd(s.id));
+    const totalCash = stops.filter(s => { const o=getOrd(s.id); return o&&o.payMethod==='cash'; })
+      .reduce((sum,s) => sum + parseFloat(getOrd(s.id).cashReceived||0), 0);
+    const totalBank = stops.filter(s => { const o=getOrd(s.id); return o&&o.payMethod==='bank'; })
+      .reduce((sum,s) => sum + ordTotal(getOrd(s.id)), 0);
+    const totalUnpaid = stops.filter(s => { const o=getOrd(s.id); return o&&o.payMethod==='unpaid'; })
+      .reduce((sum,s) => sum + ordTotal(getOrd(s.id)), 0);
+    rows.push([]);
+    rows.push(['','TOPLAM','','',`${stops.reduce((s,x)=>{const o=getOrd(x.id);return s+(o?ordTotal(o):0)},0).toFixed(2)}`,`Cash: £${totalCash.toFixed(2)} | Bank: £${totalBank.toFixed(2)} | Ödenmedi: £${totalUnpaid.toFixed(2)}`,'','','','']);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:4},{wch:28},{wch:32},{wch:10},{wch:8},{wch:10},{wch:8},{wch:8},{wch:8},{wch:22}];
+    XLSX.utils.book_append_sheet(wb, ws, `H${d.week} ${d.label.slice(0,3)}`);
+  });
+
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Costadoro_Rota_${today}.xlsx`);
+}
+
+// ══════════════════════════════════════════════════════════════
+// CUSTOMER NOTES (Kalıcı müşteri notları)
+// ══════════════════════════════════════════════════════════════
+let cnoteStopId = null;
+
+function openCnote(stopId) {
+  cnoteStopId = stopId;
+  const stop = STOPS.find(s => s.id === stopId);
+  document.getElementById('cnoteStopName').textContent = stop.n;
+  document.getElementById('cnoteText').value = S.cnotes[stopId] || '';
+  document.getElementById('cnoteOv').classList.add('on');
+  setTimeout(() => document.getElementById('cnoteText').focus(), 300);
+}
+
+function openCnoteFromOrd() {
+  if (ordStopId === null) return;
+  closeOrd();
+  setTimeout(() => openCnote(ordStopId), 100);
+}
+
+function closeCnote() {
+  document.getElementById('cnoteOv').classList.remove('on');
+  cnoteStopId = null;
+}
+
+function saveCnote() {
+  const text = document.getElementById('cnoteText').value.trim();
+  if (text) S.cnotes[cnoteStopId] = text;
+  else delete S.cnotes[cnoteStopId];
+  save.cnotes();
+  closeCnote();
+  if (curPage === 'plan') renderPlan();
+  if (curPage === 'adresler') renderAdresler();
+}
+
+// Show permanent note banner in order modal
+function refreshOrdCnoteBanner(stopId) {
+  const note = S.cnotes[stopId];
+  const banner = document.getElementById('ordCnoteBanner');
+  if (note) {
+    banner.style.display = 'block';
+    banner.textContent = '📌 ' + note;
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// DEBT HISTORY (Borç Geçmişi)
+// ══════════════════════════════════════════════════════════════
+function addDebtHistory(stopId, type, amount, note) {
+  if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
+  S.debtHistory[stopId].push({
+    date: new Date().toISOString().slice(0, 10),
+    type, // 'added' | 'paid'
+    amount: parseFloat(amount),
+    note: note || ''
+  });
+  save.debtHistory();
+}
+
+let borcSearchTerm = '';
+
+function onBorcSearch(v) {
+  borcSearchTerm = v.toLowerCase();
+  document.getElementById('borcClear').classList.toggle('show', v.length > 0);
+  renderBorclar();
+}
+function clearBorcSearch() {
+  document.getElementById('borcSearch').value = '';
+  borcSearchTerm = '';
+  document.getElementById('borcClear').classList.remove('show');
+  renderBorclar();
+}
+
+function renderBorclar() {
+  // Collect all stops with debt or history
+  let debtors = STOPS.filter(s => {
+    const hasDebt = (S.debts[s.id] || 0) > 0;
+    const hasHistory = (S.debtHistory[s.id] || []).length > 0;
+    return hasDebt || hasHistory;
+  });
+
+  if (borcSearchTerm) {
+    debtors = debtors.filter(s => s.n.toLowerCase().includes(borcSearchTerm));
+  }
+
+  const totalDebt = debtors.reduce((sum, s) => sum + (S.debts[s.id] || 0), 0);
+  document.getElementById('borcSub').textContent =
+    `${debtors.length} müşteri · Toplam borç: ${fmt(totalDebt)}`;
+
+  const el = document.getElementById('borcBody');
+
+  if (!debtors.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">✅</div><p>Borçlu müşteri yok!</p></div>`;
+    return;
+  }
+
+  // Sort: highest debt first
+  debtors.sort((a, b) => (S.debts[b.id] || 0) - (S.debts[a.id] || 0));
+
+  let h = '<div style="padding:8px 12px 12px">';
+
+  debtors.forEach(s => {
+    const debt = S.debts[s.id] || 0;
+    const history = (S.debtHistory[s.id] || []).slice().reverse(); // newest first
+    const dayId = S.assign[s.id];
+    const day = dayId ? getDay(dayId) : null;
+
+    h += `<div class="bdg-card">
+      <div class="bdg-head" onclick="toggleBdg(${s.id})">
+        <div>
+          <div class="bdg-name">${s.n}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${s.a}, ${s.p}${day ? ' · ' + day.label + ' H' + day.week : ''}</div>
+        </div>
+        ${debt > 0 ? `<span class="bdg-badge">BORÇ</span>` : '<span style="font-size:9px;color:#027A48;font-weight:700;background:#ECFDF3;padding:2px 7px;border-radius:99px">KAPANDI</span>'}
+        <div class="bdg-total">${debt > 0 ? fmt(debt) : fmt(0)}</div>
+      </div>
+      <div class="bdg-body" id="bdg-${s.id}">
+        ${history.length ? `
+          <div class="bdg-hist">
+            ${history.map(h => `
+              <div class="bdg-hist-row">
+                <span class="bdg-hist-date">${h.date}</span>
+                <span class="bdg-hist-desc">${h.type === 'added' ? '➕ Borç eklendi' : '✅ Ödeme yapıldı'}${h.note ? ' — ' + h.note : ''}</span>
+                <span class="bdg-hist-amt ${h.type === 'added' ? 'pos' : 'neg'}">${h.type === 'added' ? '+' : '−'}${fmt(h.amount)}</span>
+              </div>`).join('')}
+          </div>` : '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Geçmiş kaydı yok</div>'}
+        ${debt > 0 ? `
+          <div style="display:flex;gap:6px;margin-bottom:8px">
+            <input type="number" id="qpay-${s.id}" min="0" step="0.01" placeholder="Ödeme tutarı £" style="flex:1;border:1px solid var(--border2);border-radius:8px;padding:8px 10px;font-family:'Inter',monospace;font-size:14px;font-weight:700;background:var(--bg);outline:none;color:var(--text)">
+            <button onclick="quickPayDebt(${s.id})" style="padding:0 14px;height:38px;border-radius:8px;border:none;background:#B54708;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap">Ödeme Al</button>
+          </div>
+          <button class="bdg-clear-btn" onclick="clearDebt(${s.id})">Borcu Tamamen Sil (£${(S.debts[s.id]||0).toFixed(2)})</button>` : ''}
+      </div>
+    </div>`;
+  });
+
+  h += '</div>';
+  el.innerHTML = h;
+}
+
+function toggleBdg(stopId) {
+  const el = document.getElementById('bdg-' + stopId);
+  if (el) el.classList.toggle('open');
+}
+
+function quickPayDebt(stopId) {
+  const inp = document.getElementById('qpay-' + stopId);
+  const amount = parseFloat(inp.value) || 0;
+  if (amount <= 0) { inp.focus(); return; }
+  const current = S.debts[stopId] || 0;
+  const remaining = Math.max(0, current - amount);
+  S.debts[stopId] = remaining;
+  save.debts();
+  addDebtHistory(stopId, 'paid', Math.min(amount, current), 'Borç geçmişinden ödeme');
+  renderBorclar();
+}
+
+function clearDebt(stopId) {
+  const amt = S.debts[stopId] || 0;
+  if (!confirm(`${STOPS.find(s=>s.id===stopId)?.n} için £${amt.toFixed(2)} borç siliniyor. Emin misin?`)) return;
+  addDebtHistory(stopId, 'paid', amt, 'Manuel silme');
+  S.debts[stopId] = 0;
+  save.debts();
+  renderBorclar();
+}
+
+// ══════════════════════════════════════════════════════════════
+// SAVE ORDER / DEBT / OPEN ORD (with debt history + catalog reset)
+// ══════════════════════════════════════════════════════════════
+function saveOrder() {
+  if (ordStopId === null) return;
+  const tot = ordItems.reduce((s, i) => s + i.qty * i.price, 0);
+
+  if (ordPay === 'unpaid' && tot > 0) {
+    S.debts[ordStopId] = (S.debts[ordStopId] || 0) + tot;
+    save.debts();
+    addDebtHistory(ordStopId, 'added', tot, 'Sipariş ödemedi');
+  }
+
+  const debtPaidAmt = parseFloat(document.getElementById('debtPayInp')?.value) || 0;
+  if (debtPaidAmt > 0) {
+    addDebtHistory(ordStopId, 'paid', debtPaidAmt, 'Ziyaret sırasında ödeme');
+  }
+
+  S.orders[ordKey(ordStopId)] = {
+    items: ordItems,
+    payMethod: ordPay || 'unpaid',
+    cashReceived: ordPay === 'cash' ? (parseFloat(document.getElementById('cashReceived').value) || tot) : tot,
+    note: document.getElementById('ordNote').value.trim(),
+    debtPaid: debtPaidAmt > 0 ? debtPaidAmt : null,
+    ts: new Date().toISOString(),
+  };
+  save.orders();
+
+  const key = ordDayId + '_' + ordStopId;
+  S.vis[key] = true;
+  save.vis();
+
+  closeOrd();
+  renderPlan();
+  if (curPage === 'rota') renderRota();
+  if (curPage === 'dash') renderDash();
+}
+
+function applyDebtPayment() {
+  const amount = parseFloat(document.getElementById('debtPayInp').value) || 0;
+  if (amount <= 0) { alert('Geçerli bir tutar girin.'); return; }
+  const current = S.debts[ordStopId] || 0;
+  const paid = Math.min(amount, current);
+  const remaining = Math.max(0, current - amount);
+  S.debts[ordStopId] = remaining;
+  save.debts();
+  addDebtHistory(ordStopId, 'paid', paid, 'Sipariş modalında ödeme');
+  const resultEl = document.getElementById('debtPayResult');
+  resultEl.style.color = remaining === 0 ? '#027A48' : '#B54708';
+  resultEl.textContent = remaining === 0 ? '✓ Borç tamamen ödendi!' : `Kalan borç: ${fmt(remaining)}`;
+  document.getElementById('ordDebtAmt').textContent = fmt(remaining);
+  if (remaining === 0) document.getElementById('ordDebtSection').style.display = 'none';
+}
+
+function openOrd(stopId, dayId) {
+  ordStopId = stopId;
+  ordDayId = dayId;
+  const stop = STOPS.find(s => s.id === stopId);
+  const day = getDay(dayId);
+  document.getElementById('ordTitle').textContent = stop.n;
+  document.getElementById('ordSub').textContent = `${stop.a}, ${stop.p}${day ? ' · ' + day.label + ' Hafta ' + day.week : ''}`;
+
+  const existing = getOrd(stopId);
+  ordItems = existing ? JSON.parse(JSON.stringify(existing.items)) : [];
+  ordPay = existing ? existing.payMethod : null;
+  document.getElementById('ordNote').value = existing ? (existing.note || '') : '';
+  document.getElementById('cashReceived').value = existing ? (existing.cashReceived || '') : '';
+  document.getElementById('newItemName').value = '';
+  document.getElementById('newItemQty').value = '1';
+  document.getElementById('newItemPrice').value = '';
+  document.getElementById('debtPayRow').style.display = 'none';
+  document.getElementById('debtPayInp').value = '';
+  document.getElementById('debtPayResult').textContent = '';
+  // Hide catalog picker
+  const catArea = document.getElementById('catPickArea');
+  if (catArea) catArea.style.display = 'none';
+
+  const debt = S.debts[stopId] || 0;
+  const debtSec = document.getElementById('ordDebtSection');
+  if (debt > 0) {
+    debtSec.style.display = 'block';
+    document.getElementById('ordDebtAmt').textContent = fmt(debt);
+  } else {
+    debtSec.style.display = 'none';
+  }
+
+  refreshOrdCnoteBanner(stopId);
+  renderOrdItems();
+  renderOrdTotal();
+  selectPay(ordPay);
+  calcChange();
+  document.getElementById('ordOv').classList.add('on');
+}
+
+// ══════════════════════════════════════════════════════════════
+// PRODUCT CATALOG
+// ══════════════════════════════════════════════════════════════
+let editCatId = null;
+
+function renderKatalog() {
+  const items = S.catalog;
+  document.getElementById('katSub').textContent = `${items.length} ürün`;
+  const el = document.getElementById('katBody');
+  if (!items.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📦</div><p>Katalog boş.<br>+ butonuyla ürün ekleyin.</p></div>`;
+    return;
+  }
+  // Group by category
+  const cats = {};
+  items.forEach(it => {
+    const c = it.category || 'Genel';
+    if (!cats[c]) cats[c] = [];
+    cats[c].push(it);
+  });
+  let h = '';
+  Object.keys(cats).sort().forEach(cat => {
+    h += `<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">${cat}</div>`;
+    cats[cat].forEach(it => {
+      h += `<div class="cat-item">
+        <div style="flex:1;min-width:0">
+          <div class="cat-item-name">${it.name}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${it.category||'Genel'}</div>
+        </div>
+        <div class="cat-item-price">£${(+it.price).toFixed(2)}</div>
+        <div class="cat-item-actions">
+          <button class="cat-act-btn" onclick="openEditCat('${it.id}')">✏️</button>
+          <button class="cat-act-btn" style="color:#D92D20;border-color:#FECDCA" onclick="deleteCatItem('${it.id}')">🗑</button>
+        </div>
+      </div>`;
+    });
+  });
+  el.innerHTML = h;
+}
+
+function openAddCat() {
+  editCatId = null;
+  document.getElementById('catModalTitle').textContent = 'Ürün Ekle';
+  document.getElementById('cat-name').value = '';
+  document.getElementById('cat-price').value = '';
+  document.getElementById('cat-cat').value = '';
+  document.getElementById('catOv').classList.add('on');
+  setTimeout(() => document.getElementById('cat-name').focus(), 300);
+}
+
+function openEditCat(id) {
+  const it = S.catalog.find(x => x.id === id);
+  if (!it) return;
+  editCatId = id;
+  document.getElementById('catModalTitle').textContent = 'Ürün Düzenle';
+  document.getElementById('cat-name').value = it.name;
+  document.getElementById('cat-price').value = it.price;
+  document.getElementById('cat-cat').value = it.category || '';
+  document.getElementById('catOv').classList.add('on');
+}
+
+function closeCat() { document.getElementById('catOv').classList.remove('on'); }
+
+function saveCatItem() {
+  const name  = document.getElementById('cat-name').value.trim();
+  const price = parseFloat(document.getElementById('cat-price').value) || 0;
+  const cat   = document.getElementById('cat-cat').value.trim() || 'Genel';
+  if (!name) { document.getElementById('cat-name').focus(); return; }
+  if (editCatId) {
+    const it = S.catalog.find(x => x.id === editCatId);
+    if (it) { it.name = name; it.price = price; it.category = cat; }
+  } else {
+    S.catalog.push({ id: Date.now().toString(36), name, price, category: cat });
+  }
+  save.catalog();
+  closeCat();
+  renderKatalog();
+}
+
+function deleteCatItem(id) {
+  const it = S.catalog.find(x => x.id === id);
+  if (!it || !confirm(`"${it.name}" silinecek. Emin misin?`)) return;
+  S.catalog.splice(S.catalog.indexOf(it), 1);
+  save.catalog();
+  renderKatalog();
+}
+
+// ── Catalog quick-pick in order modal ──
+function toggleCatPick() {
+  const area = document.getElementById('catPickArea');
+  const btn  = document.getElementById('catPickToggle');
+  const show = area.style.display === 'none';
+  area.style.display = show ? 'block' : 'none';
+  btn.style.color = show ? '#9E77ED' : '#2E90FA';
+  if (show) renderCatChips();
+}
+
+function renderCatChips() {
+  const stopOverrides = (ordStopId !== null ? S.stopCatalog[ordStopId] : null) || [];
+  const global = S.catalog;
+  // Merge: stop overrides take priority
+  const merged = [...global];
+  stopOverrides.forEach(ov => {
+    const existing = merged.findIndex(x => x.name === ov.name);
+    if (existing >= 0) merged[existing] = { ...merged[existing], ...ov, isOverride: true };
+    else merged.push({ ...ov, id: 'ov_' + ov.name, isOverride: true });
+  });
+  const el = document.getElementById('catChips');
+  if (!merged.length) {
+    el.innerHTML = `<div style="font-size:11px;color:var(--muted)">Katalog boş. <button onclick="showPage('katalog')" style="border:none;background:none;color:#2E90FA;font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">Katalog →</button></div>`;
+    return;
+  }
+  el.innerHTML = merged.map(it =>
+    `<button class="cat-chip${it.isOverride ? ' stop-override' : ''}" onclick="addFromCatalog('${it.name.replace(/'/g,"\\'")}',${it.price})">
+      ${it.name} · £${(+it.price).toFixed(2)}
+    </button>`
+  ).join('');
+}
+
+function addFromCatalog(name, price) {
+  // Check if already in order — increment qty
+  const existing = ordItems.find(x => x.name === name);
+  if (existing) { existing.qty++; }
+  else { ordItems.push({ name, qty: 1, price: parseFloat(price) }); }
+  renderOrdItems(); renderOrdTotal(); calcChange();
+}
+
+// ══════════════════════════════════════════════════════════════
+// PLAN IMPORT
+// ══════════════════════════════════════════════════════════════
+let planImportRows = []; // [{cafeName, week, day, order}]
+
+const DAY_MAP = {
+  'pazartesi':'0','pzt':'0','monday':'0','mon':'0',
+  'salı':'1','sal':'1','tuesday':'1','tue':'1',
+  'çarşamba':'2','çar':'2','wednesday':'2','wed':'2',
+  'perşembe':'3','per':'3','thursday':'3','thu':'3',
+  'cuma':'4','cum':'4','friday':'4','fri':'4',
+};
+
+function openPlanImport() {
+  planImportRows = [];
+  document.getElementById('pimportPreview').style.display = 'none';
+  document.getElementById('pimportApplyBtn').disabled = true;
+  document.getElementById('pimportApplyBtn').style.opacity = '.4';
+  document.getElementById('planImportFile').value = '';
+  document.getElementById('planImportOv').classList.add('on');
+}
+function closePlanImport() { document.getElementById('planImportOv').classList.remove('on'); }
+
+function handlePlanImportDrop(e) {
+  e.preventDefault();
+  document.getElementById('pimportDrop').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) processPlanImportFile(file);
+}
+function handlePlanImportFile(inp) {
+  if (inp.files[0]) processPlanImportFile(inp.files[0]);
+}
+
+function processPlanImportFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      let rows = [];
+      if (ext === 'json') {
+        rows = JSON.parse(e.target.result);
+        planImportRows = rows.map(r => ({
+          cafeName: r.cafe || r.name || r['cafe adı'] || '',
+          week: (r.week || r.hafta || 'A').toUpperCase(),
+          day: r.day || r.gün || '',
+          order: parseInt(r.order || r.sıra || 0) || 0,
+        }));
+      } else {
+        // Excel or CSV
+        const wb = XLSX.read(e.target.result, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        if (!raw.length) return;
+        const header = raw[0].map(h => String(h).toLowerCase().trim());
+        const ci = k => header.findIndex(h => h.includes(k));
+        const nameI  = Math.max(ci('cafe'), ci('adı'), ci('name'));
+        const weekI  = Math.max(ci('hafta'), ci('week'));
+        const dayI   = Math.max(ci('gün'), ci('day'));
+        const orderI = Math.max(ci('sıra'), ci('order'), ci('seq'));
+        planImportRows = raw.slice(1).filter(r => r[nameI]).map(r => ({
+          cafeName: String(r[nameI]).trim(),
+          week: String(r[weekI] || 'A').trim().toUpperCase(),
+          day: String(r[dayI] || '').trim(),
+          order: parseInt(r[orderI]) || 0,
+        }));
+      }
+      showPlanImportPreview();
+    } catch (err) {
+      alert('Dosya okunamadı: ' + err.message);
+    }
+  };
+  if (ext === 'json') reader.readAsText(file);
+  else reader.readAsBinaryString(file);
+}
+
+function showPlanImportPreview() {
+  const preview = document.getElementById('pimportPreview');
+  const list    = document.getElementById('pimportPreviewList');
+  const summary = document.getElementById('pimportSummary');
+  preview.style.display = 'block';
+  let matched = 0, notFound = 0;
+  let h = '';
+  planImportRows.forEach(r => {
+    const stop = STOPS.find(s => s.n.toLowerCase().includes(r.cafeName.toLowerCase()) || r.cafeName.toLowerCase().includes(s.n.toLowerCase().slice(0, 6)));
+    const dayKey = DAY_MAP[r.day.toLowerCase()] ?? null;
+    const dayId = dayKey !== null ? `w${r.week}${dayKey}` : null;
+    const day = dayId ? getDay(dayId) : null;
+    const ok = stop && day;
+    if (ok) matched++; else notFound++;
+    h += `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);font-size:11px">
+      <span style="font-size:14px">${ok ? '✅' : '⚠️'}</span>
+      <span style="flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.cafeName}</span>
+      <span style="color:${day ? day.color : 'var(--muted)'};font-weight:700;flex-shrink:0">${day ? day.label + ' H' + day.week : r.day + ' ' + r.week + ' (?)'}</span>
+    </div>`;
+  });
+  list.innerHTML = h;
+  summary.innerHTML = `<span style="color:#027A48;font-weight:700">✅ ${matched} eşleşti</span>${notFound ? `  ·  <span style="color:#B54708;font-weight:700">⚠️ ${notFound} bulunamadı</span>` : ''}`;
+  const btn = document.getElementById('pimportApplyBtn');
+  btn.disabled = matched === 0;
+  btn.style.opacity = matched > 0 ? '1' : '.4';
+}
+
+function applyPlanImport() {
+  let applied = 0;
+  planImportRows.forEach(r => {
+    const stop = STOPS.find(s => s.n.toLowerCase().includes(r.cafeName.toLowerCase()) || r.cafeName.toLowerCase().includes(s.n.toLowerCase().slice(0, 6)));
+    const dayKey = DAY_MAP[r.day.toLowerCase()] ?? null;
+    const dayId = dayKey !== null ? `w${r.week}${dayKey}` : null;
+    if (!stop || !dayId || !getDay(dayId)) return;
+    S.assign[stop.id] = dayId;
+    if (r.order > 0) {
+      if (!S.order[dayId]) S.order[dayId] = [];
+      // Insert at position
+      const arr = S.order[dayId];
+      const existing = arr.indexOf(stop.id);
+      if (existing >= 0) arr.splice(existing, 1);
+      arr.splice(Math.max(0, r.order - 1), 0, stop.id);
+    }
+    applied++;
+  });
+  save.assign(); save.order();
+  closePlanImport();
+  renderRota(); renderPlan();
+  refreshAllMarkers();
+  alert(`✅ ${applied} durak atandı.`);
+}
+
+// ══════════════════════════════════════════════════════════════
+// PRODUCT ANALYTICS (Dashboard upgrade)
+// ══════════════════════════════════════════════════════════════
+let dashWeek = 'A';
+let dashPeriod = 'day';
+
+function setDashWeek(w) {
+  dashWeek = w;
+  S.dashWeek = w;
+  lsSave('dWeek', w);
+  renderDash();
+}
+
+function setDashPeriod(p) {
+  dashPeriod = p;
+  S.dashPeriod = p;
+  lsSave('dPeriod', p);
+  ['day','month'].forEach(x => document.getElementById('dp-' + x)?.classList.toggle('on', x === p));
+  renderDash();
+}
+
+function getAllOrdersForPeriod(period) {
+  // period: 'day' = today, 'month' = current month
+  const today = todayKey();
+  const monthPrefix = today.slice(0, 7); // 'YYYY-MM'
+  const all = [];
+  Object.keys(S.orders).forEach(key => {
+    const dateStr = key.split('_')[0];
+    if (period === 'day' && dateStr !== today) return;
+    if (period === 'month' && !dateStr.startsWith(monthPrefix)) return;
+    const stopId = parseInt(key.split('_')[1]);
+    all.push({ key, stopId, ord: S.orders[key] });
+  });
+  return all;
+}
+
+function buildProductStats(orderList) {
+  const stats = {}; // name → {qty, revenue}
+  orderList.forEach(({ ord }) => {
+    (ord.items || []).forEach(item => {
+      if (!stats[item.name]) stats[item.name] = { qty: 0, revenue: 0 };
+      stats[item.name].qty += item.qty;
+      stats[item.name].revenue += item.qty * item.price;
+    });
+  });
+  return Object.entries(stats)
+    .map(([name, s]) => ({ name, ...s }))
+    .sort((a, b) => b.revenue - a.revenue);
+}
+
+// ── Override original renderDash with upgraded version ──
+function renderDash() {
+  dashWeek = S.dashWeek || 'A';
+  dashPeriod = S.dashPeriod || 'day';
+  ['A','B','all'].forEach(x => document.getElementById('dW'+x)?.classList.toggle('on', x===dashWeek));
+  ['day','month'].forEach(x => document.getElementById('dp-'+x)?.classList.toggle('on', x===dashPeriod));
+
+  const days = dashWeek === 'all' ? DAYS : DAYS.filter(d => d.week === dashWeek);
+  const periodOrders = getAllOrdersForPeriod(dashPeriod);
+
+  // Only consider orders for stops in selected week/days
+  const dayStopIds = new Set();
+  days.forEach(d => stopsForDay(d.id).forEach(s => dayStopIds.add(s.id)));
+  const filtered = dashPeriod === 'day'
+    ? periodOrders.filter(o => dayStopIds.has(o.stopId))
+    : periodOrders; // monthly: all stops
+
+  let totalCash = 0, totalBank = 0, totalUnpaid = 0, totalOrders = 0, totalVisits = 0, totalStops = 0, totalDebt = 0;
+
+  const dayStats = days.map(d => {
+    const stops = stopsForDay(d.id);
+    const visited = stops.filter(s => S.vis[d.id+'_'+s.id]).length;
+    let dayCash=0, dayBank=0, dayUnpaid=0, dayTotal=0;
+    stops.forEach(s => {
+      const ord = getOrd(s.id);
+      if (ord) {
+        const tot = ordTotal(ord);
+        dayTotal += tot;
+        if (ord.payMethod==='cash') dayCash += parseFloat(ord.cashReceived||tot);
+        else if (ord.payMethod==='bank') dayBank += tot;
+        else if (ord.payMethod==='unpaid') dayUnpaid += tot;
+      }
+    });
+    totalCash += dayCash; totalBank += dayBank; totalUnpaid += dayUnpaid;
+    totalOrders += dayTotal; totalVisits += visited; totalStops += stops.length;
+    return { d, stops:stops.length, visited, dayCash, dayBank, dayUnpaid, dayTotal };
+  });
+
+  STOPS.forEach(s => { totalDebt += S.debts[s.id]||0; });
+
+  // Product stats
+  const prodStats = buildProductStats(filtered);
+  const maxRevenue = prodStats[0]?.revenue || 1;
+
+  // Top debtors
+  const topDebtors = STOPS.filter(s=>(S.debts[s.id]||0)>0)
+    .sort((a,b)=>(S.debts[b.id]||0)-(S.debts[a.id]||0)).slice(0,5);
+
+  const visitPct = totalStops ? Math.round(totalVisits/totalStops*100) : 0;
+  const periodLabel = dashPeriod==='day' ? 'Bugün' : new Date().toLocaleDateString('tr-TR',{month:'long',year:'numeric'});
+
+  let h = `
+  <div class="dash-hero">
+    <div class="dash-hero-title">${dashWeek==='all'?'Tüm Haftalar':'Hafta '+dashWeek} · ${periodLabel}</div>
+    <div class="dash-hero-val">${fmt(totalOrders)}</div>
+    <div class="dash-hero-sub">${totalVisits} / ${totalStops} durak ziyaret edildi · %${visitPct}</div>
+    <div class="dash-pills">
+      <div class="dash-pill"><div class="dash-pill-val" style="color:#6CE9A6">${fmt(totalCash)}</div><div class="dash-pill-lbl">Cash</div></div>
+      <div class="dash-pill"><div class="dash-pill-val" style="color:#84CAFF">${fmt(totalBank)}</div><div class="dash-pill-lbl">Banka</div></div>
+      <div class="dash-pill"><div class="dash-pill-val" style="color:#FDA29B">${fmt(totalUnpaid)}</div><div class="dash-pill-lbl">Ödenmedi</div></div>
+      <div class="dash-pill"><div class="dash-pill-val" style="color:#FEC84B">${fmt(totalDebt)}</div><div class="dash-pill-lbl">Toplam Borç</div></div>
+    </div>
+  </div>
+  <div class="body" style="padding-bottom:calc(60px + env(safe-area-inset-bottom,0px) + 16px)">
+
+  <div class="dash-section">
+    <div class="dash-sec-title">Ödeme Dağılımı</div>
+    <div class="dash-grid">
+      <div class="dash-card green"><div class="dash-card-val">${fmt(totalCash)}</div><div class="dash-card-lbl">💵 Cash</div></div>
+      <div class="dash-card blue"><div class="dash-card-val">${fmt(totalBank)}</div><div class="dash-card-lbl">🏦 Banka</div></div>
+      <div class="dash-card red"><div class="dash-card-val">${fmt(totalUnpaid)}</div><div class="dash-card-lbl">⏳ Ödenmedi</div></div>
+      <div class="dash-card amber"><div class="dash-card-val">${fmt(totalDebt)}</div><div class="dash-card-lbl">⚠️ Birikmiş Borç</div></div>
+    </div>
+  </div>
+
+  ${prodStats.length ? `
+  <div class="dash-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="dash-sec-title" style="margin:0">📦 Ürün Bazlı Satış</div>
+      <span style="font-size:10px;font-weight:600;color:var(--muted)">${prodStats.reduce((s,p)=>s+p.qty,0)} adet · ${fmt(prodStats.reduce((s,p)=>s+p.revenue,0))}</span>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:2px 14px">
+      ${prodStats.slice(0,15).map((p,i) => `
+        <div class="prod-row">
+          <div class="prod-rank">${i+1}</div>
+          <div>
+            <div class="prod-name">${p.name}</div>
+            <div class="prod-bar"><div class="prod-bar-fill" style="width:${Math.round(p.revenue/maxRevenue*100)}%"></div></div>
+          </div>
+          <div class="prod-stats">
+            <div class="prod-ciro">${fmt(p.revenue)}</div>
+            <div class="prod-qty">${p.qty} adet</div>
+          </div>
+        </div>`).join('')}
+    </div>
+  </div>` : ''}
+
+  <div class="dash-section">
+    <div class="dash-sec-title">Günlük Durum</div>
+    <div class="dash-week-row">
+      ${dayStats.map(ds => {
+        const pct = ds.stops ? Math.round(ds.visited/ds.stops*100) : 0;
+        return `<div class="dwc">
+          <div class="dwc-title" style="color:${ds.d.color}">${ds.d.label.slice(0,3)} H${ds.d.week}</div>
+          <div class="dwc-val">${fmt(ds.dayTotal)}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">${ds.visited}/${ds.stops} · %${pct}</div>
+          <div class="dwc-bar"><div class="dwc-bar-fill" style="width:${pct}%;background:${ds.d.color}"></div></div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>
+
+  ${topDebtors.length ? `
+  <div class="dash-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="dash-sec-title" style="margin:0">En Yüksek Borçlar</div>
+      <button onclick="showPage('borclar')" style="font-size:11px;font-weight:700;color:#2E90FA;background:none;border:none;cursor:pointer;font-family:'Inter',sans-serif">Tümünü Gör →</button>
+    </div>
+    ${topDebtors.map(s=>`<div class="debt-item">
+      <div><div class="debt-item-name">${s.n}</div><div style="font-size:10px;color:var(--muted)">${s.p}</div></div>
+      <div class="debt-item-amt">${fmt(S.debts[s.id])}</div>
+    </div>`).join('')}
+  </div>` : ''}
+
+  <div class="dash-section" style="padding-bottom:12px">
+    <div class="dash-sec-title">Notlu Müşteriler</div>
+    ${Object.keys(S.cnotes).length===0 ?
+      '<div style="font-size:12px;color:var(--muted)">Henüz not eklenmemiş.</div>' :
+      Object.keys(S.cnotes).map(sid => {
+        const s = STOPS.find(x=>x.id===parseInt(sid));
+        if(!s) return '';
+        return `<div style="background:var(--card);border:1px solid #FEC84B;border-radius:10px;padding:10px 14px;margin-bottom:6px;cursor:pointer" onclick="openCnote(${s.id})">
+          <div style="font-size:12px;font-weight:700;margin-bottom:3px">${s.n}</div>
+          <div style="font-size:11px;color:#B54708">📌 ${S.cnotes[sid]}</div>
+        </div>`;
+      }).join('')}
+  </div>
+  </div>`;
+
+  document.getElementById('dashBody').innerHTML = h;
+}
+
+// ══════════════════════════════════════════════════════════════
+// SUPABASE SETUP UI
+// ══════════════════════════════════════════════════════════════
+function openSbSetup() {
+  // Pre-fill saved config
+  const savedUrl = localStorage.getItem('cr4_sb_url') || '';
+  const savedKey = localStorage.getItem('cr4_sb_key') || '';
+  document.getElementById('sb-url').value = savedUrl;
+  document.getElementById('sb-key').value = savedKey;
+  // Show current status
+  updateSbStatusBanner();
+  document.getElementById('sbSetupOv').classList.add('on');
+}
+function closeSbSetup() { document.getElementById('sbSetupOv').classList.remove('on'); }
+
+function updateSbStatusBanner() {
+  const el = document.getElementById('sbStatusBanner');
+  if (!el) return;
+  if (SB_CONFIGURED) {
+    el.style.background = '#ECFDF3'; el.style.border = '1px solid #A9EFC5'; el.style.color = '#027A48';
+    el.textContent = '✅ Supabase yapılandırıldı — sync aktif';
+  } else {
+    el.style.background = '#FFFAEB'; el.style.border = '1px solid #FEC84B'; el.style.color = '#B54708';
+    el.textContent = '⚠️ Henüz yapılandırılmamış — sadece yerel depolama kullanılıyor';
+  }
+}
+
+function saveSbConfig() {
+  const url = document.getElementById('sb-url').value.trim().replace(/\/$/, '');
+  const key = document.getElementById('sb-key').value.trim();
+  if (!url || !key) { alert('URL ve Key zorunludur.'); return; }
+  localStorage.setItem('cr4_sb_url', url);
+  localStorage.setItem('cr4_sb_key', key);
+  // Apply immediately — reload page so consts reinitialize
+  alert('✅ Kaydedildi! Sayfa yenileniyor…');
+  location.reload();
+}
+
+async function testSbConnection() {
+  const url = document.getElementById('sb-url').value.trim().replace(/\/$/, '');
+  const key = document.getElementById('sb-key').value.trim();
+  if (!url || !key) { alert('URL ve Key girin.'); return; }
+  const el = document.getElementById('sbStatusBanner');
+  el.style.background = '#EFF8FF'; el.style.border = '1px solid #B2DDFF'; el.style.color = '#175CD3';
+  el.textContent = '🔌 Test ediliyor…';
+  try {
+    const r = await fetch(`${url}/rest/v1/cr4_store?select=key&limit=1`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` }
+    });
+    if (r.ok) {
+      el.style.background = '#ECFDF3'; el.style.border = '1px solid #A9EFC5'; el.style.color = '#027A48';
+      el.textContent = '✅ Bağlantı başarılı! Tablo bulundu.';
+    } else {
+      const txt = await r.text();
+      throw new Error(`HTTP ${r.status}: ${txt.slice(0,100)}`);
+    }
+  } catch (e) {
+    el.style.background = '#FEF3F2'; el.style.border = '1px solid #FECDCA'; el.style.color = '#B42318';
+    el.textContent = `❌ Hata: ${e.message}`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+initMap();
+renderRota();
+renderPlan();
+
+// Supabase sync — map tamamen hazır olduktan sonra başlat
+setTimeout(() => {
+  if (SB_CONFIGURED) {
+    setSyncStatus('syncing');
+    syncFromSupabase();
+  } else {
+    setSyncStatus('offline');
+  }
+}, 500);
+</script>
+</body>
+</html>
