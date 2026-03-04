@@ -273,6 +273,36 @@ a{text-decoration:none;color:inherit}
   }
 }
 
+/* === MOBILE RESPONSIVE === */
+.report-table{table-layout:fixed;word-wrap:break-word}
+.report-table th,.report-table td{word-break:break-word;overflow-wrap:break-word}
+@media(max-width:480px){
+  .topbar h1{font-size:16px}
+  .metric-grid{grid-template-columns:1fr 1fr;gap:8px}
+  .metric-value{font-size:18px}
+  .metric-label{font-size:11px}
+  .report-table{font-size:12px}
+  .report-table th,.report-table td{padding:6px 4px}
+  .day-tabs{gap:2px;padding:8px 8px}
+  .day-tab{min-width:50px;padding:8px 4px;font-size:12px}
+  .chip-group{gap:4px}
+  .chip{padding:5px 10px;font-size:12px}
+  .order-item-row{flex-wrap:wrap}
+  .order-item-row .select{flex:1 1 100%;min-width:0}
+  .order-item-row .input{flex:1 1 45%;min-width:60px}
+  .action-bar{padding:8px 12px;gap:6px}
+  .action-btn{padding:8px 10px;min-width:62px;font-size:10px}
+  .card{padding:10px}
+  .pay-options{gap:4px}
+  .pay-opt{padding:10px 4px;font-size:12px}
+  .modal-sheet{padding:16px 12px calc(16px + var(--safe-b))}
+  .btn{padding:8px 12px;font-size:13px;min-height:40px}
+  .date-range-bar{gap:4px}
+  .date-btn{padding:5px 10px;font-size:12px}
+  .custom-dates input{padding:6px;font-size:14px}
+  .page-body{padding:10px 12px 12px}
+}
+
 /* === SYNC STATUS === */
 .sync-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-left:6px}
 .sync-dot.ok{background:var(--success)}
@@ -863,10 +893,20 @@ function calcDayRevenue(dayId) {
   });
   const todayOrders = Object.values(S.orders)
     .filter(o => assigned.includes(o.customerId) && o.status === 'delivered' &&
-                 o.deliveredAt && o.deliveredAt.slice(0, 10) === today);
-  const cash = todayOrders.filter(o => o.payMethod === 'cash').reduce((s, o) => s + calcOrderTotal(o), 0);
-  const bank = todayOrders.filter(o => o.payMethod === 'bank').reduce((s, o) => s + calcOrderTotal(o), 0);
-  const unpaid = todayOrders.filter(o => o.payMethod === 'unpaid').reduce((s, o) => s + calcOrderTotal(o), 0);
+                 o.deliveredAt && o.deliveredAt.slice(0, 10) === today && o.payMethod !== 'visit');
+  let cash = 0, bank = 0, unpaid = 0;
+  todayOrders.forEach(o => {
+    const total = calcOrderTotal(o);
+    if (o.payMethod === 'cash') {
+      const paid = (o.cashPaid !== undefined) ? o.cashPaid : total;
+      cash += Math.min(paid, total);
+      unpaid += Math.max(0, total - paid);
+    } else if (o.payMethod === 'bank') {
+      bank += total;
+    } else {
+      unpaid += total;
+    }
+  });
   return { cash, bank, unpaid, total: cash + bank + unpaid };
 }
 
@@ -1000,12 +1040,6 @@ function selectVisitPayMethod(method, el) {
 function confirmVisitOnly() {
   const stopId = parseInt(deliveryStopId);
   const now = new Date().toISOString();
-  // Record visit in debt history
-  if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
-  S.debtHistory[stopId].unshift({
-    date: now, amount: 0, type: 'visit', note: 'Visited - no orders'
-  });
-  save.debtHistory();
   // Mark as visited today by creating a zero-total delivery marker
   const vid = uid();
   S.orders[vid] = {
@@ -1104,6 +1138,10 @@ function confirmDelivery() {
     o.status = 'delivered';
     o.deliveredAt = now;
     o.payMethod = deliveryPayMethod;
+    if (deliveryPayMethod === 'cash') {
+      const cashInput = document.getElementById('cash-amount-input');
+      o.cashPaid = cashInput ? (parseFloat(cashInput.value) || 0) : grandTotal;
+    }
   });
 
   if (deliveryPayMethod === 'unpaid') {
@@ -1644,23 +1682,27 @@ function renderProfile() {
     html += `<p class="text-muted" style="font-size:13px;padding:8px 0">No delivery history</p>`;
   } else {
     recentDelivered.forEach(o => {
+      const isVisit = o.payMethod === 'visit';
+      const badgeLabel = isVisit ? 'visited' : 'delivered';
+      const badgeClass = isVisit ? 'badge-purple' : 'badge-success';
+      const payLabel = o.payMethod === 'visit' ? '' : o.payMethod === 'cash' && o.cashPaid !== undefined && o.cashPaid < calcOrderTotal(o) ? `cash (partial ${formatCurrency(o.cashPaid)})` : (o.payMethod || '');
       html += `
         <div class="order-card" style="opacity:0.85">
           <div class="order-card-head">
             <div class="order-card-date">${formatDateTime(o.deliveredAt)}</div>
-            <span class="badge badge-success">delivered</span>
+            <span class="badge ${badgeClass}">${badgeLabel}</span>
           </div>
-          <div class="order-card-items">${o.items.map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>
+          ${o.items.length > 0 ? `<div class="order-card-items">${o.items.map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>` : (o.note ? `<div class="order-card-items text-muted">${escHtml(o.note)}</div>` : '')}
           <div class="order-card-footer">
-            <span class="order-card-total">${formatCurrency(calcOrderTotal(o))}</span>
-            <span class="text-muted" style="font-size:12px">${o.payMethod || ''}</span>
+            ${o.items.length > 0 ? `<span class="order-card-total">${formatCurrency(calcOrderTotal(o))}</span>` : '<span></span>'}
+            <span class="text-muted" style="font-size:12px">${payLabel}</span>
           </div>
         </div>`;
     });
   }
 
-  // Debt History
-  const dh = S.debtHistory[stop.id] || [];
+  // Debt History (only show add/clear with actual amounts, skip visit-only entries)
+  const dh = (S.debtHistory[stop.id] || []).filter(h => h.type !== 'visit' && h.amount > 0);
   if (dh.length > 0) {
     html += `<div class="section-head"><h3>Debt History</h3></div>`;
     dh.slice(0, 15).forEach(h => {
@@ -2164,21 +2206,28 @@ function renderReports() {
               <thead><tr><th>Customer</th><th>Payment</th><th>Products</th></tr></thead>
               <tbody>`;
           report.rows.forEach(r => {
-            const pColor = r.payDisplay.type === 'cash' ? 'var(--success)' : r.payDisplay.type === 'bank' ? 'var(--info)' : 'var(--danger)';
+            let payHtml = '';
+            r.payDisplay.parts.forEach(p => {
+              const c = p.type === 'cash' ? 'var(--success)' : p.type === 'bank' ? 'var(--info)' : 'var(--danger)';
+              payHtml += `<div style="font-weight:600;color:${c};font-size:13px">${p.text}</div>`;
+            });
+            if (r.payDisplay.unpaidAmount > 0 && r.payDisplay.type !== 'unpaid') {
+              payHtml += `<div style="font-weight:600;color:var(--danger);font-size:11px">left: ${formatCurrency(r.payDisplay.unpaidAmount)}</div>`;
+            }
             t += `<tr>
-              <td style="white-space:nowrap">${escHtml(r.name)}</td>
-              <td style="font-weight:600;color:${pColor};font-size:13px;white-space:nowrap">${r.payDisplay.text}</td>
+              <td style="font-size:13px">${escHtml(r.name)}</td>
+              <td>${payHtml}</td>
               <td style="font-size:12px">${r.productsSummary}</td>
             </tr>`;
           });
           t += `<tr style="background:var(--bg);font-weight:700">
               <td>TOTAL (${report.rows.length})</td>
-              <td style="font-size:11px;white-space:nowrap">
+              <td style="font-size:11px">
                 <span style="color:var(--success)">Cash ${formatCurrency(report.totalCash)}</span><br>
                 <span style="color:var(--info)">Bank ${formatCurrency(report.totalBank)}</span><br>
                 <span style="color:var(--danger)">Unpaid ${formatCurrency(report.totalUnpaid)}</span>
               </td>
-              <td style="font-size:12px">${report.productTotals}</td>
+              <td></td>
             </tr>`;
           t += `</tbody></table></div>
           <div style="display:flex;gap:8px;margin-top:12px">
@@ -2263,7 +2312,15 @@ function calcReportData() {
   const payments = { cash: 0, bank: 0, unpaid: 0 };
   filtered.forEach(o => {
     const total = calcOrderTotal(o);
-    payments[o.payMethod || 'unpaid'] += total;
+    if (o.payMethod === 'cash') {
+      const paid = (o.cashPaid !== undefined) ? o.cashPaid : total;
+      payments.cash += Math.min(paid, total);
+      payments.unpaid += Math.max(0, total - paid);
+    } else if (o.payMethod === 'bank') {
+      payments.bank += total;
+    } else if (o.payMethod !== 'visit') {
+      payments.unpaid += total;
+    }
   });
 
   const customers = {};
@@ -2288,19 +2345,26 @@ function calcProductSalesReport() {
     return o.items.some(item => S.reportProducts.includes(item.name));
   });
 
-  // Group by customer, then aggregate
+  // Group by customer, then aggregate with partial cash support
   const byCustomer = {};
   filtered.forEach(o => {
     const cid = o.customerId;
-    if (!byCustomer[cid]) byCustomer[cid] = { orders: [], payMethods: {} };
+    if (!byCustomer[cid]) byCustomer[cid] = { orders: [], cashPaid: 0, bankPaid: 0, unpaidTotal: 0 };
     byCustomer[cid].orders.push(o);
-    const pm = o.payMethod || 'unpaid';
-    byCustomer[cid].payMethods[pm] = (byCustomer[cid].payMethods[pm] || 0) + calcOrderTotal(o);
+    const total = calcOrderTotal(o);
+    if (o.payMethod === 'cash') {
+      const paid = (o.cashPaid !== undefined) ? o.cashPaid : total;
+      byCustomer[cid].cashPaid += Math.min(paid, total);
+      byCustomer[cid].unpaidTotal += Math.max(0, total - paid);
+    } else if (o.payMethod === 'bank') {
+      byCustomer[cid].bankPaid += total;
+    } else if (o.payMethod !== 'visit') {
+      byCustomer[cid].unpaidTotal += total;
+    }
   });
 
   const rows = [];
   let totalCash = 0, totalBank = 0, totalUnpaid = 0, grandTotal = 0;
-  const allProductQtys = {};
 
   Object.entries(byCustomer).forEach(([cid, data]) => {
     const stop = getStop(parseInt(cid));
@@ -2313,32 +2377,35 @@ function calcProductSalesReport() {
       o.items.forEach(item => {
         if (S.reportProducts.includes(item.name)) {
           prodMap[item.name] = (prodMap[item.name] || 0) + item.qty;
-          if (!allProductQtys[item.name]) allProductQtys[item.name] = 0;
-          allProductQtys[item.name] += item.qty;
         }
       });
       custTotal += calcOrderTotal(o);
     });
 
-    // Payment display per customer: cash shows amount, bank shows "Bank", unpaid shows "Not Paid"
+    // Payment display: cash shows £amount, partial shows £paid + left: £X, bank shows "Bank", unpaid shows "Not Paid"
     const payDisplay = (() => {
-      if (data.payMethods.cash && !data.payMethods.bank && !data.payMethods.unpaid) return { text: formatCurrency(data.payMethods.cash), type: 'cash' };
-      if (data.payMethods.bank && !data.payMethods.cash && !data.payMethods.unpaid) return { text: 'Bank', type: 'bank' };
-      if (data.payMethods.unpaid && !data.payMethods.cash && !data.payMethods.bank) return { text: 'Not Paid', type: 'unpaid' };
-      // Mixed payments
       const parts = [];
-      if (data.payMethods.cash) parts.push(formatCurrency(data.payMethods.cash));
-      if (data.payMethods.bank) parts.push('Bank');
-      if (data.payMethods.unpaid) parts.push('Not Paid');
-      const dominantType = data.payMethods.cash >= (data.payMethods.bank || 0) && data.payMethods.cash >= (data.payMethods.unpaid || 0) ? 'cash' : data.payMethods.bank >= (data.payMethods.unpaid || 0) ? 'bank' : 'unpaid';
-      return { text: parts.join(' + '), type: dominantType };
+      let primaryType = 'unpaid';
+      if (data.cashPaid > 0) {
+        parts.push({ text: formatCurrency(data.cashPaid), type: 'cash' });
+        primaryType = 'cash';
+      }
+      if (data.bankPaid > 0) {
+        parts.push({ text: 'Bank', type: 'bank' });
+        if (primaryType === 'unpaid') primaryType = 'bank';
+      }
+      if (data.unpaidTotal > 0) {
+        parts.push({ text: 'Not Paid', type: 'unpaid' });
+      }
+      if (parts.length === 0) parts.push({ text: 'Not Paid', type: 'unpaid' });
+      return { parts, type: primaryType, unpaidAmount: data.unpaidTotal };
     })();
 
     const productsSummary = Object.entries(prodMap).map(([n, q]) => `${q} ${n}`).join(', ');
 
-    totalCash += data.payMethods.cash || 0;
-    totalBank += data.payMethods.bank || 0;
-    totalUnpaid += data.payMethods.unpaid || 0;
+    totalCash += data.cashPaid;
+    totalBank += data.bankPaid;
+    totalUnpaid += data.unpaidTotal;
     grandTotal += custTotal;
 
     rows.push({
@@ -2350,9 +2417,8 @@ function calcProductSalesReport() {
   });
 
   rows.sort((a, b) => b.total - a.total);
-  const productTotals = Object.entries(allProductQtys).map(([n, q]) => `${q} ${n}`).join(', ');
 
-  return { rows, totalCash, totalBank, totalUnpaid, grandTotal, productTotals };
+  return { rows, totalCash, totalBank, totalUnpaid, grandTotal };
 }
 
 function getReportDateLabel() {
@@ -2370,10 +2436,17 @@ function exportProductReportPDF() {
 
   let tableRows = '';
   report.rows.forEach(r => {
-    const pColor = r.payDisplay.type === 'cash' ? '#12B76A' : r.payDisplay.type === 'bank' ? '#2E90FA' : '#F04438';
+    let payCell = '';
+    r.payDisplay.parts.forEach(p => {
+      const c = p.type === 'cash' ? '#12B76A' : p.type === 'bank' ? '#2E90FA' : '#F04438';
+      payCell += `<div style="color:${c};font-weight:600">${p.text}</div>`;
+    });
+    if (r.payDisplay.unpaidAmount > 0 && r.payDisplay.type !== 'unpaid') {
+      payCell += `<div style="color:#F04438;font-size:10px;font-weight:600">left: ${formatCurrency(r.payDisplay.unpaidAmount)}</div>`;
+    }
     tableRows += `<tr>
       <td>${escHtml(r.name)}</td>
-      <td style="color:${pColor};font-weight:600">${r.payDisplay.text}</td>
+      <td>${payCell}</td>
       <td>${r.productsSummary}</td>
     </tr>`;
   });
@@ -2410,7 +2483,7 @@ function exportProductReportPDF() {
             <span style="color:#2E90FA">Bank ${formatCurrency(report.totalBank)}</span> |
             <span style="color:#F04438">Unpaid ${formatCurrency(report.totalUnpaid)}</span>
           </td>
-          <td>${report.productTotals}</td>
+          <td></td>
         </tr>
       </tbody>
     </table>
@@ -2432,12 +2505,14 @@ function exportProductReportExcel() {
   const report = calcProductSalesReport();
   if (report.rows.length === 0) { alert('No data to export.'); return; }
 
-  const data = [['Customer', 'Payment', 'Products']];
+  const data = [['Customer', 'Payment', 'Unpaid', 'Products']];
   report.rows.forEach(r => {
-    data.push([r.name, r.payDisplay.text, r.productsSummary]);
+    const payText = r.payDisplay.parts.map(p => p.text).join(' + ');
+    const unpaidText = r.payDisplay.unpaidAmount > 0 ? formatCurrency(r.payDisplay.unpaidAmount) : '';
+    data.push([r.name, payText, unpaidText, r.productsSummary]);
   });
   data.push([]);
-  data.push(['TOTAL', '', report.productTotals]);
+  data.push(['TOTAL']);
   data.push(['Cash', formatCurrency(report.totalCash)]);
   data.push(['Bank', formatCurrency(report.totalBank)]);
   data.push(['Unpaid', formatCurrency(report.totalUnpaid)]);
@@ -2445,7 +2520,7 @@ function exportProductReportExcel() {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(data);
   // Set column widths
-  ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 40 }];
+  ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 12 }, { wch: 40 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Product Report');
   XLSX.writeFile(wb, 'product_report_' + todayStr() + '.xlsx');
 }
