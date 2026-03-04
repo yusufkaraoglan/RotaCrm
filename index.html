@@ -1279,7 +1279,8 @@ function renderOrderFormModal(title, existingNote) {
         <input class="input" id="cust-search-input" placeholder="Search customer..."
                value="${selectedStop ? escHtml(selectedStop.n) : ''}"
                oninput="filterCustomerList(this.value)"
-               onfocus="openCustomerList()" ${custDisabled}>
+               onfocus="openCustomerList()"
+               onblur="setTimeout(closeCustList,250)" ${custDisabled}>
         <div class="search-select-list" id="cust-search-list"></div>
       </div>
     </div>
@@ -1318,7 +1319,7 @@ function filterCustomerList(query) {
   if (q) filtered = STOPS.filter(s => s.n.toLowerCase().includes(q) || s.c.toLowerCase().includes(q) || s.p.toLowerCase().includes(q));
   filtered = filtered.slice(0, 20);
   list.innerHTML = filtered.map(s =>
-    `<div class="search-select-item" onpointerdown="event.preventDefault();selectCustomerFromList(${s.id})">
+    `<div class="search-select-item" onclick="selectCustomerFromList(${s.id})">
       ${escHtml(s.n)}<div class="ss-sub">${escHtml(s.c)} &middot; ${escHtml(s.p)}</div>
     </div>`
   ).join('');
@@ -1340,11 +1341,15 @@ function selectCustomerFromList(stopId) {
   updateOrderPrices();
 }
 
+function closeCustList() {
+  const list = document.getElementById('cust-search-list');
+  if (list) list.classList.remove('open');
+}
+
 function closeCustListOnClickOutside(e) {
   const wrap = document.getElementById('cust-search-wrap');
   if (wrap && !wrap.contains(e.target)) {
-    const list = document.getElementById('cust-search-list');
-    if (list) list.classList.remove('open');
+    closeCustList();
   }
 }
 
