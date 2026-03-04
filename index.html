@@ -265,6 +265,14 @@ a{text-decoration:none;color:inherit}
 .search-select-item:active{background:var(--primary-light)}
 .search-select-item .ss-sub{font-size:11px;color:var(--text-sec)}
 
+/* === ZOOM PREVENTION (iOS) === */
+@supports (-webkit-touch-callout: none) {
+  input[type="text"], input[type="number"], input[type="date"], input[type="tel"],
+  input[type="email"], input[type="search"], select, textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* === SYNC STATUS === */
 .sync-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-left:6px}
 .sync-dot.ok{background:var(--success)}
@@ -540,6 +548,7 @@ let tempOrderItems = [];
 let tempOrderCustomerId = null;
 let deliveryStopId = null;
 let deliveryPayMethod = null;
+let profilePreviousPage = 'customers';
 let leafletMap = null;
 let mapMarkers = [];
 
@@ -732,6 +741,9 @@ function renderRoute() {
         <div style="font-size:12px;color:var(--text-sec)">${dateInfo}</div>
       </div>
       <div class="topbar-actions">
+        <button class="btn-ghost" onclick="exportRouteExcel()" title="Export Route">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </button>
         <button class="btn-ghost" onclick="showImportModal()" title="Import">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
@@ -767,6 +779,8 @@ function renderRoute() {
         o.deliveredAt && o.deliveredAt.slice(0, 10) === today
       );
       const todayRev = todayOrders.reduce((s, o) => s + calcOrderTotal(o), 0);
+      const isVisited = delivered && todayOrders.every(o => o.payMethod === 'visit');
+      const debt = S.debts[stopId] || 0;
 
       html += `
         <div class="route-card ${delivered ? 'delivered' : ''}" style="border-left-color:${dayObj.color}">
@@ -776,15 +790,16 @@ function renderRoute() {
             <div class="route-card-sub">${escHtml(stop.c)} &middot; ${escHtml(stop.p)}</div>
             <div class="route-card-badges">
               ${pending.length > 0 ? `<span class="badge badge-warning">${pending.length} pending</span>` : ''}
-              ${delivered ? `<span class="badge badge-success">Delivered</span>` : ''}
+              ${delivered ? `<span class="badge badge-success">${isVisited ? 'Visited' : 'Delivered'}</span>` : ''}
               ${todayRev > 0 ? `<span class="badge badge-info">${formatCurrency(todayRev)}</span>` : ''}
+              ${!delivered && debt > 0 ? `<span class="badge badge-danger">${formatCurrency(debt)}</span>` : ''}
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
             ${idx > 0 ? `<button class="btn-icon-sm" onclick="moveStop(${stopId},-1,'${dayId}')" style="color:var(--text-muted);font-size:16px">&uarr;</button>` : '<div style="height:32px"></div>'}
             ${idx < sorted.length - 1 ? `<button class="btn-icon-sm" onclick="moveStop(${stopId},1,'${dayId}')" style="color:var(--text-muted);font-size:16px">&darr;</button>` : '<div style="height:32px"></div>'}
           </div>
-          <button class="delivery-btn ${delivered ? 'done' : ''}" onclick="event.stopPropagation();${delivered ? '' : `showDeliveryModal(${stopId})`}">
+          <button class="delivery-btn ${delivered ? 'done' : ''}" onclick="event.stopPropagation();${delivered ? '' : `showDeliveryModal(${stopId})`}" title="${pending.length === 0 && !delivered ? 'Visit' : ''}">
             ${delivered ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'
                         : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>'}
           </button>
@@ -858,12 +873,17 @@ function calcDayRevenue(dayId) {
 // ══════════════════════════════════════════════════════════════
 // DELIVERY MODAL
 // ══════════════════════════════════════════════════════════════
+let deliveryCashAmount = 0;
+
 function showDeliveryModal(stopId) {
   deliveryStopId = stopId;
   deliveryPayMethod = null;
+  deliveryCashAmount = 0;
   const stop = getStop(stopId);
   if (!stop) return;
   const pending = getStopOrders(stopId, 'pending');
+  const debt = S.debts[stopId] || 0;
+  const isVisitMode = pending.length === 0;
 
   let itemsHtml = '';
   if (pending.length > 0) {
@@ -875,38 +895,161 @@ function showDeliveryModal(stopId) {
         ${o.note ? `<div class="text-muted" style="font-size:12px;margin-top:4px">${escHtml(o.note)}</div>` : ''}
       </div>`;
     });
-  } else {
-    itemsHtml = '<p class="text-muted" style="text-align:center;padding:16px">No pending orders</p>';
   }
 
   const grandTotal = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
 
-  openModal(`
-    <div class="modal-handle"></div>
-    <div class="modal-title">Delivery - ${escHtml(stop.n)}</div>
-    <div style="margin-bottom:12px">
-      <div style="font-size:13px;font-weight:600;color:var(--text-sec);margin-bottom:8px">Pending Orders (${pending.length})</div>
-      ${itemsHtml}
-      ${pending.length > 0 ? `<div class="flex-between" style="font-size:15px;font-weight:700;padding:4px 0">
-        <span>Total</span><span>${formatCurrency(grandTotal)}</span>
-      </div>` : ''}
-    </div>
-    <div style="font-size:13px;font-weight:600;color:var(--text-sec);margin-bottom:8px">Payment Method</div>
-    <div class="pay-options">
-      <div class="pay-opt" onclick="selectPayMethod('cash',this)" data-method="cash">
-        <div class="pay-icon">&#163;</div>Cash
+  if (isVisitMode) {
+    // VISIT MODE - no pending orders
+    let visitHtml = `
+      <div class="modal-handle"></div>
+      <div class="modal-title">Visit - ${escHtml(stop.n)}</div>
+      <div style="text-align:center;padding:12px 0">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="var(--primary)" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <p class="text-muted" style="margin-top:8px;font-size:13px">No pending orders for this customer</p>
+      </div>`;
+
+    if (debt > 0) {
+      visitHtml += `
+        <div class="card" style="border-left:4px solid var(--danger)">
+          <div class="flex-between">
+            <span style="font-size:13px;font-weight:600;color:var(--text-sec)">Outstanding Debt</span>
+            <span style="font-size:18px;font-weight:700;color:var(--danger)">${formatCurrency(debt)}</span>
+          </div>
+          <div style="margin-top:12px">
+            <div style="font-size:13px;font-weight:600;color:var(--text-sec);margin-bottom:6px">Collect Payment</div>
+            <div class="pay-options">
+              <div class="pay-opt" onclick="selectVisitPayMethod('cash',this)">
+                <div class="pay-icon">&#163;</div>Cash
+              </div>
+              <div class="pay-opt" onclick="selectVisitPayMethod('bank',this)">
+                <div class="pay-icon">&#127974;</div>Bank
+              </div>
+            </div>
+            <div id="visit-cash-input" class="hidden" style="margin-top:8px">
+              <label class="form-label">Amount received</label>
+              <input class="input" type="number" step="0.01" id="visit-cash-amount" value="${debt.toFixed(2)}" placeholder="0.00">
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-success btn-block mt-2" onclick="confirmVisitWithPayment()" id="btn-confirm-visit-pay" disabled>
+          Collect Payment & Mark Visited
+        </button>`;
+    }
+
+    visitHtml += `
+      <button class="btn ${debt > 0 ? 'btn-outline' : 'btn-success'} btn-block mt-1" onclick="confirmVisitOnly()">
+        ${debt > 0 ? 'Mark Visited (No Payment)' : 'Mark Visited'}
+      </button>`;
+
+    openModal(visitHtml);
+  } else {
+    // DELIVERY MODE - has pending orders
+    openModal(`
+      <div class="modal-handle"></div>
+      <div class="modal-title">Delivery - ${escHtml(stop.n)}</div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:13px;font-weight:600;color:var(--text-sec);margin-bottom:8px">Pending Orders (${pending.length})</div>
+        ${itemsHtml}
+        <div class="flex-between" style="font-size:15px;font-weight:700;padding:4px 0">
+          <span>Total</span><span id="delivery-grand-total">${formatCurrency(grandTotal)}</span>
+        </div>
+        ${debt > 0 ? `<div class="flex-between" style="font-size:13px;padding:4px 0;color:var(--danger)">
+          <span>Outstanding Debt</span><span style="font-weight:600">${formatCurrency(debt)}</span>
+        </div>` : ''}
       </div>
-      <div class="pay-opt" onclick="selectPayMethod('bank',this)" data-method="bank">
-        <div class="pay-icon">&#127974;</div>Bank
+      <div style="font-size:13px;font-weight:600;color:var(--text-sec);margin-bottom:8px">Payment Method</div>
+      <div class="pay-options">
+        <div class="pay-opt" onclick="selectPayMethod('cash',this)" data-method="cash">
+          <div class="pay-icon">&#163;</div>Cash
+        </div>
+        <div class="pay-opt" onclick="selectPayMethod('bank',this)" data-method="bank">
+          <div class="pay-icon">&#127974;</div>Bank
+        </div>
+        <div class="pay-opt" onclick="selectPayMethod('unpaid',this)" data-method="unpaid">
+          <div class="pay-icon">&#9203;</div>Not Paid
+        </div>
       </div>
-      <div class="pay-opt" onclick="selectPayMethod('unpaid',this)" data-method="unpaid">
-        <div class="pay-icon">&#9203;</div>Not Paid
+      <div id="cash-amount-section" class="hidden" style="margin-top:8px">
+        <label class="form-label">Cash amount received</label>
+        <input class="input" type="number" step="0.01" id="cash-amount-input" value="${grandTotal.toFixed(2)}" placeholder="0.00" oninput="updateCashRemainder()">
+        <p class="text-muted" style="font-size:12px;margin-top:4px" id="cash-remainder-msg"></p>
       </div>
-    </div>
-    <button class="btn btn-success btn-block mt-2" onclick="confirmDelivery()" id="btn-confirm-delivery" disabled>
-      Confirm Delivery
-    </button>
-  `);
+      <button class="btn btn-success btn-block mt-2" onclick="confirmDelivery()" id="btn-confirm-delivery" disabled>
+        Confirm Delivery
+      </button>
+    `);
+  }
+}
+
+let visitPayMethod = null;
+
+function selectVisitPayMethod(method, el) {
+  visitPayMethod = method;
+  document.querySelectorAll('.pay-opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  const btn = document.getElementById('btn-confirm-visit-pay');
+  if (btn) btn.disabled = false;
+  const cashSection = document.getElementById('visit-cash-input');
+  if (cashSection) {
+    if (method === 'cash') cashSection.classList.remove('hidden');
+    else cashSection.classList.add('hidden');
+  }
+}
+
+function confirmVisitOnly() {
+  const stopId = parseInt(deliveryStopId);
+  const now = new Date().toISOString();
+  // Record visit in debt history
+  if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
+  S.debtHistory[stopId].unshift({
+    date: now, amount: 0, type: 'visit', note: 'Visited - no orders'
+  });
+  save.debtHistory();
+  // Mark as visited today by creating a zero-total delivery marker
+  const vid = uid();
+  S.orders[vid] = {
+    id: vid, customerId: stopId, items: [],
+    note: 'Visit (no orders)', status: 'delivered',
+    payMethod: 'visit', createdAt: now, deliveredAt: now
+  };
+  save.orders();
+  closeModal();
+  renderRoute();
+}
+
+function confirmVisitWithPayment() {
+  const stopId = parseInt(deliveryStopId);
+  if (!visitPayMethod) return;
+  const debt = S.debts[stopId] || 0;
+  let payAmount = debt;
+  if (visitPayMethod === 'cash') {
+    payAmount = parseFloat(document.getElementById('visit-cash-amount')?.value) || 0;
+    if (payAmount <= 0) { alert('Enter a valid amount.'); return; }
+  }
+
+  const now = new Date().toISOString();
+  // Clear debt
+  const cleared = Math.min(payAmount, debt);
+  S.debts[stopId] = Math.max(0, debt - cleared);
+  if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
+  S.debtHistory[stopId].unshift({
+    date: now, amount: cleared, type: 'clear',
+    note: `Visit payment (${visitPayMethod})`
+  });
+  save.debts();
+  save.debtHistory();
+
+  // Mark visited
+  const vid = uid();
+  S.orders[vid] = {
+    id: vid, customerId: stopId, items: [],
+    note: `Visit - debt payment ${formatCurrency(cleared)}`, status: 'delivered',
+    payMethod: visitPayMethod, createdAt: now, deliveredAt: now
+  };
+  save.orders();
+  closeModal();
+  renderRoute();
 }
 
 function selectPayMethod(method, el) {
@@ -914,6 +1057,32 @@ function selectPayMethod(method, el) {
   document.querySelectorAll('.pay-opt').forEach(o => o.classList.remove('selected'));
   el.classList.add('selected');
   document.getElementById('btn-confirm-delivery').disabled = false;
+  // Show/hide cash amount section
+  const cashSection = document.getElementById('cash-amount-section');
+  if (cashSection) {
+    if (method === 'cash') {
+      cashSection.classList.remove('hidden');
+      updateCashRemainder();
+    } else {
+      cashSection.classList.add('hidden');
+    }
+  }
+}
+
+function updateCashRemainder() {
+  const stopId = parseInt(deliveryStopId);
+  const pending = getStopOrders(stopId, 'pending');
+  const grandTotal = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
+  const cashInput = document.getElementById('cash-amount-input');
+  const msg = document.getElementById('cash-remainder-msg');
+  if (!cashInput || !msg) return;
+  const paid = parseFloat(cashInput.value) || 0;
+  const remainder = grandTotal - paid;
+  if (remainder > 0.01) {
+    msg.innerHTML = `<span style="color:var(--danger)">${formatCurrency(remainder)} will be added to debt</span>`;
+  } else {
+    msg.innerHTML = '';
+  }
 }
 
 function confirmDelivery() {
@@ -921,8 +1090,16 @@ function confirmDelivery() {
   const stopId = parseInt(deliveryStopId);
   const pending = getStopOrders(stopId, 'pending');
   const now = new Date().toISOString();
+  const grandTotal = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
 
-  let totalUnpaid = 0;
+  // Handle partial cash payment
+  let unpaidAmount = 0;
+  if (deliveryPayMethod === 'cash') {
+    const cashInput = document.getElementById('cash-amount-input');
+    const cashPaid = cashInput ? (parseFloat(cashInput.value) || 0) : grandTotal;
+    unpaidAmount = Math.max(0, grandTotal - cashPaid);
+  }
+
   pending.forEach(o => {
     o.status = 'delivered';
     o.deliveredAt = now;
@@ -930,12 +1107,22 @@ function confirmDelivery() {
   });
 
   if (deliveryPayMethod === 'unpaid') {
-    totalUnpaid = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
-    S.debts[stopId] = (S.debts[stopId] || 0) + totalUnpaid;
+    // Full amount goes to debt
+    S.debts[stopId] = (S.debts[stopId] || 0) + grandTotal;
     if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
     S.debtHistory[stopId].unshift({
-      date: now, amount: totalUnpaid, type: 'add',
-      note: `Delivery - ${pending.length} order(s)`
+      date: now, amount: grandTotal, type: 'add',
+      note: `Delivery - ${pending.length} order(s) (not paid)`
+    });
+    save.debts();
+    save.debtHistory();
+  } else if (deliveryPayMethod === 'cash' && unpaidAmount > 0.01) {
+    // Partial cash payment - remainder goes to debt
+    S.debts[stopId] = (S.debts[stopId] || 0) + unpaidAmount;
+    if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
+    S.debtHistory[stopId].unshift({
+      date: now, amount: unpaidAmount, type: 'add',
+      note: `Delivery - partial cash (paid ${formatCurrency(grandTotal - unpaidAmount)}, remainder ${formatCurrency(unpaidAmount)})`
     });
     save.debts();
     save.debtHistory();
@@ -1071,7 +1258,7 @@ function renderOrderFormModal(title, existingNote) {
     total += (item.qty || 0) * (item.price || 0);
     itemsHtml += `
       <div class="order-item-row">
-        <select class="select" onchange="updateOrderItem(${idx},'name',this.value)" style="font-size:14px">
+        <select class="select" onchange="updateOrderItem(${idx},'name',this.value)" style="font-size:16px">
           <option value="">Select product...</option>
           ${catOptions}
         </select>
@@ -1131,7 +1318,7 @@ function filterCustomerList(query) {
   if (q) filtered = STOPS.filter(s => s.n.toLowerCase().includes(q) || s.c.toLowerCase().includes(q) || s.p.toLowerCase().includes(q));
   filtered = filtered.slice(0, 20);
   list.innerHTML = filtered.map(s =>
-    `<div class="search-select-item" onmousedown="selectCustomerFromList(${s.id})">
+    `<div class="search-select-item" onpointerdown="event.preventDefault();selectCustomerFromList(${s.id})">
       ${escHtml(s.n)}<div class="ss-sub">${escHtml(s.c)} &middot; ${escHtml(s.p)}</div>
     </div>`
   ).join('');
@@ -1352,6 +1539,7 @@ function saveNewCustomer() {
 // PROFILE PAGE
 // ══════════════════════════════════════════════════════════════
 function showProfile(stopId) {
+  profilePreviousPage = curPage || 'customers';
   profileStopId = parseInt(stopId);
   showPage('profile');
 }
@@ -1370,7 +1558,7 @@ function renderProfile() {
 
   let html = `
     <header class="topbar">
-      <button class="btn-ghost" onclick="showPage('customers')" style="font-size:18px;padding:8px">&larr;</button>
+      <button class="btn-ghost" onclick="showPage('${profilePreviousPage}')" style="font-size:18px;padding:8px">&larr;</button>
       <h1 style="flex:1;text-align:center;font-size:16px">${escHtml(stop.n)}</h1>
       <button class="btn-ghost" onclick="showEditCustomerModal()" style="font-size:13px;color:var(--primary)">Edit</button>
     </header>
@@ -1787,16 +1975,25 @@ function clearDebt() {
 // ══════════════════════════════════════════════════════════════
 // REPORTS PAGE
 // ══════════════════════════════════════════════════════════════
+let reportTab = 'overview';
+
 function renderReports() {
   const data = calcReportData();
-  const today = todayStr();
 
   let html = `
     <header class="topbar">
       <h1>Reports</h1>
     </header>
+    <!-- Report Tabs -->
+    <div class="day-tabs" style="border-bottom:1px solid var(--border)">
+      <button class="day-tab ${reportTab==='overview'?'active':''}" style="${reportTab==='overview'?'background:var(--primary);color:#fff':''}" onclick="reportTab='overview';renderReports()">Overview</button>
+      <button class="day-tab ${reportTab==='products'?'active':''}" style="${reportTab==='products'?'background:var(--primary);color:#fff':''}" onclick="reportTab='products';renderReports()">Products</button>
+      <button class="day-tab ${reportTab==='customers'?'active':''}" style="${reportTab==='customers'?'background:var(--primary);color:#fff':''}" onclick="reportTab='customers';renderReports()">Customers</button>
+      <button class="day-tab ${reportTab==='debts'?'active':''}" style="${reportTab==='debts'?'background:var(--primary);color:#fff':''}" onclick="reportTab='debts';renderReports()">Debts</button>
+      <button class="day-tab ${reportTab==='export'?'active':''}" style="${reportTab==='export'?'background:var(--primary);color:#fff':''}" onclick="reportTab='export';renderReports()">Export</button>
+    </div>
     <div class="page-body">
-      <!-- Date Range -->
+      <!-- Date Range (always visible) -->
       <div class="date-range-bar">
         <button class="date-btn ${S.reportRange==='today'?'active':''}" onclick="setReportRange('today')">Today</button>
         <button class="date-btn ${S.reportRange==='week'?'active':''}" onclick="setReportRange('week')">This Week</button>
@@ -1808,22 +2005,10 @@ function renderReports() {
           <input type="date" value="${S.reportStart}" onchange="S.reportStart=this.value;renderReports()">
           <input type="date" value="${S.reportEnd}" onchange="S.reportEnd=this.value;renderReports()">
         </div>
-      ` : ''}
+      ` : ''}`;
 
-      <!-- Product Filter -->
-      ${S.catalog.length > 0 ? `
-        <div style="margin-bottom:12px">
-          <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">Filter by Product</div>
-          <div class="chip-group">
-            <button class="chip ${S.reportProducts.length===0?'active':''}" onclick="S.reportProducts=[];renderReports()">All</button>
-            ${S.catalog.map(c => `
-              <button class="chip ${S.reportProducts.includes(c.name)?'active':''}"
-                onclick="toggleReportProduct('${escHtml(c.name)}')">${escHtml(c.name)}</button>
-            `).join('')}
-          </div>
-        </div>
-      ` : ''}
-
+  if (reportTab === 'overview') {
+    html += `
       <!-- Summary Cards -->
       <div class="metric-grid">
         <div class="metric-card">
@@ -1844,6 +2029,49 @@ function renderReports() {
         </div>
       </div>
 
+      <!-- Payment Breakdown -->
+      <div class="report-section">
+        <h3>Payment Summary</h3>
+        <div class="card">
+          <div class="flex-between mb-1">
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:var(--success);display:inline-block"></span> Cash</span>
+            <span style="font-weight:600">${formatCurrency(data.payments.cash)}</span>
+          </div>
+          <div class="progress-bar mb-2">
+            <div class="progress-fill" style="width:${data.totalRevenue > 0 ? (data.payments.cash / data.totalRevenue * 100) : 0}%;background:var(--success)"></div>
+          </div>
+          <div class="flex-between mb-1">
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:var(--info);display:inline-block"></span> Bank</span>
+            <span style="font-weight:600">${formatCurrency(data.payments.bank)}</span>
+          </div>
+          <div class="progress-bar mb-2">
+            <div class="progress-fill" style="width:${data.totalRevenue > 0 ? (data.payments.bank / data.totalRevenue * 100) : 0}%;background:var(--info)"></div>
+          </div>
+          <div class="flex-between mb-1">
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:var(--danger);display:inline-block"></span> Unpaid</span>
+            <span style="font-weight:600">${formatCurrency(data.payments.unpaid)}</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:${data.totalRevenue > 0 ? (data.payments.unpaid / data.totalRevenue * 100) : 0}%;background:var(--danger)"></div>
+          </div>
+        </div>
+      </div>`;
+  } else if (reportTab === 'products') {
+    html += `
+      <!-- Product Filter -->
+      ${S.catalog.length > 0 ? `
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">Filter Products</div>
+          <div class="chip-group">
+            <button class="chip ${S.reportProducts.length===0?'active':''}" onclick="S.reportProducts=[];renderReports()">All</button>
+            ${S.catalog.map(c => `
+              <button class="chip ${S.reportProducts.includes(c.name)?'active':''}"
+                onclick="toggleReportProduct('${escHtml(c.name)}')">${escHtml(c.name)}</button>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       <!-- Product Breakdown -->
       <div class="report-section">
         <h3>Product Breakdown</h3>
@@ -1861,36 +2089,9 @@ function renderReports() {
             </table>
           </div>
         `}
-      </div>
-
-      <!-- Payment Breakdown -->
-      <div class="report-section">
-        <h3>Payment Breakdown</h3>
-        <div class="card">
-          <div class="flex-between mb-1">
-            <span>Cash</span>
-            <span style="font-weight:600">${formatCurrency(data.payments.cash)}</span>
-          </div>
-          <div class="progress-bar mb-2">
-            <div class="progress-fill" style="width:${data.totalRevenue > 0 ? (data.payments.cash / data.totalRevenue * 100) : 0}%;background:var(--success)"></div>
-          </div>
-          <div class="flex-between mb-1">
-            <span>Bank Transfer</span>
-            <span style="font-weight:600">${formatCurrency(data.payments.bank)}</span>
-          </div>
-          <div class="progress-bar mb-2">
-            <div class="progress-fill" style="width:${data.totalRevenue > 0 ? (data.payments.bank / data.totalRevenue * 100) : 0}%;background:var(--info)"></div>
-          </div>
-          <div class="flex-between mb-1">
-            <span>Unpaid</span>
-            <span style="font-weight:600">${formatCurrency(data.payments.unpaid)}</span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill" style="width:${data.totalRevenue > 0 ? (data.payments.unpaid / data.totalRevenue * 100) : 0}%;background:var(--danger)"></div>
-          </div>
-        </div>
-      </div>
-
+      </div>`;
+  } else if (reportTab === 'customers') {
+    html += `
       <!-- Top Customers -->
       <div class="report-section">
         <h3>Top Customers</h3>
@@ -1901,58 +2102,73 @@ function renderReports() {
               <tbody>
                 ${Object.entries(data.customers)
                   .sort((a, b) => b[1].revenue - a[1].revenue)
-                  .slice(0, 15)
+                  .slice(0, 30)
                   .map(([id, d]) => {
                     const s = getStop(parseInt(id));
-                    return `<tr><td>${s ? escHtml(s.n) : 'Unknown'}</td><td class="text-right">${d.orders}</td><td class="text-right">${formatCurrency(d.revenue)}</td></tr>`;
+                    return `<tr onclick="showProfile(${id})" style="cursor:pointer"><td>${s ? escHtml(s.n) : 'Unknown'}</td><td class="text-right">${d.orders}</td><td class="text-right">${formatCurrency(d.revenue)}</td></tr>`;
                   }).join('')}
               </tbody>
             </table>
           </div>
         `}
+      </div>`;
+  } else if (reportTab === 'debts') {
+    const debtors = Object.entries(S.debts).filter(([_, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const totalDebt = debtors.reduce((s, [_, v]) => s + v, 0);
+    html += `
+      <div class="card" style="text-align:center;margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text-sec)">Total Outstanding</div>
+        <div style="font-size:28px;font-weight:700;color:var(--danger)">${formatCurrency(totalDebt)}</div>
+        <div class="text-muted" style="font-size:12px">${debtors.length} customer${debtors.length !== 1 ? 's' : ''} with debt</div>
       </div>
+      ${debtors.length === 0 ? '<p class="text-muted text-center" style="font-size:13px;padding:20px">No outstanding debts</p>' : `
+        <div class="card" style="padding:0;overflow:hidden">
+          <table class="report-table">
+            <thead><tr><th>Customer</th><th class="text-right">Debt</th></tr></thead>
+            <tbody>${debtors.map(([id, amount]) => {
+              const s = getStop(parseInt(id));
+              return `<tr onclick="showProfile(${id})" style="cursor:pointer"><td>${s ? escHtml(s.n) : 'Unknown'}</td><td class="text-right text-danger" style="font-weight:600">${formatCurrency(amount)}</td></tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      `}`;
+  } else if (reportTab === 'export') {
+    html += `
+      <!-- Product Filter for Export -->
+      ${S.catalog.length > 0 ? `
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">Select Products for Report</div>
+          <div class="chip-group">
+            ${S.catalog.map(c => `
+              <button class="chip ${S.reportProducts.includes(c.name)?'active':''}"
+                onclick="toggleReportProduct('${escHtml(c.name)}')">${escHtml(c.name)}</button>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
 
-      <!-- Debt Overview -->
-      <div class="report-section">
-        <h3>Outstanding Debts</h3>
-        ${(() => {
-          const debtors = Object.entries(S.debts).filter(([_, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-          if (debtors.length === 0) return '<p class="text-muted" style="font-size:13px">No outstanding debts</p>';
-          return `<div class="card" style="padding:0;overflow:hidden">
-            <table class="report-table">
-              <thead><tr><th>Customer</th><th class="text-right">Debt</th></tr></thead>
-              <tbody>${debtors.map(([id, amount]) => {
-                const s = getStop(parseInt(id));
-                return `<tr onclick="showProfile(${id})" style="cursor:pointer"><td>${s ? escHtml(s.n) : 'Unknown'}</td><td class="text-right text-danger" style="font-weight:600">${formatCurrency(amount)}</td></tr>`;
-              }).join('')}</tbody>
-            </table>
-          </div>`;
-        })()}
-      </div>
-
-      <!-- Custom Product Report -->
+      <!-- Product Sales Report -->
       <div class="report-section">
         <h3>Product Sales Report</h3>
-        <p class="text-muted mb-1" style="font-size:12px">Select products and date range above, then export as PDF.</p>
         ${(() => {
-          if (S.reportProducts.length === 0) return '<p class="text-muted" style="font-size:13px">Select specific products above to generate report</p>';
+          if (S.reportProducts.length === 0) return '<div class="card" style="text-align:center;padding:20px"><p class="text-muted" style="font-size:13px">Select products above to generate a sales report</p></div>';
           const report = calcProductSalesReport();
-          if (report.rows.length === 0) return '<p class="text-muted" style="font-size:13px">No matching orders for this period</p>';
-          let t = `<div class="card" style="padding:0;overflow:hidden">
+          if (report.rows.length === 0) return '<div class="card" style="text-align:center;padding:20px"><p class="text-muted" style="font-size:13px">No matching orders for this period</p></div>';
+          let t = `<div class="card" style="padding:0;overflow:hidden;overflow-x:auto">
             <table class="report-table">
               <thead><tr><th>Customer</th><th>Payment</th><th>Products</th></tr></thead>
               <tbody>`;
           report.rows.forEach(r => {
             const pColor = r.payDisplay.type === 'cash' ? 'var(--success)' : r.payDisplay.type === 'bank' ? 'var(--info)' : 'var(--danger)';
             t += `<tr>
-              <td>${escHtml(r.name)}</td>
-              <td style="font-weight:600;color:${pColor};font-size:13px">${r.payDisplay.text}</td>
+              <td style="white-space:nowrap">${escHtml(r.name)}</td>
+              <td style="font-weight:600;color:${pColor};font-size:13px;white-space:nowrap">${r.payDisplay.text}</td>
               <td style="font-size:12px">${r.productsSummary}</td>
             </tr>`;
           });
           t += `<tr style="background:var(--bg);font-weight:700">
               <td>TOTAL (${report.rows.length})</td>
-              <td style="font-size:11px">
+              <td style="font-size:11px;white-space:nowrap">
                 <span style="color:var(--success)">Cash ${formatCurrency(report.totalCash)}</span><br>
                 <span style="color:var(--info)">Bank ${formatCurrency(report.totalBank)}</span><br>
                 <span style="color:var(--danger)">Unpaid ${formatCurrency(report.totalUnpaid)}</span>
@@ -1961,13 +2177,21 @@ function renderReports() {
             </tr>`;
           t += `</tbody></table></div>
           <div style="display:flex;gap:8px;margin-top:12px">
-            <button class="btn btn-primary" style="flex:1" onclick="exportProductReportPDF()">PDF</button>
-            <button class="btn btn-outline" style="flex:1" onclick="exportProductReportExcel()">Excel</button>
+            <button class="btn btn-primary" style="flex:1" onclick="exportProductReportPDF()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              PDF
+            </button>
+            <button class="btn btn-outline" style="flex:1" onclick="exportProductReportExcel()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 7h8M8 12h8M8 17h4"/></svg>
+              Excel
+            </button>
           </div>`;
           return t;
         })()}
-      </div>
-    </div>`;
+      </div>`;
+  }
+
+  html += `</div>`;
 
   document.getElementById('page-reports').innerHTML = html;
 }
@@ -2190,9 +2414,13 @@ function exportProductReportPDF() {
     </button>
   </body></html>`;
 
-  const win = window.open('', '_blank');
-  win.document.write(html);
-  win.document.close();
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 function exportProductReportExcel() {
@@ -2246,9 +2474,9 @@ function renderSettings() {
           ${catHtml}
           <div style="padding:10px;border-top:1px solid var(--border)">
             <div style="display:flex;gap:6px">
-              <input class="input" id="cat-name" placeholder="Product name" style="flex:2;font-size:14px">
-              <input class="input" id="cat-unit" placeholder="Unit" style="flex:1;font-size:14px">
-              <input class="input" id="cat-price" placeholder="Price" type="number" step="0.01" style="width:70px;font-size:14px">
+              <input class="input" id="cat-name" placeholder="Product name" style="flex:2">
+              <input class="input" id="cat-unit" placeholder="Unit" style="flex:1">
+              <input class="input" id="cat-price" placeholder="Price" type="number" step="0.01" style="width:70px">
               <button class="btn btn-primary btn-sm" onclick="addCatalogItem()">+</button>
             </div>
           </div>
@@ -2619,6 +2847,38 @@ function exportExcel() {
   XLSX.utils.book_append_sheet(wb, ws2, 'Orders');
 
   XLSX.writeFile(wb, 'costadoro_export_' + todayStr() + '.xlsx');
+}
+
+function exportRouteExcel() {
+  const wb = XLSX.utils.book_new();
+
+  ['A', 'B'].forEach(week => {
+    const days = DAYS.filter(d => d.week === week);
+    const data = [['#', 'Customer', 'City', 'Postcode', 'Day', 'Debt']];
+
+    days.forEach(day => {
+      const assigned = [];
+      Object.entries(S.assign).forEach(([sid, did]) => {
+        if (did === day.id) assigned.push(parseInt(sid));
+      });
+      const ro = S.routeOrder[day.id] || [];
+      const sorted = [...new Set([...ro.filter(id => assigned.includes(id)), ...assigned])];
+
+      sorted.forEach((stopId, idx) => {
+        const stop = getStop(stopId);
+        if (!stop) return;
+        data.push([idx + 1, stop.n, stop.c, stop.p, day.label, S.debts[stopId] || 0]);
+      });
+
+      if (sorted.length > 0) data.push([]); // empty row between days
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{ wch: 4 }, { wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Week ' + week);
+  });
+
+  XLSX.writeFile(wb, 'route_export_' + todayStr() + '.xlsx');
 }
 
 // ══════════════════════════════════════════════════════════════
