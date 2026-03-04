@@ -520,7 +520,7 @@ async function syncFromSupabase() {
 async function pushAllToSupabase() {
   if (!SB_CONFIGURED) { alert('Supabase not configured.'); return; }
   setSyncStatus('syncing');
-  const keys = ['stops','assign','routeOrder','geo','ordersV2','debts','debtHistory','cnotes','catalog','customerPricing'];
+  const keys = ['stops','assign','routeOrder','geo','ordersV2','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts'];
   for (const k of keys) {
     const v = lsGet(k, null);
     if (v !== null) await sbSet(k, v);
@@ -573,6 +573,7 @@ function loadState() {
   S.reportEnd = '';
   S.reportProducts = [];
   S.mapFilter = 'all';
+  S.customerProducts = lsGet('customerProducts', {});
 }
 
 // Save helpers
@@ -586,7 +587,8 @@ const save = {
   debtHistory: () => lsSave('debtHistory', S.debtHistory),
   cnotes:   () => lsSave('cnotes', S.cnotes),
   catalog:  () => lsSave('catalog', S.catalog),
-  pricing:  () => lsSave('customerPricing', S.customerPricing)
+  pricing:  () => lsSave('customerPricing', S.customerPricing),
+  customerProducts: () => lsSave('customerProducts', S.customerProducts)
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -794,11 +796,15 @@ function renderRoute() {
 
   // Summary bar
   const deliveredCount = sorted.filter(id => isDeliveredToday(id)).length;
-  const dayRevenue = calcDayRevenue(dayId);
+  const rev = calcDayRevenue(dayId);
   html += `
-    <div class="route-summary">
+    <div class="route-summary" style="flex-wrap:wrap;gap:6px">
       <span>${deliveredCount} / ${sorted.length} delivered</span>
-      <span class="revenue">${formatCurrency(dayRevenue)}</span>
+      <div style="display:flex;gap:10px;font-size:12px">
+        <span style="color:var(--success)">Cash ${formatCurrency(rev.cash)}</span>
+        <span style="color:var(--info)">Bank ${formatCurrency(rev.bank)}</span>
+        <span style="color:var(--danger)">Unpaid ${formatCurrency(rev.unpaid)}</span>
+      </div>
     </div>`;
 
   document.getElementById('page-route').innerHTML = html;
@@ -840,10 +846,13 @@ function calcDayRevenue(dayId) {
   Object.entries(S.assign).forEach(([sid, did]) => {
     if (did === dayId) assigned.push(parseInt(sid));
   });
-  return Object.values(S.orders)
+  const todayOrders = Object.values(S.orders)
     .filter(o => assigned.includes(o.customerId) && o.status === 'delivered' &&
-                 o.deliveredAt && o.deliveredAt.slice(0, 10) === today)
-    .reduce((s, o) => s + calcOrderTotal(o), 0);
+                 o.deliveredAt && o.deliveredAt.slice(0, 10) === today);
+  const cash = todayOrders.filter(o => o.payMethod === 'cash').reduce((s, o) => s + calcOrderTotal(o), 0);
+  const bank = todayOrders.filter(o => o.payMethod === 'bank').reduce((s, o) => s + calcOrderTotal(o), 0);
+  const unpaid = todayOrders.filter(o => o.payMethod === 'unpaid').reduce((s, o) => s + calcOrderTotal(o), 0);
+  return { cash, bank, unpaid, total: cash + bank + unpaid };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1373,13 +1382,21 @@ function renderProfile() {
         <div style="font-size:12px;color:var(--text-sec)">${escHtml(stop.c)} &middot; ${escHtml(stop.p)}</div>
         ${dayObj ? `<div style="margin-top:8px"><span class="badge" style="background:${dayObj.color}20;color:${dayObj.color}">Week ${dayObj.week} - ${dayObj.label}</span></div>` : '<div style="margin-top:8px"><span class="badge badge-outline">Not assigned</span></div>'}
         ${note ? `<div style="margin-top:8px;font-size:12px;color:var(--text-sec);font-style:italic">"${escHtml(note)}"</div>` : ''}
+        ${(S.customerProducts[stop.id] && S.customerProducts[stop.id].length > 0) ? `
+          <div style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap;justify-content:center">
+            ${S.customerProducts[stop.id].map(p => `<span class="badge badge-purple" style="font-size:10px">${escHtml(p)}</span>`).join('')}
+          </div>` : ''}
       </div>
 
       <!-- Action Bar -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0">
+      <div class="action-bar">
         <button class="action-btn" onclick="showAssignModal()">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           Assign
+        </button>
+        <button class="action-btn" onclick="showCustomerProductsModal()">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          Products
         </button>
         <button class="action-btn" onclick="showPricingModal()">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -1567,6 +1584,59 @@ function assignToDay(dayId) {
 function unassignFromDay() {
   delete S.assign[profileStopId];
   save.assign();
+  closeModal();
+  renderProfile();
+}
+
+// ══════════════════════════════════════════════════════════════
+// CUSTOMER PRODUCTS (which products this customer uses)
+// ══════════════════════════════════════════════════════════════
+function showCustomerProductsModal() {
+  const stop = getStop(profileStopId);
+  if (!stop) return;
+  const assigned = S.customerProducts[stop.id] || [];
+
+  if (S.catalog.length === 0) {
+    openModal(`<div class="modal-handle"></div>
+      <div class="modal-title">Customer Products</div>
+      <p class="text-muted text-center" style="padding:20px">No products in catalog. Add products in Settings first.</p>
+      <button class="btn btn-outline btn-block" onclick="closeModal()">Close</button>
+    `);
+    return;
+  }
+
+  let html = `<div class="modal-handle"></div>
+    <div class="modal-title">Products - ${escHtml(stop.n)}</div>
+    <p class="text-muted mb-2" style="font-size:12px">Select the products this customer uses.</p>`;
+
+  S.catalog.forEach((c, i) => {
+    const checked = assigned.includes(c.name);
+    html += `<label style="display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" id="cprod-${i}" ${checked ? 'checked' : ''} value="${escHtml(c.name)}"
+        style="width:20px;height:20px;accent-color:var(--primary)">
+      <div style="flex:1">
+        <div style="font-weight:500">${escHtml(c.name)}</div>
+        <div class="text-muted" style="font-size:12px">${escHtml(c.unit || '')} - ${formatCurrency(c.price)}</div>
+      </div>
+    </label>`;
+  });
+
+  html += `<button class="btn btn-primary btn-block mt-2" onclick="saveCustomerProducts()">Save</button>`;
+  openModal(html);
+}
+
+function saveCustomerProducts() {
+  const products = [];
+  S.catalog.forEach((c, i) => {
+    const el = document.getElementById('cprod-' + i);
+    if (el && el.checked) products.push(c.name);
+  });
+  if (products.length > 0) {
+    S.customerProducts[profileStopId] = products;
+  } else {
+    delete S.customerProducts[profileStopId];
+  }
+  save.customerProducts();
   closeModal();
   renderProfile();
 }
@@ -1859,6 +1929,44 @@ function renderReports() {
           </div>`;
         })()}
       </div>
+
+      <!-- Custom Product Report -->
+      <div class="report-section">
+        <h3>Product Sales Report</h3>
+        <p class="text-muted mb-1" style="font-size:12px">Select products and date range above, then export as PDF.</p>
+        ${(() => {
+          if (S.reportProducts.length === 0) return '<p class="text-muted" style="font-size:13px">Select specific products above to generate report</p>';
+          const report = calcProductSalesReport();
+          if (report.rows.length === 0) return '<p class="text-muted" style="font-size:13px">No matching orders for this period</p>';
+          let t = `<div class="card" style="padding:0;overflow:hidden">
+            <table class="report-table">
+              <thead><tr><th>Customer</th><th>Payment</th><th>Products</th><th class="text-right">Total</th></tr></thead>
+              <tbody>`;
+          report.rows.forEach(r => {
+            t += `<tr>
+              <td>${escHtml(r.name)}</td>
+              <td><span class="badge ${r.payMethod==='cash'?'badge-success':r.payMethod==='bank'?'badge-info':'badge-danger'}" style="font-size:10px">${r.payMethod}</span></td>
+              <td style="font-size:12px">${r.productsSummary}</td>
+              <td class="text-right" style="font-weight:600">${formatCurrency(r.total)}</td>
+            </tr>`;
+          });
+          t += `<tr style="background:var(--bg);font-weight:700">
+              <td>TOTAL</td>
+              <td>
+                <span style="color:var(--success);font-size:11px">Cash ${formatCurrency(report.totalCash)}</span><br>
+                <span style="color:var(--info);font-size:11px">Bank ${formatCurrency(report.totalBank)}</span><br>
+                <span style="color:var(--danger);font-size:11px">Unpaid ${formatCurrency(report.totalUnpaid)}</span>
+              </td>
+              <td style="font-size:12px">${report.productTotals}</td>
+              <td class="text-right">${formatCurrency(report.grandTotal)}</td>
+            </tr>`;
+          t += `</tbody></table></div>
+          <button class="btn btn-primary btn-block mt-2" onclick="exportProductReportPDF()">
+            Download PDF
+          </button>`;
+          return t;
+        })()}
+      </div>
     </div>`;
 
   document.getElementById('page-reports').innerHTML = html;
@@ -1938,6 +2046,143 @@ function calcReportData() {
   });
 
   return { totalRevenue, deliveryCount, avgOrder, totalDebt, products, payments, customers };
+}
+
+function calcProductSalesReport() {
+  const orders = Object.values(S.orders);
+  let filtered = orders.filter(o => {
+    if (o.status !== 'delivered' || !o.deliveredAt) return false;
+    const d = o.deliveredAt.slice(0, 10);
+    if (S.reportStart && d < S.reportStart) return false;
+    if (S.reportEnd && d > S.reportEnd) return false;
+    // Must have at least one of the selected products
+    return o.items.some(item => S.reportProducts.includes(item.name));
+  });
+
+  // Group by customer, then aggregate
+  const byCustomer = {};
+  filtered.forEach(o => {
+    const cid = o.customerId;
+    if (!byCustomer[cid]) byCustomer[cid] = { orders: [], payMethods: {} };
+    byCustomer[cid].orders.push(o);
+    const pm = o.payMethod || 'unpaid';
+    byCustomer[cid].payMethods[pm] = (byCustomer[cid].payMethods[pm] || 0) + calcOrderTotal(o);
+  });
+
+  const rows = [];
+  let totalCash = 0, totalBank = 0, totalUnpaid = 0, grandTotal = 0;
+  const allProductQtys = {};
+
+  Object.entries(byCustomer).forEach(([cid, data]) => {
+    const stop = getStop(parseInt(cid));
+    if (!stop) return;
+
+    // Aggregate products for this customer (only selected products)
+    const prodMap = {};
+    let custTotal = 0;
+    data.orders.forEach(o => {
+      o.items.forEach(item => {
+        if (S.reportProducts.includes(item.name)) {
+          prodMap[item.name] = (prodMap[item.name] || 0) + item.qty;
+          if (!allProductQtys[item.name]) allProductQtys[item.name] = 0;
+          allProductQtys[item.name] += item.qty;
+        }
+      });
+      custTotal += calcOrderTotal(o);
+    });
+
+    // Dominant payment method
+    const pmEntries = Object.entries(data.payMethods);
+    const dominantPM = pmEntries.sort((a, b) => b[1] - a[1])[0]?.[0] || 'unpaid';
+
+    const productsSummary = Object.entries(prodMap).map(([n, q]) => `${q} ${n}`).join(', ');
+
+    totalCash += data.payMethods.cash || 0;
+    totalBank += data.payMethods.bank || 0;
+    totalUnpaid += data.payMethods.unpaid || 0;
+    grandTotal += custTotal;
+
+    rows.push({
+      name: stop.n,
+      payMethod: dominantPM,
+      productsSummary,
+      total: custTotal
+    });
+  });
+
+  rows.sort((a, b) => b.total - a.total);
+  const productTotals = Object.entries(allProductQtys).map(([n, q]) => `${q} ${n}`).join(', ');
+
+  return { rows, totalCash, totalBank, totalUnpaid, grandTotal, productTotals };
+}
+
+function exportProductReportPDF() {
+  const report = calcProductSalesReport();
+  if (report.rows.length === 0) { alert('No data to export.'); return; }
+
+  const dateLabel = S.reportRange === 'custom'
+    ? `${S.reportStart} to ${S.reportEnd}`
+    : S.reportRange === 'today' ? todayStr()
+    : S.reportRange === 'week' ? `${S.reportStart} to ${S.reportEnd}`
+    : `${S.reportStart} to ${S.reportEnd}`;
+  const exportDate = new Date().toLocaleString('en-GB');
+  const productsLabel = S.reportProducts.join(', ');
+
+  let tableRows = '';
+  report.rows.forEach(r => {
+    tableRows += `<tr>
+      <td>${escHtml(r.name)}</td>
+      <td style="text-align:center"><span style="padding:2px 8px;border-radius:10px;font-size:11px;background:${r.payMethod==='cash'?'#ECFDF3;color:#12B76A':r.payMethod==='bank'?'#EFF8FF;color:#2E90FA':'#FEF3F2;color:#F04438'}">${r.payMethod}</span></td>
+      <td>${r.productsSummary}</td>
+      <td style="text-align:right;font-weight:600">${formatCurrency(r.total)}</td>
+    </tr>`;
+  });
+
+  const html = `<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <title>Product Sales Report</title>
+    <style>
+      body{font-family:'Inter',Arial,sans-serif;font-size:12px;color:#111;padding:20px;max-width:800px;margin:0 auto}
+      h1{font-size:18px;margin-bottom:4px}
+      .meta{color:#666;font-size:11px;margin-bottom:16px}
+      table{width:100%;border-collapse:collapse;margin-bottom:16px}
+      th{text-align:left;padding:8px;background:#f5f5f7;border-bottom:2px solid #ddd;font-size:11px;color:#666}
+      td{padding:8px;border-bottom:1px solid #eee}
+      .total-row{background:#f5f5f7;font-weight:700}
+      .total-row td{border-top:2px solid #ddd}
+      @media print{body{padding:10px}button{display:none!important}}
+    </style>
+  </head><body>
+    <h1>Costadoro Delivery - Product Sales Report</h1>
+    <div class="meta">
+      Period: ${dateLabel}<br>
+      Products: ${escHtml(productsLabel)}<br>
+      Generated: ${exportDate}
+    </div>
+    <table>
+      <thead><tr><th>Customer</th><th style="text-align:center">Payment</th><th>Products</th><th style="text-align:right">Total</th></tr></thead>
+      <tbody>
+        ${tableRows}
+        <tr class="total-row">
+          <td>TOTAL (${report.rows.length} customers)</td>
+          <td style="font-size:10px">
+            <span style="color:#12B76A">Cash ${formatCurrency(report.totalCash)}</span> |
+            <span style="color:#2E90FA">Bank ${formatCurrency(report.totalBank)}</span> |
+            <span style="color:#F04438">Unpaid ${formatCurrency(report.totalUnpaid)}</span>
+          </td>
+          <td>${report.productTotals}</td>
+          <td style="text-align:right">${formatCurrency(report.grandTotal)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <button onclick="window.print()" style="padding:10px 24px;background:#E85D3A;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">
+      Save as PDF
+    </button>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2118,7 +2363,7 @@ function saveSupabaseConfig() {
 function resetAllData() {
   if (!confirm('This will delete ALL local data. Are you sure?')) return;
   if (!confirm('This cannot be undone. Proceed?')) return;
-  const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','stopCatalog','vis'];
+  const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','stopCatalog','vis'];
   keys.forEach(k => localStorage.removeItem('cr4_' + k));
   location.reload();
 }
