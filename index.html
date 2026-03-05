@@ -205,6 +205,8 @@ a{text-decoration:none;color:inherit}
 
 /* === MAP === */
 .map-container{width:100%;height:100%;min-height:300px}
+.map-label{background:none!important;border:none!important;box-shadow:none!important;font-size:9px!important;font-weight:600!important;color:#333!important;white-space:nowrap!important;padding:0!important;margin:0!important}
+.map-label::before{display:none!important}
 
 /* === EMPTY STATE === */
 .empty-state{text-align:center;padding:40px 20px;color:var(--text-muted)}
@@ -556,7 +558,7 @@ async function syncFromSupabase() {
 }
 
 async function pushAllToSupabase() {
-  if (!SB_CONFIGURED) { alert('Supabase not configured.'); return; }
+  if (!SB_CONFIGURED) { appAlert('Supabase not configured.'); return; }
   setSyncStatus('syncing');
   const keys = ['stops','assign','routeOrder','geo','ordersV2','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts'];
   for (const k of keys) {
@@ -564,7 +566,7 @@ async function pushAllToSupabase() {
     if (v !== null) await sbSet(k, v);
   }
   setSyncStatus('ok');
-  alert('All data pushed to cloud.');
+  appAlert('All data pushed to cloud.');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -738,6 +740,40 @@ function openModal(html) {
 function closeModal() {
   document.getElementById('modal-overlay').classList.remove('active');
   document.body.style.overflow = '';
+}
+
+// ══════════════════════════════════════════════════════════════
+// CUSTOM DIALOGS (replace browser alert/confirm)
+// ══════════════════════════════════════════════════════════════
+let _dialogResolve = null;
+
+function appAlert(msg) {
+  return new Promise(resolve => {
+    openModal(`
+      <div class="modal-handle"></div>
+      <div style="text-align:center;padding:16px 0">
+        <p style="font-size:15px;font-weight:500;line-height:1.5">${msg}</p>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="_dialogResolve();closeModal()">OK</button>
+    `);
+    _dialogResolve = resolve;
+  });
+}
+
+function appConfirm(msg) {
+  return new Promise(resolve => {
+    openModal(`
+      <div class="modal-handle"></div>
+      <div style="text-align:center;padding:16px 0">
+        <p style="font-size:15px;font-weight:500;line-height:1.5">${msg}</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline btn-block" onclick="_dialogResolve(false);closeModal()">Cancel</button>
+        <button class="btn btn-danger btn-block" onclick="_dialogResolve(true);closeModal()">OK</button>
+      </div>
+    `);
+    _dialogResolve = resolve;
+  });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1059,7 +1095,7 @@ function confirmVisitWithPayment() {
   let payAmount = debt;
   if (visitPayMethod === 'cash') {
     payAmount = parseFloat(document.getElementById('visit-cash-amount')?.value) || 0;
-    if (payAmount <= 0) { alert('Enter a valid amount.'); return; }
+    if (payAmount <= 0) { appAlert('Enter a valid amount.'); return; }
   }
 
   const now = new Date().toISOString();
@@ -1251,6 +1287,13 @@ function renderOrders() {
     </button>`;
 
   document.getElementById('page-orders').innerHTML = html;
+  // Refocus search input if user was typing
+  if (S.ordersSearch) {
+    setTimeout(() => {
+      const inp = document.querySelector('#page-orders .search-bar input');
+      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    }, 0);
+  }
 }
 
 function showDeliveryFromOrder(orderId) {
@@ -1258,8 +1301,8 @@ function showDeliveryFromOrder(orderId) {
   if (order) showDeliveryModal(order.customerId);
 }
 
-function deleteOrderFromList(orderId) {
-  if (!confirm('Remove this order?')) return;
+async function deleteOrderFromList(orderId) {
+  if (!(await appConfirm('Remove this order?'))) return;
   delete S.orders[orderId];
   save.orders();
   renderOrders();
@@ -1318,7 +1361,7 @@ function renderOrderFormModal(title, existingNote) {
                value="${selectedStop ? escHtml(selectedStop.n) : ''}"
                oninput="filterCustomerList(this.value)"
                onfocus="openCustomerList()"
-               onblur="setTimeout(closeCustList,250)" ${custDisabled}>
+               onblur="setTimeout(closeCustList,400)" ${custDisabled}>
         <div class="search-select-list" id="cust-search-list"></div>
       </div>
     </div>
@@ -1422,9 +1465,9 @@ function removeOrderItem(idx) {
 }
 
 function saveOrder() {
-  if (!tempOrderCustomerId) { alert('Please select a customer.'); return; }
+  if (!tempOrderCustomerId) { appAlert('Please select a customer.'); return; }
   const items = tempOrderItems.filter(i => i.name && i.qty > 0);
-  if (items.length === 0) { alert('Please add at least one item.'); return; }
+  if (items.length === 0) { appAlert('Please add at least one item.'); return; }
 
   const note = document.getElementById('order-note')?.value || '';
 
@@ -1536,6 +1579,13 @@ function renderCustomers() {
 
   html += `</div>`;
   document.getElementById('page-customers').innerHTML = html;
+  // Refocus search input if user was typing
+  if (S.customersSearch) {
+    setTimeout(() => {
+      const inp = document.querySelector('#page-customers .search-bar input');
+      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    }, 0);
+  }
 }
 
 function showAddCustomerModal() {
@@ -1564,7 +1614,7 @@ function showAddCustomerModal() {
 
 function saveNewCustomer() {
   const name = document.getElementById('add-cust-name').value.trim();
-  if (!name) { alert('Name is required.'); return; }
+  if (!name) { appAlert('Name is required.'); return; }
   const maxId = STOPS.reduce((m, s) => Math.max(m, s.id), 0);
   STOPS.push({
     id: maxId + 1,
@@ -1702,18 +1752,25 @@ function renderProfile() {
   }
 
   // Debt History (only show add/clear with actual amounts, skip visit-only entries)
-  const dh = (S.debtHistory[stop.id] || []).filter(h => h.type !== 'visit' && h.amount > 0);
+  const dhRaw = S.debtHistory[stop.id] || [];
+  const dh = dhRaw.map((h, i) => ({...h, _idx: i})).filter(h => h.type !== 'visit' && h.amount > 0);
   if (dh.length > 0) {
     html += `<div class="section-head"><h3>Debt History</h3></div>`;
     dh.slice(0, 15).forEach(h => {
       html += `<div class="card" style="padding:10px;margin-bottom:6px">
         <div class="flex-between">
-          <span style="font-size:13px">${h.note || h.type}</span>
-          <span style="font-size:13px;font-weight:600;color:${h.type === 'add' ? 'var(--danger)' : 'var(--success)'}">
+          <span style="font-size:13px;flex:1;min-width:0">${h.note || h.type}</span>
+          <span style="font-size:13px;font-weight:600;color:${h.type === 'add' ? 'var(--danger)' : 'var(--success)'};white-space:nowrap;margin-left:8px">
             ${h.type === 'add' ? '+' : '-'}${formatCurrency(Math.abs(h.amount))}
           </span>
         </div>
-        <div class="text-muted" style="font-size:11px;margin-top:2px">${formatDateTime(h.date)}</div>
+        <div class="flex-between" style="margin-top:4px">
+          <div class="text-muted" style="font-size:11px">${formatDateTime(h.date)}</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDebtHistoryModal(${stop.id},${h._idx})">Edit</button>
+            <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="removeDebtHistory(${stop.id},${h._idx})">Remove</button>
+          </div>
+        </div>
       </div>`;
     });
   }
@@ -1722,8 +1779,8 @@ function renderProfile() {
   document.getElementById('page-profile').innerHTML = html;
 }
 
-function deleteOrder(orderId) {
-  if (!confirm('Delete this order?')) return;
+async function deleteOrder(orderId) {
+  if (!(await appConfirm('Delete this order?'))) return;
   delete S.orders[orderId];
   save.orders();
   if (curPage === 'profile') renderProfile();
@@ -1769,8 +1826,8 @@ function saveEditCustomer() {
   renderProfile();
 }
 
-function deleteCustomer() {
-  if (!confirm('Are you sure you want to delete this customer? This cannot be undone.')) return;
+async function deleteCustomer() {
+  if (!(await appConfirm('Are you sure you want to delete this customer?<br>This cannot be undone.'))) return;
   STOPS = STOPS.filter(s => s.id !== profileStopId);
   delete S.assign[profileStopId];
   save.stops();
@@ -1963,7 +2020,7 @@ function showAddDebtModal() {
 
 function addDebt() {
   const amount = parseFloat(document.getElementById('debt-amount').value) || 0;
-  if (amount <= 0) { alert('Enter a valid amount.'); return; }
+  if (amount <= 0) { appAlert('Enter a valid amount.'); return; }
   const note = document.getElementById('debt-note').value.trim() || 'Manual entry';
 
   S.debts[profileStopId] = (S.debts[profileStopId] || 0) + amount;
@@ -2016,6 +2073,63 @@ function clearDebt() {
   save.debts();
   save.debtHistory();
   closeModal();
+  renderProfile();
+}
+
+function showEditDebtHistoryModal(stopId, idx) {
+  const dh = S.debtHistory[stopId];
+  if (!dh || !dh[idx]) return;
+  const h = dh[idx];
+  openModal(`
+    <div class="modal-handle"></div>
+    <div class="modal-title">Edit Debt Entry</div>
+    <div class="form-group">
+      <label class="form-label">Amount</label>
+      <input class="input" type="number" step="0.01" id="edit-dh-amount" value="${h.amount}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Note</label>
+      <input class="input" id="edit-dh-note" value="${escHtml(h.note || '')}">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="saveEditDebtHistory(${stopId},${idx})">Save</button>
+  `);
+}
+
+function saveEditDebtHistory(stopId, idx) {
+  const dh = S.debtHistory[stopId];
+  if (!dh || !dh[idx]) return;
+  const oldAmount = dh[idx].amount;
+  const oldType = dh[idx].type;
+  const newAmount = parseFloat(document.getElementById('edit-dh-amount').value) || 0;
+  dh[idx].amount = newAmount;
+  dh[idx].note = document.getElementById('edit-dh-note').value.trim();
+  // Adjust debt balance
+  if (oldType === 'add') {
+    S.debts[stopId] = (S.debts[stopId] || 0) - oldAmount + newAmount;
+  } else {
+    S.debts[stopId] = (S.debts[stopId] || 0) + oldAmount - newAmount;
+  }
+  S.debts[stopId] = Math.max(0, S.debts[stopId]);
+  save.debts();
+  save.debtHistory();
+  closeModal();
+  renderProfile();
+}
+
+async function removeDebtHistory(stopId, idx) {
+  if (!(await appConfirm('Remove this debt entry?'))) return;
+  const dh = S.debtHistory[stopId];
+  if (!dh || !dh[idx]) return;
+  const h = dh[idx];
+  // Reverse the debt effect
+  if (h.type === 'add') {
+    S.debts[stopId] = Math.max(0, (S.debts[stopId] || 0) - h.amount);
+  } else {
+    S.debts[stopId] = (S.debts[stopId] || 0) + h.amount;
+  }
+  dh.splice(idx, 1);
+  save.debts();
+  save.debtHistory();
   renderProfile();
 }
 
@@ -2428,7 +2542,7 @@ function getReportDateLabel() {
 
 function exportProductReportPDF() {
   const report = calcProductSalesReport();
-  if (report.rows.length === 0) { alert('No data to export.'); return; }
+  if (report.rows.length === 0) { appAlert('No data to export.'); return; }
 
   const dateLabel = getReportDateLabel();
   const exportDate = new Date().toLocaleString('en-GB');
@@ -2503,7 +2617,7 @@ function exportProductReportPDF() {
 
 function exportProductReportExcel() {
   const report = calcProductSalesReport();
-  if (report.rows.length === 0) { alert('No data to export.'); return; }
+  if (report.rows.length === 0) { appAlert('No data to export.'); return; }
 
   const data = [['Customer', 'Payment', 'Unpaid', 'Products']];
   report.rows.forEach(r => {
@@ -2661,15 +2775,15 @@ function addCatalogItem() {
   const name = document.getElementById('cat-name').value.trim();
   const unit = document.getElementById('cat-unit').value.trim();
   const price = parseFloat(document.getElementById('cat-price').value) || 0;
-  if (!name) { alert('Product name is required.'); return; }
-  if (S.catalog.some(c => c.name === name)) { alert('Product already exists.'); return; }
+  if (!name) { appAlert('Product name is required.'); return; }
+  if (S.catalog.some(c => c.name === name)) { appAlert('Product already exists.'); return; }
   S.catalog.push({ name, unit, price });
   save.catalog();
   renderSettings();
 }
 
-function removeCatalogItem(idx) {
-  if (!confirm('Remove ' + S.catalog[idx].name + '?')) return;
+async function removeCatalogItem(idx) {
+  if (!(await appConfirm('Remove ' + S.catalog[idx].name + '?'))) return;
   S.catalog.splice(idx, 1);
   save.catalog();
   renderSettings();
@@ -2696,13 +2810,12 @@ function saveSupabaseConfig() {
   localStorage.setItem('cr4_sb_url', document.getElementById('sb-url').value.trim());
   localStorage.setItem('cr4_sb_key', document.getElementById('sb-key').value.trim());
   closeModal();
-  alert('Configuration saved. Reload the app to apply.');
-  location.reload();
+  appAlert('Configuration saved. Reload the app to apply.').then(() => location.reload());
 }
 
-function resetAllData() {
-  if (!confirm('This will delete ALL local data. Are you sure?')) return;
-  if (!confirm('This cannot be undone. Proceed?')) return;
+async function resetAllData() {
+  if (!(await appConfirm('This will delete ALL local data.<br>Are you sure?'))) return;
+  if (!(await appConfirm('This cannot be undone. Proceed?'))) return;
   const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','stopCatalog','vis'];
   keys.forEach(k => localStorage.removeItem('cr4_' + k));
   location.reload();
@@ -2786,6 +2899,10 @@ function refreshMapMarkers() {
     </div>`;
 
     const marker = L.marker([geo.lat, geo.lng], { icon }).bindPopup(popupHtml).addTo(leafletMap);
+    marker.bindTooltip(stop.n, {
+      permanent: true, direction: 'bottom', offset: [0, 6],
+      className: 'map-label'
+    });
     mapMarkers.push(marker);
   });
 
@@ -2884,11 +3001,11 @@ function importExcel(file) {
 
       save.stops();
       closeModal();
-      alert(`Import complete: ${added} new customers added.`);
+      appAlert(`Import complete: ${added} new customers added.`);
       if (curPage === 'customers') renderCustomers();
       else if (curPage === 'settings') renderSettings();
     } catch (err) {
-      alert('Import failed: ' + err.message);
+      appAlert('Import failed: ' + err.message);
     }
   };
   reader.readAsArrayBuffer(file);
