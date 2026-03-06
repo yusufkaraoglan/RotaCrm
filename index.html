@@ -108,7 +108,7 @@ a{text-decoration:none;color:inherit}
 /* === MODAL === */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;justify-content:center;align-items:flex-end}
 .modal-overlay.active{display:flex}
-.modal-sheet{background:var(--card);border-radius:var(--radius-lg) var(--radius-lg) 0 0;width:100%;max-height:90vh;overflow-y:auto;padding:20px 16px calc(20px + var(--safe-b));animation:slideUp .25s ease-out}
+.modal-sheet{background:var(--card);border-radius:var(--radius-lg) var(--radius-lg) 0 0;width:100%;max-height:90vh;max-height:90dvh;overflow-y:auto;padding:20px 16px calc(20px + var(--safe-b));animation:slideUp .25s ease-out}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px}
 .modal-title{font-size:17px;font-weight:700;margin-bottom:16px}
@@ -267,6 +267,15 @@ a{text-decoration:none;color:inherit}
 .search-select-item:active{background:var(--primary-light)}
 .search-select-item .ss-sub{font-size:11px;color:var(--text-sec)}
 
+/* === CUSTOMER PICKER OVERLAY === */
+.customer-picker-overlay{position:fixed;inset:0;background:var(--bg);z-index:250;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+.customer-picker-overlay .cpick-header{padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.customer-picker-overlay .cpick-header input{flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:16px;background:var(--card)}
+.customer-picker-overlay .cpick-header input:focus{outline:none;border-color:var(--primary)}
+.customer-picker-overlay .cpick-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.customer-picker-overlay .cpick-item{padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer}
+.customer-picker-overlay .cpick-item:active{background:var(--primary-light)}
+
 /* === ZOOM PREVENTION (iOS) === */
 @supports (-webkit-touch-callout: none) {
   input[type="text"], input[type="number"], input[type="date"], input[type="tel"],
@@ -323,6 +332,7 @@ a{text-decoration:none;color:inherit}
 <div class="page" id="page-profile"></div>
 <div class="page" id="page-reports"></div>
 <div class="page" id="page-settings"></div>
+<div class="page" id="page-catalog"></div>
 <div class="page" id="page-map"></div>
 
 <!-- ═══ MODAL ═══ -->
@@ -529,6 +539,7 @@ function lsSave(k, v) {
 }
 
 let syncStatus = 'off';
+let lastSyncTime = null;
 function setSyncStatus(s) {
   syncStatus = s;
   const dot = document.getElementById('sync-dot');
@@ -551,6 +562,7 @@ async function syncFromSupabase() {
     loadState();
     renderCurrentPage();
     setSyncStatus('ok');
+    lastSyncTime = new Date();
   } catch (e) {
     console.warn('Sync error:', e.message);
     setSyncStatus('error');
@@ -646,7 +658,7 @@ function formatDate(d) {
 function formatDateTime(d) {
   if (!d) return '';
   const dt = new Date(d);
-  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' +
+  return dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) + ' ' +
          dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
@@ -714,7 +726,7 @@ function showPage(name) {
   curPage = name;
   document.querySelectorAll('.nav-btn').forEach(b => {
     const pg = b.dataset.page;
-    b.classList.toggle('active', pg === name || (name === 'profile' && pg === 'customers') || (name === 'map' && pg === 'settings'));
+    b.classList.toggle('active', pg === name || (name === 'profile' && pg === 'customers') || (name === 'map' && pg === 'settings') || (name === 'catalog' && pg === 'settings'));
   });
   renderCurrentPage();
 }
@@ -728,6 +740,7 @@ function renderCurrentPage() {
     case 'reports': renderReports(); break;
     case 'settings': renderSettings(); break;
     case 'map': renderMapPage(); break;
+    case 'catalog': renderCatalog(); break;
   }
 }
 
@@ -891,6 +904,14 @@ function renderRoute() {
   document.getElementById('page-route').innerHTML = html;
 }
 
+function rerenderRouteKeepScroll() {
+  const body = document.querySelector('#page-route .page-body');
+  const scrollPos = body ? body.scrollTop : 0;
+  renderRoute();
+  const newBody = document.querySelector('#page-route .page-body');
+  if (newBody) newBody.scrollTop = scrollPos;
+}
+
 function setRouteWeek(w) {
   S.routeWeek = w;
   S.routeDay = 0;
@@ -918,7 +939,7 @@ function moveStop(stopId, dir, dayId) {
   [sorted[idx], sorted[newIdx]] = [sorted[newIdx], sorted[idx]];
   S.routeOrder[dayId] = sorted;
   save.routeOrder();
-  renderRoute();
+  rerenderRouteKeepScroll();
 }
 
 function calcDayRevenue(dayId) {
@@ -1014,6 +1035,10 @@ function showDeliveryModal(stopId) {
     }
 
     visitHtml += `
+      <div class="form-group" style="margin-top:12px">
+        <label class="form-label">Visit Note (optional)</label>
+        <textarea class="textarea" id="visit-note" rows="2" style="min-height:50px" placeholder="Add a note..."></textarea>
+      </div>
       <button class="btn ${debt > 0 ? 'btn-outline' : 'btn-success'} btn-block mt-1" onclick="confirmVisitOnly()">
         ${debt > 0 ? 'Mark Visited (No Payment)' : 'Mark Visited'}
       </button>`;
@@ -1076,16 +1101,17 @@ function selectVisitPayMethod(method, el) {
 function confirmVisitOnly() {
   const stopId = parseInt(deliveryStopId);
   const now = new Date().toISOString();
+  const visitNote = document.getElementById('visit-note')?.value?.trim() || '';
   // Mark as visited today by creating a zero-total delivery marker
   const vid = uid();
   S.orders[vid] = {
     id: vid, customerId: stopId, items: [],
-    note: 'Visit (no orders)', status: 'delivered',
+    note: visitNote || 'Visit (no orders)', status: 'delivered',
     payMethod: 'visit', createdAt: now, deliveredAt: now
   };
   save.orders();
   closeModal();
-  renderRoute();
+  rerenderRouteKeepScroll();
 }
 
 function confirmVisitWithPayment() {
@@ -1111,15 +1137,16 @@ function confirmVisitWithPayment() {
   save.debtHistory();
 
   // Mark visited
+  const visitNote = document.getElementById('visit-note')?.value?.trim() || '';
   const vid = uid();
   S.orders[vid] = {
     id: vid, customerId: stopId, items: [],
-    note: `Visit - debt payment ${formatCurrency(cleared)}`, status: 'delivered',
+    note: visitNote || `Visit - debt payment ${formatCurrency(cleared)}`, status: 'delivered',
     payMethod: visitPayMethod, createdAt: now, deliveredAt: now
   };
   save.orders();
   closeModal();
-  renderRoute();
+  rerenderRouteKeepScroll();
 }
 
 function selectPayMethod(method, el) {
@@ -1204,54 +1231,67 @@ function confirmDelivery() {
 
   save.orders();
   closeModal();
-  renderRoute();
+  rerenderRouteKeepScroll();
 }
 
 // ══════════════════════════════════════════════════════════════
 // ORDERS PAGE
 // ══════════════════════════════════════════════════════════════
-function renderOrders() {
-  let orders = Object.values(S.orders);
+function renderOrders(fullRender) {
+  const isSearchUpdate = !fullRender && document.getElementById('orders-results');
 
-  // Filter by status
-  if (S.ordersFilter === 'pending') orders = orders.filter(o => o.status === 'pending');
-  else if (S.ordersFilter === 'delivered') orders = orders.filter(o => o.status === 'delivered');
-
-  // Filter by search
-  if (S.ordersSearch) {
-    const q = S.ordersSearch.toLowerCase();
-    orders = orders.filter(o => {
-      const stop = getStop(o.customerId);
-      return stop && stop.n.toLowerCase().includes(q);
-    });
+  if (!isSearchUpdate) {
+    let html = `
+      <header class="topbar">
+        <h1>Orders</h1>
+        <div class="topbar-actions">
+          <span class="badge badge-outline" id="orders-pending-badge">${Object.values(S.orders).filter(o=>o.status==='pending').length} pending</span>
+        </div>
+      </header>
+      <div class="page-body">
+        <div class="search-bar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" placeholder="Search by customer..." value="${escHtml(S.ordersSearch)}" oninput="S.ordersSearch=this.value;renderOrderResults()">
+        </div>
+        <div class="chip-group">
+          <button class="chip ${S.ordersFilter==='all'?'active':''}" onclick="S.ordersFilter='all';renderOrderResults()">All</button>
+          <button class="chip ${S.ordersFilter==='pending'?'active':''}" onclick="S.ordersFilter='pending';renderOrderResults()">Pending</button>
+          <button class="chip ${S.ordersFilter==='delivered'?'active':''}" onclick="S.ordersFilter='delivered';renderOrderResults()">Delivered</button>
+        </div>
+        <div id="orders-results"></div>
+      </div>
+      <button class="fab" onclick="showNewOrderModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>`;
+    document.getElementById('page-orders').innerHTML = html;
   }
 
-  // Sort: pending first, then by date desc
+  renderOrderResults();
+}
+
+function renderOrderResults() {
+  const container = document.getElementById('orders-results');
+  if (!container) return;
+
+  let orders = Object.values(S.orders);
+  if (S.ordersFilter === 'pending') orders = orders.filter(o => o.status === 'pending');
+  else if (S.ordersFilter === 'delivered') orders = orders.filter(o => o.status === 'delivered');
+  if (S.ordersSearch) {
+    const q = S.ordersSearch.toLowerCase();
+    orders = orders.filter(o => { const stop = getStop(o.customerId); return stop && stop.n.toLowerCase().includes(q); });
+  }
   orders.sort((a, b) => {
     if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
     return (b.createdAt || '').localeCompare(a.createdAt || '');
   });
 
-  let html = `
-    <header class="topbar">
-      <h1>Orders</h1>
-      <div class="topbar-actions">
-        <span class="badge badge-outline">${Object.values(S.orders).filter(o=>o.status==='pending').length} pending</span>
-      </div>
-    </header>
-    <div class="page-body">
-      <div class="search-bar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="Search by customer..." value="${escHtml(S.ordersSearch)}" oninput="S.ordersSearch=this.value;renderOrders()">
-      </div>
-      <div class="chip-group">
-        <button class="chip ${S.ordersFilter==='all'?'active':''}" onclick="S.ordersFilter='all';renderOrders()">All</button>
-        <button class="chip ${S.ordersFilter==='pending'?'active':''}" onclick="S.ordersFilter='pending';renderOrders()">Pending</button>
-        <button class="chip ${S.ordersFilter==='delivered'?'active':''}" onclick="S.ordersFilter='delivered';renderOrders()">Delivered</button>
-      </div>`;
+  // Update badge
+  const badge = document.getElementById('orders-pending-badge');
+  if (badge) badge.textContent = Object.values(S.orders).filter(o=>o.status==='pending').length + ' pending';
 
+  let html = '';
   if (orders.length === 0) {
-    html += `<div class="empty-state"><p><b>No orders found</b></p><p>Create a new order with the + button</p></div>`;
+    html = `<div class="empty-state"><p><b>No orders found</b></p><p>Create a new order with the + button</p></div>`;
   } else {
     orders.forEach(o => {
       const stop = getStop(o.customerId);
@@ -1280,20 +1320,7 @@ function renderOrders() {
         </div>`;
     });
   }
-
-  html += `</div>
-    <button class="fab" onclick="showNewOrderModal()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    </button>`;
-
-  document.getElementById('page-orders').innerHTML = html;
-  // Refocus search input if user was typing
-  if (S.ordersSearch) {
-    setTimeout(() => {
-      const inp = document.querySelector('#page-orders .search-bar input');
-      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
-    }, 0);
-  }
+  container.innerHTML = html;
 }
 
 function showDeliveryFromOrder(orderId) {
@@ -1356,13 +1383,10 @@ function renderOrderFormModal(title, existingNote) {
     <div class="modal-title">${title}</div>
     <div class="form-group">
       <label class="form-label">Customer</label>
-      <div class="search-select" id="cust-search-wrap">
-        <input class="input" id="cust-search-input" placeholder="Search customer..."
-               value="${selectedStop ? escHtml(selectedStop.n) : ''}"
-               oninput="filterCustomerList(this.value)"
-               onfocus="openCustomerList()"
-               onblur="setTimeout(closeCustList,400)" ${custDisabled}>
-        <div class="search-select-list" id="cust-search-list"></div>
+      <div class="input" id="cust-display"
+           onclick="${editingOrderId ? '' : 'openCustomerPicker()'}"
+           style="cursor:${editingOrderId ? 'default' : 'pointer'};color:${selectedStop ? 'var(--text)' : 'var(--text-muted)'};${editingOrderId ? 'opacity:0.6' : ''}">
+        ${selectedStop ? escHtml(selectedStop.n) : 'Tap to select customer...'}
       </div>
     </div>
     <div class="form-group">
@@ -1387,51 +1411,55 @@ function renderOrderFormModal(title, existingNote) {
     tempOrderItems.forEach((item, idx) => {
       if (selects[idx] && item.name) selects[idx].value = item.name;
     });
-    // Close customer list when clicking outside
-    document.addEventListener('click', closeCustListOnClickOutside);
+    // Product dropdowns set
   }, 50);
 }
 
-function filterCustomerList(query) {
-  const list = document.getElementById('cust-search-list');
+function openCustomerPicker() {
+  if (editingOrderId) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'customer-picker-overlay';
+  overlay.id = 'customer-picker';
+  overlay.innerHTML = `
+    <div class="cpick-header">
+      <button class="btn-ghost" onclick="closeCustomerPicker()" style="font-size:20px;padding:4px">&larr;</button>
+      <input type="text" id="cpick-search" placeholder="Search customer..." autofocus
+             oninput="filterCPicker(this.value)">
+    </div>
+    <div class="cpick-list" id="cpick-list"></div>
+  `;
+  document.body.appendChild(overlay);
+  filterCPicker('');
+}
+
+function filterCPicker(q) {
+  const list = document.getElementById('cpick-list');
   if (!list) return;
-  const q = query.toLowerCase().trim();
+  const query = q.toLowerCase().trim();
   let filtered = STOPS;
-  if (q) filtered = STOPS.filter(s => s.n.toLowerCase().includes(q) || s.c.toLowerCase().includes(q) || s.p.toLowerCase().includes(q));
-  filtered = filtered.slice(0, 20);
+  if (query) filtered = STOPS.filter(s =>
+    s.n.toLowerCase().includes(query) ||
+    s.c.toLowerCase().includes(query) ||
+    s.p.toLowerCase().includes(query)
+  );
+  filtered.sort((a, b) => a.n.localeCompare(b.n));
   list.innerHTML = filtered.map(s =>
-    `<div class="search-select-item" onclick="selectCustomerFromList(${s.id})">
-      ${escHtml(s.n)}<div class="ss-sub">${escHtml(s.c)} &middot; ${escHtml(s.p)}</div>
+    `<div class="cpick-item" onclick="pickCustomer(${s.id})">
+      <div style="font-weight:500">${escHtml(s.n)}</div>
+      <div style="font-size:12px;color:var(--text-sec)">${escHtml(s.c)} &middot; ${escHtml(s.p)}</div>
     </div>`
   ).join('');
-  list.classList.add('open');
 }
 
-function openCustomerList() {
-  const input = document.getElementById('cust-search-input');
-  if (input) filterCustomerList(input.value);
-}
-
-function selectCustomerFromList(stopId) {
+function pickCustomer(stopId) {
   tempOrderCustomerId = stopId;
-  const stop = getStop(stopId);
-  const input = document.getElementById('cust-search-input');
-  if (input && stop) input.value = stop.n;
-  const list = document.getElementById('cust-search-list');
-  if (list) list.classList.remove('open');
+  closeCustomerPicker();
   updateOrderPrices();
 }
 
-function closeCustList() {
-  const list = document.getElementById('cust-search-list');
-  if (list) list.classList.remove('open');
-}
-
-function closeCustListOnClickOutside(e) {
-  const wrap = document.getElementById('cust-search-wrap');
-  if (wrap && !wrap.contains(e.target)) {
-    closeCustList();
-  }
+function closeCustomerPicker() {
+  const el = document.getElementById('customer-picker');
+  if (el) el.remove();
 }
 
 function updateOrderItem(idx, field, value) {
@@ -1493,7 +1521,6 @@ function saveOrder() {
   editingOrderId = null;
   save.orders();
   closeModal();
-  document.removeEventListener('click', closeCustListOnClickOutside);
   if (curPage === 'orders') renderOrders();
   else if (curPage === 'profile') renderProfile();
   else if (curPage === 'route') renderRoute();
@@ -1502,65 +1529,61 @@ function saveOrder() {
 // ══════════════════════════════════════════════════════════════
 // CUSTOMERS PAGE
 // ══════════════════════════════════════════════════════════════
-function renderCustomers() {
-  let stops = [...STOPS];
+function renderCustomers(fullRender) {
+  const isSearchUpdate = !fullRender && document.getElementById('customers-results');
 
-  // Filter
-  if (S.customersFilter === 'A') {
-    stops = stops.filter(s => {
-      const d = S.assign[s.id];
-      return d && d.startsWith('wA');
-    });
-  } else if (S.customersFilter === 'B') {
-    stops = stops.filter(s => {
-      const d = S.assign[s.id];
-      return d && d.startsWith('wB');
-    });
-  } else if (S.customersFilter === 'none') {
-    stops = stops.filter(s => !S.assign[s.id]);
+  if (!isSearchUpdate) {
+    let html = `
+      <header class="topbar">
+        <h1>Customers</h1>
+        <div class="topbar-actions">
+          <span class="badge badge-outline">${STOPS.length}</span>
+          <button class="btn btn-primary btn-sm" onclick="showAddCustomerModal()">+ Add</button>
+        </div>
+      </header>
+      <div class="page-body">
+        <div class="search-bar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" placeholder="Search customers..." value="${escHtml(S.customersSearch)}" oninput="S.customersSearch=this.value;renderCustomerResults()">
+        </div>
+        <div class="chip-group">
+          <button class="chip ${S.customersFilter==='all'?'active':''}" onclick="S.customersFilter='all';renderCustomerResults()">All</button>
+          <button class="chip ${S.customersFilter==='A'?'active':''}" onclick="S.customersFilter='A';renderCustomerResults()">Week A</button>
+          <button class="chip ${S.customersFilter==='B'?'active':''}" onclick="S.customersFilter='B';renderCustomerResults()">Week B</button>
+          <button class="chip ${S.customersFilter==='none'?'active':''}" onclick="S.customersFilter='none';renderCustomerResults()">Unassigned</button>
+        </div>
+        <div id="customers-results"></div>
+      </div>`;
+    document.getElementById('page-customers').innerHTML = html;
   }
 
-  // Search
+  renderCustomerResults();
+}
+
+function renderCustomerResults() {
+  const container = document.getElementById('customers-results');
+  if (!container) return;
+
+  let stops = [...STOPS];
+  if (S.customersFilter === 'A') stops = stops.filter(s => { const d = S.assign[s.id]; return d && d.startsWith('wA'); });
+  else if (S.customersFilter === 'B') stops = stops.filter(s => { const d = S.assign[s.id]; return d && d.startsWith('wB'); });
+  else if (S.customersFilter === 'none') stops = stops.filter(s => !S.assign[s.id]);
+
   if (S.customersSearch) {
     const q = S.customersSearch.toLowerCase();
-    stops = stops.filter(s =>
-      s.n.toLowerCase().includes(q) ||
-      s.c.toLowerCase().includes(q) ||
-      s.p.toLowerCase().includes(q)
-    );
+    stops = stops.filter(s => s.n.toLowerCase().includes(q) || s.c.toLowerCase().includes(q) || s.p.toLowerCase().includes(q));
   }
-
   stops.sort((a, b) => a.n.localeCompare(b.n));
 
-  let html = `
-    <header class="topbar">
-      <h1>Customers</h1>
-      <div class="topbar-actions">
-        <span class="badge badge-outline">${STOPS.length}</span>
-        <button class="btn btn-primary btn-sm" onclick="showAddCustomerModal()">+ Add</button>
-      </div>
-    </header>
-    <div class="page-body">
-      <div class="search-bar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="Search customers..." value="${escHtml(S.customersSearch)}" oninput="S.customersSearch=this.value;renderCustomers()">
-      </div>
-      <div class="chip-group">
-        <button class="chip ${S.customersFilter==='all'?'active':''}" onclick="S.customersFilter='all';renderCustomers()">All</button>
-        <button class="chip ${S.customersFilter==='A'?'active':''}" onclick="S.customersFilter='A';renderCustomers()">Week A</button>
-        <button class="chip ${S.customersFilter==='B'?'active':''}" onclick="S.customersFilter='B';renderCustomers()">Week B</button>
-        <button class="chip ${S.customersFilter==='none'?'active':''}" onclick="S.customersFilter='none';renderCustomers()">Unassigned</button>
-      </div>`;
-
+  let html = '';
   if (stops.length === 0) {
-    html += `<div class="empty-state"><p><b>No customers found</b></p></div>`;
+    html = `<div class="empty-state"><p><b>No customers found</b></p></div>`;
   } else {
     stops.forEach(s => {
       const dayId = S.assign[s.id];
       const dayObj = dayId ? getDayObj(dayId) : null;
       const pending = getStopOrders(s.id, 'pending').length;
       const debt = S.debts[s.id] || 0;
-
       html += `
         <div class="customer-card" onclick="showProfile(${s.id})">
           <div class="customer-avatar">${getCustomerInitials(s.n)}</div>
@@ -1576,16 +1599,7 @@ function renderCustomers() {
         </div>`;
     });
   }
-
-  html += `</div>`;
-  document.getElementById('page-customers').innerHTML = html;
-  // Refocus search input if user was typing
-  if (S.customersSearch) {
-    setTimeout(() => {
-      const inp = document.querySelector('#page-customers .search-bar input');
-      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
-    }, 0);
-  }
+  container.innerHTML = html;
 }
 
 function showAddCustomerModal() {
@@ -1644,8 +1658,6 @@ function renderProfile() {
   const dayId = S.assign[stop.id];
   const dayObj = dayId ? getDayObj(dayId) : null;
   const pending = getStopOrders(stop.id, 'pending');
-  const delivered = getStopOrders(stop.id, 'delivered').sort((a, b) => (b.deliveredAt || '').localeCompare(a.deliveredAt || ''));
-  const recentDelivered = delivered.slice(0, 20);
   const debt = S.debts[stop.id] || 0;
   const note = S.cnotes[stop.id] || '';
 
@@ -1702,6 +1714,7 @@ function renderProfile() {
         <div class="debt-actions">
           <button class="btn btn-outline btn-sm" onclick="showAddDebtModal()">Add Debt</button>
           <button class="btn btn-success btn-sm" onclick="showClearDebtModal()" ${debt <= 0 ? 'disabled' : ''}>Clear Debt</button>
+          <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="removeAllDebt()" ${debt <= 0 ? 'disabled' : ''}>Remove Debt</button>
         </div>
       </div>
 
@@ -1722,30 +1735,6 @@ function renderProfile() {
           <div class="order-card-footer">
             <span class="order-card-total">${formatCurrency(calcOrderTotal(o))}</span>
             <button class="btn btn-danger btn-sm" onclick="deleteOrder('${o.id}')">Delete</button>
-          </div>
-        </div>`;
-    });
-  }
-
-  html += `<div class="section-head"><h3>Order History</h3></div>`;
-  if (recentDelivered.length === 0) {
-    html += `<p class="text-muted" style="font-size:13px;padding:8px 0">No delivery history</p>`;
-  } else {
-    recentDelivered.forEach(o => {
-      const isVisit = o.payMethod === 'visit';
-      const badgeLabel = isVisit ? 'visited' : 'delivered';
-      const badgeClass = isVisit ? 'badge-purple' : 'badge-success';
-      const payLabel = o.payMethod === 'visit' ? '' : o.payMethod === 'cash' && o.cashPaid !== undefined && o.cashPaid < calcOrderTotal(o) ? `cash (partial ${formatCurrency(o.cashPaid)})` : (o.payMethod || '');
-      html += `
-        <div class="order-card" style="opacity:0.85">
-          <div class="order-card-head">
-            <div class="order-card-date">${formatDateTime(o.deliveredAt)}</div>
-            <span class="badge ${badgeClass}">${badgeLabel}</span>
-          </div>
-          ${o.items.length > 0 ? `<div class="order-card-items">${o.items.map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>` : (o.note ? `<div class="order-card-items text-muted">${escHtml(o.note)}</div>` : '')}
-          <div class="order-card-footer">
-            ${o.items.length > 0 ? `<span class="order-card-total">${formatCurrency(calcOrderTotal(o))}</span>` : '<span></span>'}
-            <span class="text-muted" style="font-size:12px">${payLabel}</span>
           </div>
         </div>`;
     });
@@ -2073,6 +2062,15 @@ function clearDebt() {
   save.debts();
   save.debtHistory();
   closeModal();
+  renderProfile();
+}
+
+async function removeAllDebt() {
+  const debt = S.debts[profileStopId] || 0;
+  if (debt <= 0) return;
+  if (!(await appConfirm('Remove entire debt of ' + formatCurrency(debt) + '?<br>This will NOT create a payment record.'))) return;
+  S.debts[profileStopId] = 0;
+  save.debts();
   renderProfile();
 }
 
@@ -2643,17 +2641,6 @@ function exportProductReportExcel() {
 // SETTINGS PAGE
 // ══════════════════════════════════════════════════════════════
 function renderSettings() {
-  const catHtml = S.catalog.length === 0
-    ? '<p class="text-muted" style="padding:14px;text-align:center;font-size:13px">No products yet</p>'
-    : S.catalog.map((c, i) => `
-        <div class="catalog-row">
-          <span class="catalog-name">${escHtml(c.name)}</span>
-          <span class="catalog-detail">${escHtml(c.unit || '')}</span>
-          <span class="catalog-detail" style="font-weight:600">${formatCurrency(c.price)}</span>
-          <button class="btn-icon-sm" style="color:var(--danger);font-size:14px" onclick="removeCatalogItem(${i})">&#10005;</button>
-        </div>
-      `).join('');
-
   let html = `
     <header class="topbar">
       <h1>Settings</h1>
@@ -2665,14 +2652,12 @@ function renderSettings() {
       <div class="settings-section">
         <div class="settings-title">Product Catalog</div>
         <div class="settings-card">
-          ${catHtml}
-          <div style="padding:10px;border-top:1px solid var(--border)">
-            <div style="display:flex;gap:6px">
-              <input class="input" id="cat-name" placeholder="Product name" style="flex:2">
-              <input class="input" id="cat-unit" placeholder="Unit" style="flex:1">
-              <input class="input" id="cat-price" placeholder="Price" type="number" step="0.01" style="width:70px">
-              <button class="btn btn-primary btn-sm" onclick="addCatalogItem()">+</button>
+          <div class="settings-item" onclick="showPage('catalog')" style="cursor:pointer">
+            <div>
+              <div class="settings-item-label">Manage Catalog</div>
+              <div class="settings-item-desc">${S.catalog.length} products</div>
             </div>
+            <span style="color:var(--text-muted)">&rarr;</span>
           </div>
         </div>
       </div>
@@ -2719,7 +2704,7 @@ function renderSettings() {
           <div class="settings-item">
             <div>
               <div class="settings-item-label">Status</div>
-              <div class="settings-item-desc">${SB_CONFIGURED ? 'Connected' : 'Not configured'}</div>
+              <div class="settings-item-desc">${SB_CONFIGURED ? 'Connected' + (lastSyncTime ? ' (last: ' + lastSyncTime.toLocaleTimeString('en-GB') + ')' : '') : 'Not configured'}</div>
             </div>
             <span class="sync-dot ${SB_CONFIGURED ? (syncStatus || 'off') : 'off'}"></span>
           </div>
@@ -2771,6 +2756,47 @@ function renderSettings() {
   document.getElementById('page-settings').innerHTML = html;
 }
 
+function renderCatalog() {
+  let html = `
+    <header class="topbar">
+      <button class="btn-ghost" onclick="showPage('settings')" style="font-size:18px;padding:8px">&larr;</button>
+      <h1 style="flex:1;text-align:center;font-size:16px">Product Catalog</h1>
+      <span class="badge badge-outline">${S.catalog.length} products</span>
+    </header>
+    <div class="page-body">
+      <div class="card">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Add Product</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <input class="input" id="cat-name" placeholder="Product name" style="flex:2;min-width:120px">
+          <input class="input" id="cat-unit" placeholder="Unit" style="flex:1;min-width:60px">
+          <input class="input" id="cat-price" placeholder="£0.00" type="number" step="0.01" style="width:80px;flex:none">
+          <button class="btn btn-primary btn-sm" onclick="addCatalogItem()">Add</button>
+        </div>
+      </div>`;
+
+  if (S.catalog.length === 0) {
+    html += `<div class="empty-state"><p><b>No products yet</b></p><p>Add products above</p></div>`;
+  } else {
+    S.catalog.forEach((c, i) => {
+      html += `
+        <div class="card" style="margin-bottom:8px">
+          <div class="flex-between">
+            <div>
+              <div style="font-weight:600">${escHtml(c.name)}</div>
+              <div class="text-muted" style="font-size:12px">${escHtml(c.unit || 'No unit')}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-weight:700">${formatCurrency(c.price)}</span>
+              <button class="btn-icon-sm" style="color:var(--danger);font-size:14px" onclick="removeCatalogItem(${i})">&#10005;</button>
+            </div>
+          </div>
+        </div>`;
+    });
+  }
+  html += `</div>`;
+  document.getElementById('page-catalog').innerHTML = html;
+}
+
 function addCatalogItem() {
   const name = document.getElementById('cat-name').value.trim();
   const unit = document.getElementById('cat-unit').value.trim();
@@ -2779,14 +2805,16 @@ function addCatalogItem() {
   if (S.catalog.some(c => c.name === name)) { appAlert('Product already exists.'); return; }
   S.catalog.push({ name, unit, price });
   save.catalog();
-  renderSettings();
+  if (curPage === 'catalog') renderCatalog();
+  else if (curPage === 'settings') renderSettings();
 }
 
 async function removeCatalogItem(idx) {
   if (!(await appConfirm('Remove ' + S.catalog[idx].name + '?'))) return;
   S.catalog.splice(idx, 1);
   save.catalog();
-  renderSettings();
+  if (curPage === 'catalog') renderCatalog();
+  else if (curPage === 'settings') renderSettings();
 }
 
 function showSupabaseModal() {
@@ -2853,6 +2881,7 @@ function renderMapPage() {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap'
     }).addTo(leafletMap);
+    leafletMap.on('zoomend', updateTooltipVisibility);
     refreshMapMarkers();
   }, 150);
 }
@@ -2900,7 +2929,7 @@ function refreshMapMarkers() {
 
     const marker = L.marker([geo.lat, geo.lng], { icon }).bindPopup(popupHtml).addTo(leafletMap);
     marker.bindTooltip(stop.n, {
-      permanent: true, direction: 'bottom', offset: [0, 6],
+      permanent: false, direction: 'bottom', offset: [0, 6],
       className: 'map-label'
     });
     mapMarkers.push(marker);
@@ -2910,6 +2939,19 @@ function refreshMapMarkers() {
     const group = L.featureGroup(mapMarkers);
     leafletMap.fitBounds(group.getBounds().pad(0.1));
   }
+  updateTooltipVisibility();
+}
+
+function updateTooltipVisibility() {
+  if (!leafletMap) return;
+  const zoom = leafletMap.getZoom();
+  mapMarkers.forEach(m => {
+    if (zoom >= 12) {
+      if (m.getTooltip() && !m.isTooltipOpen()) m.openTooltip();
+    } else {
+      if (m.getTooltip() && m.isTooltipOpen()) m.closeTooltip();
+    }
+  });
 }
 
 function showMapAssignModal(stopId) {
@@ -3100,6 +3142,21 @@ function init() {
     setSyncStatus('off');
     syncFromSupabase();
   }
+
+  // Periodic sync every 5 minutes
+  setInterval(() => {
+    if (SB_CONFIGURED && navigator.onLine) syncFromSupabase();
+  }, 5 * 60 * 1000);
+
+  // Sync when coming back online
+  window.addEventListener('online', () => {
+    if (SB_CONFIGURED) syncFromSupabase();
+  });
+
+  // Sync when app becomes visible again (tab/app switch)
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && SB_CONFIGURED && navigator.onLine) syncFromSupabase();
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
