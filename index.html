@@ -1246,57 +1246,62 @@ function updateCashRemainder() {
 }
 
 function confirmDelivery() {
-  if (!deliveryStopId || !deliveryPayMethod) return;
-  const stopId = parseInt(deliveryStopId);
-  const pending = getStopOrders(stopId, 'pending');
-  const now = new Date().toISOString();
-  const grandTotal = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
+  try {
+    if (!deliveryStopId && deliveryStopId !== 0) { appAlert('Hata: stopId yok'); return; }
+    if (!deliveryPayMethod) { appAlert('Lütfen ödeme yöntemi seçin.'); return; }
+    const stopId = parseInt(deliveryStopId);
+    const pending = getStopOrders(stopId, 'pending');
+    if (pending.length === 0) { appAlert('Bekleyen sipariş bulunamadı.'); closeModal(); return; }
+    const now = new Date().toISOString();
+    const grandTotal = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
 
-  // Handle partial cash payment
-  let unpaidAmount = 0;
-  if (deliveryPayMethod === 'cash') {
-    const cashInput = document.getElementById('cash-amount-input');
-    const cashPaid = cashInput ? (parseFloat(cashInput.value) || 0) : grandTotal;
-    unpaidAmount = Math.max(0, grandTotal - cashPaid);
-  }
-
-  const deliveryNote = document.getElementById('delivery-note')?.value?.trim() || '';
-  pending.forEach(o => {
-    o.status = 'delivered';
-    o.deliveredAt = now;
-    o.payMethod = deliveryPayMethod;
-    if (deliveryNote) o.deliveryNote = deliveryNote;
+    // Handle partial cash payment
+    let unpaidAmount = 0;
     if (deliveryPayMethod === 'cash') {
       const cashInput = document.getElementById('cash-amount-input');
-      o.cashPaid = cashInput ? (parseFloat(cashInput.value) || 0) : grandTotal;
+      const cashPaid = cashInput ? (parseFloat(cashInput.value) || 0) : grandTotal;
+      unpaidAmount = Math.max(0, grandTotal - cashPaid);
     }
-  });
 
-  if (deliveryPayMethod === 'unpaid') {
-    // Full amount goes to debt
-    S.debts[stopId] = (S.debts[stopId] || 0) + grandTotal;
-    if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
-    S.debtHistory[stopId].unshift({
-      date: now, amount: grandTotal, type: 'add',
-      note: `Delivery - ${pending.length} order(s) (not paid)`
+    const deliveryNote = document.getElementById('delivery-note')?.value?.trim() || '';
+    pending.forEach(o => {
+      o.status = 'delivered';
+      o.deliveredAt = now;
+      o.payMethod = deliveryPayMethod;
+      if (deliveryNote) o.deliveryNote = deliveryNote;
+      if (deliveryPayMethod === 'cash') {
+        const cashInput = document.getElementById('cash-amount-input');
+        o.cashPaid = cashInput ? (parseFloat(cashInput.value) || 0) : grandTotal;
+      }
     });
-    save.debts();
-    save.debtHistory();
-  } else if (deliveryPayMethod === 'cash' && unpaidAmount > 0.01) {
-    // Partial cash payment - remainder goes to debt
-    S.debts[stopId] = (S.debts[stopId] || 0) + unpaidAmount;
-    if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
-    S.debtHistory[stopId].unshift({
-      date: now, amount: unpaidAmount, type: 'add',
-      note: `Delivery - partial cash (paid ${formatCurrency(grandTotal - unpaidAmount)}, remainder ${formatCurrency(unpaidAmount)})`
-    });
-    save.debts();
-    save.debtHistory();
+
+    if (deliveryPayMethod === 'unpaid') {
+      S.debts[stopId] = (S.debts[stopId] || 0) + grandTotal;
+      if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
+      S.debtHistory[stopId].unshift({
+        date: now, amount: grandTotal, type: 'add',
+        note: `Delivery - ${pending.length} order(s) (not paid)`
+      });
+      save.debts();
+      save.debtHistory();
+    } else if (deliveryPayMethod === 'cash' && unpaidAmount > 0.01) {
+      S.debts[stopId] = (S.debts[stopId] || 0) + unpaidAmount;
+      if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
+      S.debtHistory[stopId].unshift({
+        date: now, amount: unpaidAmount, type: 'add',
+        note: `Delivery - partial cash (paid ${formatCurrency(grandTotal - unpaidAmount)}, remainder ${formatCurrency(unpaidAmount)})`
+      });
+      save.debts();
+      save.debtHistory();
+    }
+
+    save.orders();
+    closeModal();
+    rerenderRouteKeepScroll();
+  } catch (err) {
+    appAlert('Teslimat hatası: ' + err.message);
+    console.error('confirmDelivery error:', err);
   }
-
-  save.orders();
-  closeModal();
-  rerenderRouteKeepScroll();
 }
 
 // ══════════════════════════════════════════════════════════════
