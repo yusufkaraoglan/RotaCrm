@@ -1658,6 +1658,8 @@ function renderProfile() {
   const dayId = S.assign[stop.id];
   const dayObj = dayId ? getDayObj(dayId) : null;
   const pending = getStopOrders(stop.id, 'pending');
+  const delivered = getStopOrders(stop.id, 'delivered').sort((a, b) => (b.deliveredAt || '').localeCompare(a.deliveredAt || ''));
+  const recentDelivered = delivered.slice(0, 20);
   const debt = S.debts[stop.id] || 0;
   const note = S.cnotes[stop.id] || '';
 
@@ -1735,6 +1737,30 @@ function renderProfile() {
           <div class="order-card-footer">
             <span class="order-card-total">${formatCurrency(calcOrderTotal(o))}</span>
             <button class="btn btn-danger btn-sm" onclick="deleteOrder('${o.id}')">Delete</button>
+          </div>
+        </div>`;
+    });
+  }
+
+  html += `<div class="section-head"><h3>Order History</h3></div>`;
+  if (recentDelivered.length === 0) {
+    html += `<p class="text-muted" style="font-size:13px;padding:8px 0">No delivery history</p>`;
+  } else {
+    recentDelivered.forEach(o => {
+      const isVisit = o.payMethod === 'visit';
+      const badgeLabel = isVisit ? 'visited' : 'delivered';
+      const badgeClass = isVisit ? 'badge-purple' : 'badge-success';
+      const payLabel = o.payMethod === 'visit' ? '' : o.payMethod === 'cash' && o.cashPaid !== undefined && o.cashPaid < calcOrderTotal(o) ? `cash (partial ${formatCurrency(o.cashPaid)})` : (o.payMethod || '');
+      html += `
+        <div class="order-card" style="opacity:0.85">
+          <div class="order-card-head">
+            <div class="order-card-date">${formatDateTime(o.deliveredAt)}</div>
+            <span class="badge ${badgeClass}">${badgeLabel}</span>
+          </div>
+          ${o.items.length > 0 ? `<div class="order-card-items">${o.items.map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>` : (o.note ? `<div class="order-card-items text-muted">${escHtml(o.note)}</div>` : '')}
+          <div class="order-card-footer">
+            ${o.items.length > 0 ? `<span class="order-card-total">${formatCurrency(calcOrderTotal(o))}</span>` : '<span></span>'}
+            <span class="text-muted" style="font-size:12px">${payLabel}</span>
           </div>
         </div>`;
     });
