@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#E85D3A">
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Costadoro%20Delivery%22%2C%22short_name%22%3A%22Costadoro%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23111111%22%2C%22theme_color%22%3A%22%23E85D3A%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2520viewBox%3D%270%200%20512%20512%27%253E%253Crect%2520fill%3D%27%2523E85D3A%27%2520width%3D%27512%27%2520height%3D%27512%27%2520rx%3D%2764%27%2F%253E%253Ctext%2520x%3D%27256%27%2520y%3D%27360%27%2520font-size%3D%27320%27%2520text-anchor%3D%27middle%27%2520fill%3D%27white%27%253E%25E2%2598%2595%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
 <title>Costadoro Delivery</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -618,7 +620,7 @@ async function syncFromSupabase() {
 async function pushAllToSupabase() {
   if (!SB_CONFIGURED) { appAlert('Supabase not configured.'); return; }
   setSyncStatus('syncing');
-  const keys = ['stops','assign','routeOrder','geo','ordersV2','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts'];
+  const keys = ['stops','assign','routeOrder','geo','ordersV2','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','recurringOrders'];
   for (const k of keys) {
     const v = lsGet(k, null);
     if (v !== null) await sbSet(k, v);
@@ -673,6 +675,7 @@ function loadState() {
   S.reportProducts = [];
   S.mapFilter = 'all';
   S.customerProducts = lsGet('customerProducts', {});
+  S.recurringOrders = lsGet('recurringOrders', {});
 }
 
 // Save helpers
@@ -687,7 +690,8 @@ const save = {
   cnotes:   () => lsSave('cnotes', S.cnotes),
   catalog:  () => lsSave('catalog', S.catalog),
   pricing:  () => lsSave('customerPricing', S.customerPricing),
-  customerProducts: () => lsSave('customerProducts', S.customerProducts)
+  customerProducts: () => lsSave('customerProducts', S.customerProducts),
+  recurringOrders: () => lsSave('recurringOrders', S.recurringOrders)
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -868,6 +872,9 @@ function renderRoute() {
         <div style="font-size:12px;color:var(--text-sec)">${dateInfo}</div>
       </div>
       <div class="topbar-actions">
+        <button class="btn-ghost" onclick="shareRouteSummary()" title="Share Route Summary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        </button>
         <button class="btn-ghost" onclick="exportRouteExcel()" title="Export Route">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         </button>
@@ -1124,6 +1131,10 @@ function showDeliveryModal(stopId) {
         <input class="input" type="number" step="0.01" id="cash-amount-input" value="${grandTotal.toFixed(2)}" placeholder="0.00" oninput="updateCashRemainder()">
         <p class="text-muted" style="font-size:12px;margin-top:4px" id="cash-remainder-msg"></p>
       </div>
+      <div style="margin-top:12px">
+        <label class="form-label">Teslimat Notu (opsiyonel)</label>
+        <textarea class="textarea" id="delivery-note" rows="2" placeholder="Not ekleyin..." style="width:100%;font-size:14px;padding:8px;border:1px solid var(--border);border-radius:8px;resize:vertical"></textarea>
+      </div>
       <button class="btn btn-success btn-block mt-2" onclick="confirmDelivery()" id="btn-confirm-delivery" disabled>
         Confirm Delivery
       </button>
@@ -1245,10 +1256,12 @@ function confirmDelivery() {
     unpaidAmount = Math.max(0, grandTotal - cashPaid);
   }
 
+  const deliveryNote = document.getElementById('delivery-note')?.value?.trim() || '';
   pending.forEach(o => {
     o.status = 'delivered';
     o.deliveredAt = now;
     o.payMethod = deliveryPayMethod;
+    if (deliveryNote) o.deliveryNote = deliveryNote;
     if (deliveryPayMethod === 'cash') {
       const cashInput = document.getElementById('cash-amount-input');
       o.cashPaid = cashInput ? (parseFloat(cashInput.value) || 0) : grandTotal;
@@ -1384,6 +1397,15 @@ async function deleteOrderFromList(orderId) {
 }
 
 let editingOrderId = null;
+
+function quickReorder(customerId, lastOrderId) {
+  const lastOrder = S.orders[lastOrderId];
+  if (!lastOrder || !lastOrder.items || lastOrder.items.length === 0) return;
+  editingOrderId = null;
+  tempOrderCustomerId = customerId;
+  tempOrderItems = lastOrder.items.map(i => ({ name: i.name, qty: i.qty, price: i.price }));
+  renderOrderFormModal('New Order (Reorder)', lastOrder.note || '');
+}
 
 function showNewOrderModal(preCustomerId) {
   editingOrderId = null;
@@ -1659,6 +1681,23 @@ function saveOrder() {
       deliveredAt: null
     };
   }
+  // Deduct stock for new orders
+  if (!editingOrderId) {
+    let lowStockWarnings = [];
+    items.forEach(item => {
+      const catItem = S.catalog.find(c => c.name === item.name);
+      if (catItem && catItem.stock != null) {
+        catItem.stock = Math.max(0, catItem.stock - item.qty);
+        if (catItem.stock <= 5) lowStockWarnings.push(`${catItem.name}: ${catItem.stock} kaldı`);
+      }
+    });
+    if (lowStockWarnings.length > 0) {
+      save.catalog();
+      setTimeout(() => appAlert('⚠️ Düşük stok:<br>' + lowStockWarnings.join('<br>')), 300);
+    } else if (items.some(i => S.catalog.find(c => c.name === i.name && c.stock != null))) {
+      save.catalog();
+    }
+  }
   editingOrderId = null;
   save.orders();
   closeModal();
@@ -1846,6 +1885,10 @@ function renderProfile() {
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
           Order
         </button>
+        <button class="action-btn" onclick="showRecurringModal(${stop.id})" style="${S.recurringOrders[stop.id] ? 'color:var(--primary)' : ''}">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Tekrar
+        </button>
       </div>
 
       <!-- Debt -->
@@ -1860,6 +1903,21 @@ function renderProfile() {
           <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="removeAllDebt()" ${debt <= 0 ? 'disabled' : ''}>Remove Debt</button>
         </div>
       </div>
+
+      <!-- Quick Reorder -->
+      ${(() => {
+        const lastDelivered = getStopOrders(stop.id, 'delivered')
+          .filter(o => o.items && o.items.length > 0)
+          .sort((a,b) => new Date(b.deliveredAt) - new Date(a.deliveredAt))[0];
+        return lastDelivered ? `
+        <div style="margin:8px 0">
+          <button class="btn btn-block" style="background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px" onclick="quickReorder(${stop.id},'${lastDelivered.id}')">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Son Siparişi Tekrarla
+          </button>
+          <div class="text-muted" style="font-size:11px;text-align:center;margin-top:4px">${lastDelivered.items.map(i => i.qty + 'x ' + escHtml(i.name)).join(', ')} — ${formatCurrency(calcOrderTotal(lastDelivered))}</div>
+        </div>` : '';
+      })()}
 
       <!-- Pending Orders -->
       <div class="section-head"><h3>Pending Orders (${pending.length})</h3></div>`;
@@ -1899,6 +1957,7 @@ function renderProfile() {
             <span class="badge ${badgeClass}">${badgeLabel}</span>
           </div>
           ${o.items.length > 0 ? `<div class="order-card-items">${o.items.map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>` : (o.note ? `<div class="order-card-items text-muted">${escHtml(o.note)}</div>` : '')}
+          ${o.deliveryNote ? `<div class="text-muted" style="font-size:12px;padding:2px 0;font-style:italic">📝 ${escHtml(o.deliveryNote)}</div>` : ''}
           <div class="order-card-footer">
             ${o.items.length > 0 ? `<span class="order-card-total">${formatCurrency(calcOrderTotal(o))}</span>` : '<span></span>'}
             <span class="text-muted" style="font-size:12px">${payLabel}</span>
@@ -2864,6 +2923,28 @@ function renderSettings() {
         </div>
       </div>
 
+      <!-- Data Backup -->
+      <div class="settings-section">
+        <div class="settings-title">Veri Yedekleme</div>
+        <div class="settings-card">
+          <div class="settings-item" style="cursor:pointer" onclick="exportJSON()">
+            <div>
+              <div class="settings-item-label">JSON Olarak Dışa Aktar</div>
+              <div class="settings-item-desc">Tüm verileri yedek dosyasına kaydet</div>
+            </div>
+            <span style="color:var(--text-muted)">&darr;</span>
+          </div>
+          <div class="settings-item" style="cursor:pointer" onclick="document.getElementById('json-import-input').click()">
+            <div>
+              <div class="settings-item-label">JSON'dan İçe Aktar</div>
+              <div class="settings-item-desc">Yedek dosyasından verileri geri yükle</div>
+            </div>
+            <span style="color:var(--text-muted)">&uarr;</span>
+          </div>
+        </div>
+        <input type="file" id="json-import-input" accept=".json" style="display:none" onchange="importJSON(this)">
+      </div>
+
       <!-- Cloud Sync Section -->
       <div class="settings-section">
         <div class="settings-title">Cloud Sync</div>
@@ -2941,6 +3022,7 @@ function renderCatalog() {
         <div style="display:flex;gap:8px">
           <input class="input" id="cat-unit" placeholder="Unit" style="flex:1;min-width:0">
           <input class="input" id="cat-price" placeholder="£0.00" type="number" step="0.01" style="flex:1;min-width:0">
+          <input class="input" id="cat-stock" placeholder="Stok" type="number" style="flex:0.7;min-width:0">
           <button class="btn btn-primary" onclick="addCatalogItem()" style="flex-shrink:0;padding:10px 20px">Add</button>
         </div>
       </div>`;
@@ -2957,7 +3039,10 @@ function renderCatalog() {
               <div class="catalog-card-name">${escHtml(c.name)}</div>
               <div class="catalog-card-unit">${escHtml(c.unit || 'No unit')}</div>
             </div>
-            <div class="catalog-card-price">${formatCurrency(c.price)}</div>
+            <div class="catalog-card-price">
+              ${formatCurrency(c.price)}
+              ${c.stock != null ? `<div style="font-size:11px;color:${c.stock <= 5 ? 'var(--danger)' : 'var(--text-sec)'};font-weight:600">Stok: ${c.stock}</div>` : ''}
+            </div>
             <div class="catalog-card-actions">
               <button class="btn-icon-sm" style="color:var(--info);font-size:14px" onclick="toggleCatalogEdit(${i})">
                 ${isEditing ? '&#10005;' : '&#9998;'}
@@ -2970,6 +3055,7 @@ function renderCatalog() {
             <input class="input" id="cat-edit-name-${i}" value="${escHtml(c.name)}" placeholder="Product name" style="flex:2;min-width:100px">
             <input class="input" id="cat-edit-unit-${i}" value="${escHtml(c.unit || '')}" placeholder="Unit" style="flex:1;min-width:60px">
             <input class="input" id="cat-edit-price-${i}" value="${c.price}" type="number" step="0.01" placeholder="Price" style="flex:1;min-width:70px">
+            <input class="input" id="cat-edit-stock-${i}" value="${c.stock != null ? c.stock : ''}" type="number" placeholder="Stok" style="flex:0.7;min-width:50px">
             <button class="btn btn-primary btn-sm" onclick="saveCatalogEdit(${i})" style="flex-shrink:0">Save</button>
           </div>` : ''}
         </div>`;
@@ -2988,10 +3074,12 @@ function saveCatalogEdit(idx) {
   const name = document.getElementById('cat-edit-name-' + idx).value.trim();
   const unit = document.getElementById('cat-edit-unit-' + idx).value.trim();
   const price = parseFloat(document.getElementById('cat-edit-price-' + idx).value) || 0;
+  const stockVal = document.getElementById('cat-edit-stock-' + idx).value;
+  const stock = stockVal !== '' ? parseInt(stockVal) : null;
   if (!name) { appAlert('Product name is required.'); return; }
   const oldName = S.catalog[idx].name;
   if (name !== oldName && S.catalog.some(c => c.name === name)) { appAlert('Product already exists.'); return; }
-  S.catalog[idx] = { name, unit, price };
+  S.catalog[idx] = { name, unit, price, stock };
   save.catalog();
   editingCatalogIdx = -1;
   renderCatalog();
@@ -3001,9 +3089,11 @@ function addCatalogItem() {
   const name = document.getElementById('cat-name').value.trim();
   const unit = document.getElementById('cat-unit').value.trim();
   const price = parseFloat(document.getElementById('cat-price').value) || 0;
+  const stockVal = document.getElementById('cat-stock').value;
+  const stock = stockVal !== '' ? parseInt(stockVal) : null;
   if (!name) { appAlert('Product name is required.'); return; }
   if (S.catalog.some(c => c.name === name)) { appAlert('Product already exists.'); return; }
-  S.catalog.push({ name, unit, price });
+  S.catalog.push({ name, unit, price, stock });
   save.catalog();
   if (curPage === 'catalog') renderCatalog();
   else if (curPage === 'settings') renderSettings();
@@ -3044,9 +3134,162 @@ function saveSupabaseConfig() {
 async function resetAllData() {
   if (!(await appConfirm('This will delete ALL local data.<br>Are you sure?'))) return;
   if (!(await appConfirm('This cannot be undone. Proceed?'))) return;
-  const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','stopCatalog','vis'];
+  const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','recurringOrders','stopCatalog','vis'];
   keys.forEach(k => localStorage.removeItem('cr4_' + k));
   location.reload();
+}
+
+// ══════════════════════════════════════════════════════════════
+// RECURRING ORDERS
+// ══════════════════════════════════════════════════════════════
+function showRecurringModal(stopId) {
+  const stop = getStop(stopId);
+  if (!stop) return;
+  const existing = S.recurringOrders[stopId];
+  if (existing) {
+    openModal(`
+      <div class="modal-handle"></div>
+      <div class="modal-title">Tekrarlayan Sipariş — ${escHtml(stop.n)}</div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:13px;font-weight:600;color:var(--text-sec);margin-bottom:8px">Mevcut Otomatik Sipariş:</div>
+        ${existing.items.map(i => `<div style="padding:4px 0;font-size:14px">${i.qty}x ${escHtml(i.name)} — ${formatCurrency(i.price * i.qty)}</div>`).join('')}
+        <div style="font-weight:700;padding-top:4px;font-size:15px">Toplam: ${formatCurrency(existing.items.reduce((s, i) => s + i.qty * i.price, 0))}</div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="createRecurringFromLast(${stopId})">Güncelle (Son Siparişten)</button>
+      <button class="btn btn-danger btn-block mt-1" onclick="removeRecurring(${stopId})">Tekrarlayan Siparişi Kaldır</button>
+    `);
+  } else {
+    openModal(`
+      <div class="modal-handle"></div>
+      <div class="modal-title">Tekrarlayan Sipariş — ${escHtml(stop.n)}</div>
+      <p class="text-muted" style="font-size:13px;margin-bottom:12px">Bu müşteri için otomatik tekrarlayan sipariş oluşturun. Rotadaki gününde otomatik sipariş oluşturulur.</p>
+      <button class="btn btn-primary btn-block" onclick="createRecurringFromLast(${stopId})">Son Siparişten Oluştur</button>
+    `);
+  }
+}
+
+function createRecurringFromLast(stopId) {
+  const delivered = getStopOrders(stopId, 'delivered').filter(o => o.items && o.items.length > 0)
+    .sort((a, b) => new Date(b.deliveredAt) - new Date(a.deliveredAt));
+  if (delivered.length === 0) {
+    const pending = getStopOrders(stopId, 'pending').filter(o => o.items && o.items.length > 0);
+    if (pending.length === 0) { appAlert('Bu müşterinin henüz siparişi yok.'); return; }
+    S.recurringOrders[stopId] = { items: pending[0].items.map(i => ({ name: i.name, qty: i.qty, price: i.price })) };
+  } else {
+    S.recurringOrders[stopId] = { items: delivered[0].items.map(i => ({ name: i.name, qty: i.qty, price: i.price })) };
+  }
+  save.recurringOrders();
+  closeModal();
+  appAlert('Tekrarlayan sipariş kaydedildi.');
+  if (curPage === 'profile') renderProfile();
+}
+
+function removeRecurring(stopId) {
+  delete S.recurringOrders[stopId];
+  save.recurringOrders();
+  closeModal();
+  appAlert('Tekrarlayan sipariş kaldırıldı.');
+  if (curPage === 'profile') renderProfile();
+}
+
+function autoCreateRecurringOrders() {
+  const week = getCurrentWeek();
+  const dayIdx = getTodayDayIndex();
+  const days = DAYS.filter(d => d.week === week);
+  const dayObj = days[dayIdx];
+  if (!dayObj) return;
+  const dayId = dayObj.id;
+  const today = todayStr();
+  const lastAutoKey = 'cr4_lastAutoRecurring';
+  if (localStorage.getItem(lastAutoKey) === today + '_' + dayId) return; // Already ran today
+
+  const assigned = [];
+  Object.entries(S.assign).forEach(([sid, did]) => {
+    if (did === dayId) assigned.push(parseInt(sid));
+  });
+
+  let created = 0;
+  assigned.forEach(stopId => {
+    const rec = S.recurringOrders[stopId];
+    if (!rec || !rec.items || rec.items.length === 0) return;
+    // Check if there's already a pending order for today
+    const hasPending = getStopOrders(stopId, 'pending').length > 0;
+    if (hasPending) return;
+    const id = uid();
+    S.orders[id] = {
+      id, customerId: stopId,
+      items: rec.items.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
+      note: 'Otomatik tekrarlayan sipariş',
+      status: 'pending', payMethod: null,
+      createdAt: new Date().toISOString(), deliveredAt: null
+    };
+    created++;
+  });
+  if (created > 0) {
+    save.orders();
+  }
+  localStorage.setItem(lastAutoKey, today + '_' + dayId);
+}
+
+// ══════════════════════════════════════════════════════════════
+// JSON BACKUP
+// ══════════════════════════════════════════════════════════════
+function exportJSON() {
+  const backup = {
+    version: '2.0',
+    exportedAt: new Date().toISOString(),
+    data: {
+      stops: STOPS,
+      assign: S.assign,
+      routeOrder: S.routeOrder,
+      geo: S.geo,
+      orders: S.orders,
+      debts: S.debts,
+      debtHistory: S.debtHistory,
+      cnotes: S.cnotes,
+      catalog: S.catalog,
+      customerPricing: S.customerPricing,
+      customerProducts: S.customerProducts,
+      recurringOrders: S.recurringOrders
+    }
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `costadoro-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  appAlert('Yedek dosyası indirildi.');
+}
+
+async function importJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  try {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    if (!backup.data) { appAlert('Geçersiz yedek dosyası.'); return; }
+    if (!(await appConfirm(`Bu yedek ${backup.exportedAt ? formatDate(backup.exportedAt) : 'bilinmeyen tarih'} tarihli.<br>Mevcut verilerin üzerine yazılacak. Devam?`))) return;
+    const d = backup.data;
+    if (d.stops) { STOPS = d.stops; save.stops(); }
+    if (d.assign) { S.assign = d.assign; save.assign(); }
+    if (d.routeOrder) { S.routeOrder = d.routeOrder; save.routeOrder(); }
+    if (d.geo) { S.geo = d.geo; save.geo(); }
+    if (d.orders) { S.orders = d.orders; save.orders(); }
+    if (d.debts) { S.debts = d.debts; save.debts(); }
+    if (d.debtHistory) { S.debtHistory = d.debtHistory; save.debtHistory(); }
+    if (d.cnotes) { S.cnotes = d.cnotes; save.cnotes(); }
+    if (d.catalog) { S.catalog = d.catalog; save.catalog(); }
+    if (d.customerPricing) { S.customerPricing = d.customerPricing; save.pricing(); }
+    if (d.customerProducts) { S.customerProducts = d.customerProducts; save.customerProducts(); }
+    if (d.recurringOrders) { S.recurringOrders = d.recurringOrders; save.recurringOrders(); }
+    appAlert('Veriler başarıyla geri yüklendi.');
+    renderSettings();
+  } catch (e) {
+    appAlert('Dosya okunamadı: ' + e.message);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3288,6 +3531,51 @@ function exportExcel() {
   XLSX.writeFile(wb, 'costadoro_export_' + todayStr() + '.xlsx');
 }
 
+function shareRouteSummary() {
+  const week = S.routeWeek;
+  const dayIdx = S.routeDay;
+  const days = DAYS.filter(d => d.week === week);
+  const dayObj = days[dayIdx];
+  if (!dayObj) return;
+  const dayId = dayObj.id;
+  const assigned = [];
+  Object.entries(S.assign).forEach(([sid, did]) => {
+    if (did === dayId) assigned.push(parseInt(sid));
+  });
+  const ro = S.routeOrder[dayId] || [];
+  const sorted = [...new Set([...ro.filter(id => assigned.includes(id)), ...assigned])];
+  const dateStr = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  let text = `📋 Costadoro Route\n${dateStr} (Week ${week})\n\n`;
+  let totalRev = 0;
+  sorted.forEach((stopId, idx) => {
+    const stop = getStop(stopId);
+    if (!stop) return;
+    const pending = getStopOrders(stopId, 'pending');
+    const delivered = getStopOrders(stopId, 'delivered').filter(o => {
+      const d = o.deliveredAt ? new Date(o.deliveredAt).toDateString() : '';
+      return d === new Date().toDateString();
+    });
+    const isDelivered = delivered.length > 0;
+    const debt = S.debts[stopId] || 0;
+    const todayRev = delivered.reduce((s, o) => s + calcOrderTotal(o), 0);
+    totalRev += todayRev;
+    const status = isDelivered ? '✅' : (pending.length > 0 ? '📦' : '⬜');
+    text += `${idx + 1}. ${status} ${stop.n} — ${stop.c}, ${stop.p}`;
+    if (pending.length > 0 && !isDelivered) text += ` (${pending.length} sipariş)`;
+    if (todayRev > 0) text += ` — ${formatCurrency(todayRev)}`;
+    if (debt > 0) text += ` [Borç: ${formatCurrency(debt)}]`;
+    text += '\n';
+  });
+  text += `\n📊 ${sorted.filter(id => getStopOrders(id, 'delivered').some(o => o.deliveredAt && new Date(o.deliveredAt).toDateString() === new Date().toDateString())).length}/${sorted.length} teslimat | Toplam: ${formatCurrency(totalRev)}`;
+
+  if (navigator.share) {
+    navigator.share({ title: 'Route Summary', text });
+  } else {
+    navigator.clipboard.writeText(text).then(() => appAlert('Rota özeti panoya kopyalandı.'));
+  }
+}
+
 function exportRouteExcel() {
   const wb = XLSX.utils.book_new();
 
@@ -3334,6 +3622,9 @@ function init() {
     btn.addEventListener('click', () => showPage(btn.dataset.page));
   });
 
+  // Auto-create recurring orders for today
+  autoCreateRecurringOrders();
+
   // Show route page
   showPage('route');
 
@@ -3357,9 +3648,68 @@ function init() {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && SB_CONFIGURED && navigator.onLine) syncFromSupabase();
   });
+
+  // Pull to refresh
+  let ptr_startY = 0, ptr_pulling = false;
+  const ptr_indicator = document.createElement('div');
+  ptr_indicator.style.cssText = 'position:fixed;top:0;left:0;right:0;text-align:center;padding:8px;background:var(--primary);color:#fff;font-size:13px;font-weight:600;z-index:9999;transform:translateY(-100%);transition:transform .3s';
+  document.body.appendChild(ptr_indicator);
+
+  document.addEventListener('touchstart', e => {
+    if (window.scrollY === 0) { ptr_startY = e.touches[0].clientY; ptr_pulling = true; }
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (!ptr_pulling) return;
+    const diff = e.touches[0].clientY - ptr_startY;
+    if (diff > 60) {
+      ptr_indicator.textContent = 'Bırak — Yenile';
+      ptr_indicator.style.transform = 'translateY(0)';
+    }
+  }, { passive: true });
+  document.addEventListener('touchend', () => {
+    if (!ptr_pulling) return;
+    ptr_pulling = false;
+    if (ptr_indicator.style.transform === 'translateY(0)') {
+      ptr_indicator.textContent = 'Senkronize ediliyor...';
+      if (SB_CONFIGURED && navigator.onLine) {
+        syncFromSupabase().then(() => {
+          ptr_indicator.textContent = 'Güncellendi!';
+          setTimeout(() => { ptr_indicator.style.transform = 'translateY(-100%)'; }, 800);
+        });
+      } else {
+        loadState();
+        showPage(curPage);
+        ptr_indicator.textContent = 'Yenilendi!';
+        setTimeout(() => { ptr_indicator.style.transform = 'translateY(-100%)'; }, 800);
+      }
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// Register service worker for offline caching
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE = 'costadoro-v2';
+    const URLS = ['./', 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
+      'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];
+    self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(URLS)).then(() => self.skipWaiting())));
+    self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
+    self.addEventListener('fetch', e => {
+      e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).then(res => {
+        if (res.ok && e.request.url.startsWith('http')) {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return res;
+      }).catch(() => caches.match('./'))));
+    });
+  `;
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+}
 
 </script>
 </body>
