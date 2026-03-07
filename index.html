@@ -353,12 +353,13 @@ a{text-decoration:none;color:inherit}
 
 /* === CATALOG EDIT === */
 .catalog-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:8px;transition:all .15s}
-.catalog-card-row{display:flex;align-items:center;gap:10px}
+.catalog-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .catalog-card-info{flex:1;min-width:0}
-.catalog-card-name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.catalog-card-name{font-size:15px;font-weight:600}
 .catalog-card-unit{font-size:12px;color:var(--text-sec);margin-top:2px}
-.catalog-card-price{font-size:16px;font-weight:700;flex-shrink:0}
-.catalog-card-actions{display:flex;gap:4px;flex-shrink:0}
+.catalog-card-price{font-size:16px;font-weight:700;flex-shrink:0;text-align:right}
+.catalog-card-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.catalog-card-actions{display:flex;gap:6px;flex-shrink:0}
 .catalog-edit-form{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
 .catalog-edit-form .input{flex:1;min-width:0}
 
@@ -3060,34 +3061,32 @@ function renderCatalog() {
       const isEditing = editingCatalogIdx === i;
       html += `
         <div class="catalog-card">
-          <div class="catalog-card-row">
+          <div class="catalog-card-top">
             <div class="catalog-card-info">
               <div class="catalog-card-name">${escHtml(c.name)}</div>
-              <div class="catalog-card-unit">${escHtml(c.unit || 'No unit')}</div>
+              <div class="catalog-card-unit">${escHtml(c.unit || 'No unit')} &middot; ${formatCurrency(c.price)}</div>
             </div>
-            <div class="catalog-card-price">
-              ${formatCurrency(c.price)}
-              ${c.stock != null ? `<div style="font-size:11px;color:${c.stock <= 5 ? 'var(--danger)' : 'var(--text-sec)'};font-weight:600">Stok: ${c.stock}</div>` : ''}
-            </div>
-            <div class="catalog-card-actions" style="display:flex;align-items:center;gap:4px">
-              <div style="display:flex;align-items:center;gap:2px;margin-right:4px">
-                <button class="btn-icon-sm" style="color:var(--danger);font-size:16px;width:28px;height:28px;border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();adjustStock(${i},-1)">−</button>
-                <input class="input" type="number" value="${c.stock != null ? c.stock : ''}" onchange="setStock(${i},this.value)" onclick="this.select()" placeholder="—" style="width:44px;text-align:center;padding:4px 2px;font-size:13px;font-weight:600">
-                <button class="btn-icon-sm" style="color:var(--success);font-size:16px;width:28px;height:28px;border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();adjustStock(${i},1)">+</button>
-              </div>
+            <div class="catalog-card-actions">
               <button class="btn-icon-sm" style="color:var(--info);font-size:14px" onclick="toggleCatalogEdit(${i})">
                 ${isEditing ? '&#10005;' : '&#9998;'}
               </button>
               <button class="btn-icon-sm" style="color:var(--danger);font-size:14px" onclick="removeCatalogItem(${i})">&#128465;</button>
             </div>
           </div>
+          <div class="catalog-card-bottom">
+            <div style="font-size:12px;color:var(--text-sec);font-weight:600">Stok</div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <button style="color:var(--danger);font-size:18px;width:36px;height:36px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer" onclick="event.stopPropagation();adjustStock(${i},-1)">−</button>
+              <input class="input" type="number" value="${c.stock != null ? c.stock : ''}" onchange="setStock(${i},this.value)" onclick="this.select()" placeholder="—" style="width:52px;height:36px;text-align:center;padding:4px;font-size:15px;font-weight:700;border-radius:8px">
+              <button style="color:var(--success);font-size:18px;width:36px;height:36px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer" onclick="event.stopPropagation();adjustStock(${i},1)">+</button>
+            </div>
+          </div>
           ${isEditing ? `
           <div class="catalog-edit-form">
-            <input class="input" id="cat-edit-name-${i}" value="${escHtml(c.name)}" placeholder="Product name" style="flex:2;min-width:100px">
-            <input class="input" id="cat-edit-unit-${i}" value="${escHtml(c.unit || '')}" placeholder="Unit" style="flex:1;min-width:60px">
-            <input class="input" id="cat-edit-price-${i}" value="${c.price}" type="number" step="0.01" placeholder="Price" style="flex:1;min-width:70px">
-            <input class="input" id="cat-edit-stock-${i}" value="${c.stock != null ? c.stock : ''}" type="number" placeholder="Stok" style="flex:0.7;min-width:50px">
-            <button class="btn btn-primary btn-sm" onclick="saveCatalogEdit(${i})" style="flex-shrink:0">Save</button>
+            <input class="input" id="cat-edit-name-${i}" value="${escHtml(c.name)}" placeholder="Ürün adı" style="flex:2;min-width:100px">
+            <input class="input" id="cat-edit-unit-${i}" value="${escHtml(c.unit || '')}" placeholder="Birim" style="flex:1;min-width:60px">
+            <input class="input" id="cat-edit-price-${i}" value="${c.price}" type="number" step="0.01" placeholder="Fiyat" style="flex:1;min-width:70px">
+            <button class="btn btn-primary btn-sm" onclick="saveCatalogEdit(${i})" style="flex-shrink:0">Kaydet</button>
           </div>` : ''}
         </div>`;
     });
@@ -3126,12 +3125,10 @@ function saveCatalogEdit(idx) {
   const name = document.getElementById('cat-edit-name-' + idx).value.trim();
   const unit = document.getElementById('cat-edit-unit-' + idx).value.trim();
   const price = parseFloat(document.getElementById('cat-edit-price-' + idx).value) || 0;
-  const stockVal = document.getElementById('cat-edit-stock-' + idx).value;
-  const stock = stockVal !== '' ? parseInt(stockVal) : null;
-  if (!name) { appAlert('Product name is required.'); return; }
+  if (!name) { appAlert('Ürün adı gerekli.'); return; }
   const oldName = S.catalog[idx].name;
-  if (name !== oldName && S.catalog.some(c => c.name === name)) { appAlert('Product already exists.'); return; }
-  S.catalog[idx] = { name, unit, price, stock };
+  if (name !== oldName && S.catalog.some(c => c.name === name)) { appAlert('Bu ürün zaten var.'); return; }
+  S.catalog[idx] = { name, unit, price, stock: S.catalog[idx].stock };
   save.catalog();
   editingCatalogIdx = -1;
   renderCatalog();
