@@ -1139,8 +1139,8 @@ function showDeliveryModal(stopId) {
         <label class="form-label">Teslimat Notu (opsiyonel)</label>
         <textarea class="textarea" id="delivery-note" rows="2" placeholder="Not ekleyin..." style="width:100%;font-size:14px;padding:8px;border:1px solid var(--border);border-radius:8px;resize:vertical"></textarea>
       </div>
-      <button class="btn btn-success btn-block mt-2" onclick="confirmDelivery()" id="btn-confirm-delivery" disabled>
-        Confirm Delivery
+      <button class="btn btn-success btn-block mt-2" id="btn-confirm-delivery" style="opacity:0.5" ontouchend="confirmDelivery()" onclick="confirmDelivery()">
+        Teslimatı Onayla
       </button>
     `);
   }
@@ -1216,7 +1216,8 @@ function selectPayMethod(method, el) {
   deliveryPayMethod = method;
   document.querySelectorAll('.pay-opt').forEach(o => o.classList.remove('selected'));
   el.classList.add('selected');
-  document.getElementById('btn-confirm-delivery').disabled = false;
+  const confirmBtn = document.getElementById('btn-confirm-delivery');
+  if (confirmBtn) confirmBtn.style.opacity = '1';
   // Show/hide cash amount section
   const cashSection = document.getElementById('cash-amount-section');
   if (cashSection) {
