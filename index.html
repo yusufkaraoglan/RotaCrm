@@ -1316,7 +1316,7 @@ function renderOrders(fullRender) {
       <header class="topbar">
         <h1>Orders</h1>
         <div class="topbar-actions">
-          <span class="badge badge-outline" id="orders-pending-badge">${Object.values(S.orders).filter(o=>o.status==='pending').length} pending</span>
+          <span class="badge badge-outline" id="orders-pending-badge">${Object.values(S.orders).filter(o=>o.status==='pending'&&o.payMethod!=='visit').length} pending</span>
         </div>
       </header>
       <div class="page-body">
@@ -1344,7 +1344,7 @@ function renderOrderResults() {
   const container = document.getElementById('orders-results');
   if (!container) return;
 
-  let orders = Object.values(S.orders);
+  let orders = Object.values(S.orders).filter(o => o.payMethod !== 'visit' || (o.items && o.items.length > 0));
   if (S.ordersFilter === 'pending') orders = orders.filter(o => o.status === 'pending');
   else if (S.ordersFilter === 'delivered') orders = orders.filter(o => o.status === 'delivered');
   if (S.ordersSearch) {
@@ -1358,7 +1358,7 @@ function renderOrderResults() {
 
   // Update badge
   const badge = document.getElementById('orders-pending-badge');
-  if (badge) badge.textContent = Object.values(S.orders).filter(o=>o.status==='pending').length + ' pending';
+  if (badge) badge.textContent = Object.values(S.orders).filter(o=>o.status==='pending'&&o.payMethod!=='visit').length + ' pending';
 
   let html = '';
   if (orders.length === 0) {
@@ -1556,9 +1556,10 @@ function filterProductPicker(q) {
 
   list.innerHTML = filtered.map(c => {
     const isSelected = selectedNames.includes(c.name);
-    return `<div class="ppick-item${isSelected ? ' selected' : ''}" onclick="toggleProductInOrder('${escHtml(c.name)}')">
+    const outOfStock = c.stock != null && c.stock <= 0;
+    return `<div class="ppick-item${isSelected ? ' selected' : ''}${outOfStock ? ' out-of-stock' : ''}" onclick="${outOfStock ? '' : `toggleProductInOrder('${escHtml(c.name)}')`}" style="${outOfStock ? 'opacity:0.4;pointer-events:none' : ''}">
       <div class="ppick-item-info">
-        <div class="ppick-item-name">${escHtml(c.name)}</div>
+        <div class="ppick-item-name">${escHtml(c.name)}${outOfStock ? ' <span style="color:var(--danger);font-size:11px">(Stok yok)</span>' : (c.stock != null ? ` <span style="color:var(--text-sec);font-size:11px">(${c.stock})</span>` : '')}</div>
         <div class="ppick-item-detail">${escHtml(c.unit || 'No unit')}</div>
       </div>
       <div class="ppick-item-price">${formatCurrency(tempOrderCustomerId != null ? getPrice(tempOrderCustomerId, c.name) : c.price)}</div>
@@ -1669,6 +1670,11 @@ function saveOrder() {
   if (tempOrderCustomerId == null) { appAlert('Please select a customer.'); return; }
   const items = tempOrderItems.filter(i => i.name && i.qty > 0);
   if (items.length === 0) { appAlert('Please add at least one item.'); return; }
+  // Check stock availability
+  if (!editingOrderId) {
+    const oos = items.filter(i => { const c = S.catalog.find(x => x.name === i.name); return c && c.stock != null && c.stock <= 0; });
+    if (oos.length > 0) { appAlert('Stokta yok: ' + oos.map(i => i.name).join(', ')); return; }
+  }
 
   const note = document.getElementById('order-note')?.value || '';
 
@@ -2551,7 +2557,7 @@ function renderReports() {
           if (report.rows.length === 0) return '<div class="card" style="text-align:center;padding:20px"><p class="text-muted" style="font-size:13px">No matching orders for this period</p></div>';
           let t = `<div class="card" style="padding:0;overflow:hidden;overflow-x:auto">
             <table class="report-table">
-              <thead><tr><th>Customer</th><th>Payment</th><th>Products</th></tr></thead>
+              <thead><tr><th>Customer</th><th>Date</th><th>Payment</th><th>Products</th></tr></thead>
               <tbody>`;
           report.rows.forEach(r => {
             let payHtml = '';
@@ -2562,14 +2568,15 @@ function renderReports() {
             if (r.payDisplay.unpaidAmount > 0 && r.payDisplay.type !== 'unpaid') {
               payHtml += `<div style="font-weight:600;color:var(--danger);font-size:11px">left: ${formatCurrency(r.payDisplay.unpaidAmount)}</div>`;
             }
-            t += `<tr>
+            t += `<tr${r.isDebtPayment ? ' style="background:#f0fdf4"' : ''}>
               <td style="font-size:13px">${escHtml(r.name)}</td>
+              <td style="font-size:11px;color:var(--text-sec);white-space:nowrap">${r.dateTime || ''}</td>
               <td>${payHtml}</td>
-              <td style="font-size:12px">${r.productsSummary}</td>
+              <td style="font-size:12px">${r.isDebtPayment ? '<em style="color:var(--success)">'+r.productsSummary+'</em>' : r.productsSummary}</td>
             </tr>`;
           });
           t += `<tr style="background:var(--bg);font-weight:700">
-              <td>TOTAL (${report.rows.length})</td>
+              <td colspan="2">TOTAL (${report.rows.length})</td>
               <td style="font-size:11px">
                 <span style="color:var(--success)">Cash ${formatCurrency(report.totalCash)}</span><br>
                 <span style="color:var(--info)">Bank ${formatCurrency(report.totalBank)}</span><br>
@@ -2686,85 +2693,94 @@ function calcProductSalesReport() {
   const orders = Object.values(S.orders);
   let filtered = orders.filter(o => {
     if (o.status !== 'delivered' || !o.deliveredAt) return false;
+    if (o.payMethod === 'visit' && (!o.items || o.items.length === 0)) return false;
     const d = o.deliveredAt.slice(0, 10);
     if (S.reportStart && d < S.reportStart) return false;
     if (S.reportEnd && d > S.reportEnd) return false;
-    // Must have at least one of the selected products
     return o.items.some(item => S.reportProducts.includes(item.name));
   });
 
-  // Group by customer, then aggregate with partial cash support
-  const byCustomer = {};
-  filtered.forEach(o => {
-    const cid = o.customerId;
-    if (!byCustomer[cid]) byCustomer[cid] = { orders: [], cashPaid: 0, bankPaid: 0, unpaidTotal: 0 };
-    byCustomer[cid].orders.push(o);
-    const total = calcOrderTotal(o);
-    if (o.payMethod === 'cash') {
-      const paid = (o.cashPaid !== undefined) ? o.cashPaid : total;
-      byCustomer[cid].cashPaid += Math.min(paid, total);
-      byCustomer[cid].unpaidTotal += Math.max(0, total - paid);
-    } else if (o.payMethod === 'bank') {
-      byCustomer[cid].bankPaid += total;
-    } else if (o.payMethod !== 'visit') {
-      byCustomer[cid].unpaidTotal += total;
-    }
-  });
+  // Sort by delivery date
+  filtered.sort((a, b) => (a.deliveredAt || '').localeCompare(b.deliveredAt || ''));
 
   const rows = [];
   let totalCash = 0, totalBank = 0, totalUnpaid = 0, grandTotal = 0;
 
-  Object.entries(byCustomer).forEach(([cid, data]) => {
-    const stop = getStop(parseInt(cid));
+  // Each order = separate row
+  filtered.forEach(o => {
+    const stop = getStop(o.customerId);
     if (!stop) return;
 
-    // Aggregate products for this customer (only selected products)
+    const total = calcOrderTotal(o);
     const prodMap = {};
-    let custTotal = 0;
-    data.orders.forEach(o => {
-      o.items.forEach(item => {
-        if (S.reportProducts.includes(item.name)) {
-          prodMap[item.name] = (prodMap[item.name] || 0) + item.qty;
-        }
-      });
-      custTotal += calcOrderTotal(o);
+    o.items.forEach(item => {
+      if (S.reportProducts.includes(item.name)) {
+        prodMap[item.name] = (prodMap[item.name] || 0) + item.qty;
+      }
     });
 
-    // Payment display: cash shows £amount, partial shows £paid + left: £X, bank shows "Bank", unpaid shows "Not Paid"
+    let cashPaid = 0, bankPaid = 0, unpaidTotal = 0;
+    if (o.payMethod === 'cash') {
+      const paid = (o.cashPaid !== undefined) ? o.cashPaid : total;
+      cashPaid = Math.min(paid, total);
+      unpaidTotal = Math.max(0, total - paid);
+    } else if (o.payMethod === 'bank') {
+      bankPaid = total;
+    } else {
+      unpaidTotal = total;
+    }
+
     const payDisplay = (() => {
       const parts = [];
       let primaryType = 'unpaid';
-      if (data.cashPaid > 0) {
-        parts.push({ text: formatCurrency(data.cashPaid), type: 'cash' });
-        primaryType = 'cash';
-      }
-      if (data.bankPaid > 0) {
-        parts.push({ text: 'Bank', type: 'bank' });
-        if (primaryType === 'unpaid') primaryType = 'bank';
-      }
-      if (data.unpaidTotal > 0) {
-        parts.push({ text: 'Not Paid', type: 'unpaid' });
-      }
+      if (cashPaid > 0) { parts.push({ text: formatCurrency(cashPaid), type: 'cash' }); primaryType = 'cash'; }
+      if (bankPaid > 0) { parts.push({ text: 'Bank', type: 'bank' }); if (primaryType === 'unpaid') primaryType = 'bank'; }
+      if (unpaidTotal > 0) { parts.push({ text: 'Not Paid', type: 'unpaid' }); }
       if (parts.length === 0) parts.push({ text: 'Not Paid', type: 'unpaid' });
-      return { parts, type: primaryType, unpaidAmount: data.unpaidTotal };
+      return { parts, type: primaryType, unpaidAmount: unpaidTotal };
     })();
 
-    const productsSummary = Object.entries(prodMap).map(([n, q]) => `${q} ${n}`).join(', ');
-
-    totalCash += data.cashPaid;
-    totalBank += data.bankPaid;
-    totalUnpaid += data.unpaidTotal;
-    grandTotal += custTotal;
+    totalCash += cashPaid;
+    totalBank += bankPaid;
+    totalUnpaid += unpaidTotal;
+    grandTotal += total;
 
     rows.push({
       name: stop.n,
+      dateTime: formatDateTime(o.deliveredAt),
       payDisplay,
-      productsSummary,
-      total: custTotal
+      productsSummary: Object.entries(prodMap).map(([n, q]) => `${q} ${n}`).join(', '),
+      total
     });
   });
 
-  rows.sort((a, b) => b.total - a.total);
+  // Add debt payment rows (outstanding payment received)
+  Object.entries(S.debtHistory).forEach(([cid, history]) => {
+    if (!history) return;
+    const stop = getStop(parseInt(cid));
+    if (!stop) return;
+    history.forEach(entry => {
+      if (entry.type !== 'clear') return;
+      const d = entry.date ? entry.date.slice(0, 10) : '';
+      if (S.reportStart && d < S.reportStart) return;
+      if (S.reportEnd && d > S.reportEnd) return;
+      const payMethod = entry.note?.includes('bank') ? 'bank' : entry.note?.includes('cash') ? 'cash' : 'bank';
+      const parts = [{ text: formatCurrency(entry.amount), type: payMethod }];
+      if (payMethod === 'cash') totalCash += entry.amount;
+      else totalBank += entry.amount;
+      rows.push({
+        name: stop.n,
+        dateTime: formatDateTime(entry.date),
+        payDisplay: { parts, type: payMethod, unpaidAmount: 0 },
+        productsSummary: 'Outstanding payment received',
+        total: entry.amount,
+        isDebtPayment: true
+      });
+    });
+  });
+
+  // Sort all rows by dateTime
+  rows.sort((a, b) => (a.name || '').localeCompare(b.name || '') || (a.dateTime || '').localeCompare(b.dateTime || ''));
 
   return { rows, totalCash, totalBank, totalUnpaid, grandTotal };
 }
@@ -2792,10 +2808,11 @@ function exportProductReportPDF() {
     if (r.payDisplay.unpaidAmount > 0 && r.payDisplay.type !== 'unpaid') {
       payCell += `<div style="color:#F04438;font-size:10px;font-weight:600">left: ${formatCurrency(r.payDisplay.unpaidAmount)}</div>`;
     }
-    tableRows += `<tr>
+    tableRows += `<tr${r.isDebtPayment ? ' style="background:#f0fdf4"' : ''}>
       <td>${escHtml(r.name)}</td>
+      <td style="font-size:10px;color:#666">${r.dateTime || ''}</td>
       <td>${payCell}</td>
-      <td>${r.productsSummary}</td>
+      <td>${r.isDebtPayment ? '<em style="color:#12B76A">'+r.productsSummary+'</em>' : r.productsSummary}</td>
     </tr>`;
   });
 
@@ -2821,11 +2838,11 @@ function exportProductReportPDF() {
       Generated: ${exportDate}
     </div>
     <table>
-      <thead><tr><th>Customer</th><th>Payment</th><th>Products</th></tr></thead>
+      <thead><tr><th>Customer</th><th>Date</th><th>Payment</th><th>Products</th></tr></thead>
       <tbody>
         ${tableRows}
         <tr class="total-row">
-          <td>TOTAL (${report.rows.length} customers)</td>
+          <td colspan="2">TOTAL (${report.rows.length})</td>
           <td style="font-size:10px">
             <span style="color:#12B76A">Cash ${formatCurrency(report.totalCash)}</span> |
             <span style="color:#2E90FA">Bank ${formatCurrency(report.totalBank)}</span> |
@@ -2853,22 +2870,21 @@ function exportProductReportExcel() {
   const report = calcProductSalesReport();
   if (report.rows.length === 0) { appAlert('No data to export.'); return; }
 
-  const data = [['Customer', 'Payment', 'Unpaid', 'Products']];
+  const data = [['Customer', 'Date', 'Payment', 'Unpaid', 'Products']];
   report.rows.forEach(r => {
     const payText = r.payDisplay.parts.map(p => p.text).join(' + ');
     const unpaidText = r.payDisplay.unpaidAmount > 0 ? formatCurrency(r.payDisplay.unpaidAmount) : '';
-    data.push([r.name, payText, unpaidText, r.productsSummary]);
+    data.push([r.name, r.dateTime || '', payText, unpaidText, r.isDebtPayment ? 'Outstanding payment received' : r.productsSummary]);
   });
   data.push([]);
   data.push(['TOTAL']);
-  data.push(['Cash', formatCurrency(report.totalCash)]);
-  data.push(['Bank', formatCurrency(report.totalBank)]);
-  data.push(['Unpaid', formatCurrency(report.totalUnpaid)]);
+  data.push(['Cash', '', formatCurrency(report.totalCash)]);
+  data.push(['Bank', '', formatCurrency(report.totalBank)]);
+  data.push(['Unpaid', '', formatCurrency(report.totalUnpaid)]);
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(data);
-  // Set column widths
-  ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 12 }, { wch: 40 }];
+  ws['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 40 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Product Report');
   XLSX.writeFile(wb, 'product_report_' + todayStr() + '.xlsx');
 }
@@ -3053,7 +3069,14 @@ function renderCatalog() {
               ${formatCurrency(c.price)}
               ${c.stock != null ? `<div style="font-size:11px;color:${c.stock <= 5 ? 'var(--danger)' : 'var(--text-sec)'};font-weight:600">Stok: ${c.stock}</div>` : ''}
             </div>
-            <div class="catalog-card-actions">
+            <div class="catalog-card-actions" style="display:flex;align-items:center;gap:4px">
+              ${c.stock != null ? `
+                <div style="display:flex;align-items:center;gap:2px;margin-right:4px">
+                  <button class="btn-icon-sm" style="color:var(--danger);font-size:16px;width:28px;height:28px;border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();adjustStock(${i},-1)">−</button>
+                  <input class="input" type="number" value="${c.stock}" onchange="setStock(${i},this.value)" style="width:44px;text-align:center;padding:4px 2px;font-size:13px;font-weight:600">
+                  <button class="btn-icon-sm" style="color:var(--success);font-size:16px;width:28px;height:28px;border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();adjustStock(${i},1)">+</button>
+                </div>
+              ` : ''}
               <button class="btn-icon-sm" style="color:var(--info);font-size:14px" onclick="toggleCatalogEdit(${i})">
                 ${isEditing ? '&#10005;' : '&#9998;'}
               </button>
@@ -3073,6 +3096,21 @@ function renderCatalog() {
   }
   html += `</div>`;
   document.getElementById('page-catalog').innerHTML = html;
+}
+
+function adjustStock(idx, delta) {
+  if (!S.catalog[idx] || S.catalog[idx].stock == null) return;
+  S.catalog[idx].stock = Math.max(0, S.catalog[idx].stock + delta);
+  save.catalog();
+  renderCatalog();
+}
+
+function setStock(idx, val) {
+  if (!S.catalog[idx]) return;
+  const v = parseInt(val);
+  S.catalog[idx].stock = isNaN(v) ? null : Math.max(0, v);
+  save.catalog();
+  renderCatalog();
 }
 
 function toggleCatalogEdit(idx) {
@@ -3660,20 +3698,21 @@ function init() {
   });
 
   // Pull to refresh
-  let ptr_startY = 0, ptr_pulling = false;
+  let ptr_startY = 0, ptr_pulling = false, ptr_ready = false;
   const ptr_indicator = document.createElement('div');
   ptr_indicator.id = 'ptr-indicator';
-  ptr_indicator.style.cssText = 'position:fixed;top:0;left:0;right:0;text-align:center;padding:8px;background:var(--primary);color:#fff;font-size:13px;font-weight:600;z-index:9999;transform:translateY(-100%);transition:transform .3s';
+  ptr_indicator.style.cssText = 'position:fixed;top:0;left:0;right:0;text-align:center;padding:8px;background:var(--primary);color:#fff;font-size:13px;font-weight:600;z-index:9999;transform:translateY(-100%);transition:transform .3s;pointer-events:none';
   document.body.appendChild(ptr_indicator);
 
   function isModalOpen() { return document.getElementById('modal-overlay')?.classList.contains('active'); }
   document.addEventListener('touchstart', e => {
-    if (window.scrollY === 0 && !isModalOpen()) { ptr_startY = e.touches[0].clientY; ptr_pulling = true; }
+    if (window.scrollY <= 1 && !isModalOpen()) { ptr_startY = e.touches[0].clientY; ptr_pulling = true; ptr_ready = false; }
   }, { passive: true });
   document.addEventListener('touchmove', e => {
     if (!ptr_pulling || isModalOpen()) { ptr_pulling = false; return; }
     const diff = e.touches[0].clientY - ptr_startY;
     if (diff > 80) {
+      ptr_ready = true;
       ptr_indicator.textContent = 'Bırak — Yenile';
       ptr_indicator.style.transform = 'translateY(0)';
     }
@@ -3681,11 +3720,15 @@ function init() {
   document.addEventListener('touchend', () => {
     if (!ptr_pulling) return;
     ptr_pulling = false;
-    if (ptr_indicator.style.transform === 'translateY(0)') {
+    if (ptr_ready) {
+      ptr_ready = false;
       ptr_indicator.textContent = 'Senkronize ediliyor...';
       if (SB_CONFIGURED && navigator.onLine) {
         syncFromSupabase().then(() => {
           ptr_indicator.textContent = 'Güncellendi!';
+          setTimeout(() => { ptr_indicator.style.transform = 'translateY(-100%)'; }, 800);
+        }).catch(() => {
+          ptr_indicator.textContent = 'Hata oluştu';
           setTimeout(() => { ptr_indicator.style.transform = 'translateY(-100%)'; }, 800);
         });
       } else {
