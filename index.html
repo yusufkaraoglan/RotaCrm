@@ -639,8 +639,10 @@ let curPage = 'route';
 let profileStopId = null;
 let tempOrderItems = [];
 let tempOrderCustomerId = null;
+let tempOrderDeliveryDate = '';
 let deliveryStopId = null;
 let deliveryPayMethod = null;
+let deliveryOrderIds = null; // null = all pending, array = specific order IDs
 let profilePreviousPage = 'customers';
 let leafletMap = null;
 let mapMarkers = [];
@@ -1032,13 +1034,15 @@ function calcDayRevenue(dayId) {
 // ══════════════════════════════════════════════════════════════
 let deliveryCashAmount = 0;
 
-function showDeliveryModal(stopId) {
+function showDeliveryModal(stopId, singleOrderId) {
   deliveryStopId = stopId;
   deliveryPayMethod = null;
   deliveryCashAmount = 0;
+  deliveryOrderIds = singleOrderId ? [singleOrderId] : null;
   const stop = getStop(stopId);
   if (!stop) return;
-  const pending = getStopOrders(stopId, 'pending');
+  const allPending = getStopOrders(stopId, 'pending');
+  const pending = singleOrderId ? allPending.filter(o => o.id === singleOrderId) : allPending;
   const debt = S.debts[stopId] || 0;
   const isVisitMode = pending.length === 0;
 
@@ -1048,7 +1052,7 @@ function showDeliveryModal(stopId) {
       const total = calcOrderTotal(o);
       itemsHtml += `<div class="card" style="margin-bottom:8px">
         <div class="order-card-items">${o.items.map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>
-        <div class="flex-between"><span class="text-muted" style="font-size:12px">${formatDateTime(o.createdAt)}</span><b>${formatCurrency(total)}</b></div>
+        <div class="flex-between"><span class="text-muted" style="font-size:12px">${formatDateTime(o.createdAt)}${o.deliveryDate ? ` · Teslimat: ${o.deliveryDate}` : ''}</span><b>${formatCurrency(total)}</b></div>
         ${o.note ? `<div class="text-muted" style="font-size:12px;margin-top:4px">${escHtml(o.note)}</div>` : ''}
       </div>`;
     });
@@ -1252,7 +1256,8 @@ function confirmDelivery() {
     if (!deliveryStopId && deliveryStopId !== 0) { appAlert('Hata: stopId yok'); return; }
     if (!deliveryPayMethod) { appAlert('Lütfen ödeme yöntemi seçin.'); return; }
     const stopId = parseInt(deliveryStopId);
-    const pending = getStopOrders(stopId, 'pending');
+    const allPending = getStopOrders(stopId, 'pending');
+    const pending = deliveryOrderIds ? allPending.filter(o => deliveryOrderIds.includes(o.id)) : allPending;
     if (pending.length === 0) { appAlert('Bekleyen sipariş bulunamadı.'); closeModal(); return; }
     const now = new Date().toISOString();
     const grandTotal = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
@@ -1373,7 +1378,7 @@ function renderOrderResults() {
           <div class="order-card-head">
             <div onclick="showProfile(${o.customerId})" style="cursor:pointer">
               <div class="order-card-name">${stop ? escHtml(stop.n) : 'Unknown'}</div>
-              <div class="order-card-date">${formatDateTime(o.createdAt)}</div>
+              <div class="order-card-date">${formatDateTime(o.createdAt)}${o.deliveryDate ? ` · Teslimat: ${o.deliveryDate}` : ''}</div>
             </div>
             <span class="badge ${o.status==='pending' ? 'badge-warning' : 'badge-success'}">${o.status}</span>
           </div>
@@ -1397,7 +1402,7 @@ function renderOrderResults() {
 
 function showDeliveryFromOrder(orderId) {
   const order = S.orders[orderId];
-  if (order) showDeliveryModal(order.customerId);
+  if (order) showDeliveryModal(order.customerId, orderId);
 }
 
 async function deleteOrderFromList(orderId) {
@@ -1415,14 +1420,16 @@ function quickReorder(customerId, lastOrderId) {
   editingOrderId = null;
   tempOrderCustomerId = customerId;
   tempOrderItems = lastOrder.items.map(i => ({ name: i.name, qty: i.qty, price: i.price }));
-  renderOrderFormModal('New Order (Reorder)', lastOrder.note || '');
+  tempOrderDeliveryDate = '';
+  renderOrderFormModal('Tekrar Sipariş', lastOrder.note || '');
 }
 
 function showNewOrderModal(preCustomerId) {
   editingOrderId = null;
   tempOrderItems = [{ name: '', qty: 1, price: 0 }];
   tempOrderCustomerId = preCustomerId != null ? preCustomerId : null;
-  renderOrderFormModal('New Order');
+  tempOrderDeliveryDate = '';
+  renderOrderFormModal('Yeni Sipariş');
 }
 
 function showEditOrderModal(orderId) {
@@ -1432,7 +1439,8 @@ function showEditOrderModal(orderId) {
   tempOrderCustomerId = order.customerId;
   tempOrderItems = order.items.map(i => ({ ...i }));
   if (tempOrderItems.length === 0) tempOrderItems = [{ name: '', qty: 1, price: 0 }];
-  renderOrderFormModal('Edit Order', order.note || '');
+  tempOrderDeliveryDate = order.deliveryDate || '';
+  renderOrderFormModal('Sipariş Düzenle', order.note || '');
 }
 
 function renderOrderFormModal(title, existingNote) {
@@ -1489,10 +1497,15 @@ function renderOrderFormModal(title, existingNote) {
       <span style="font-weight:700;font-size:18px;color:var(--primary)" id="order-total">${formatCurrency(total)}</span>
     </div>
     <div class="form-group">
-      <label class="form-label">Note (optional)</label>
+      <label class="form-label">Teslimat Tarihi</label>
+      <input class="input" type="date" id="order-delivery-date" value="${tempOrderDeliveryDate}" min="${new Date().toISOString().split('T')[0]}" onchange="tempOrderDeliveryDate=this.value">
+      <div class="text-muted" style="font-size:11px;margin-top:4px">${tempOrderDeliveryDate ? '' : 'Boş bırakılırsa bugün için geçerli'}</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Not (opsiyonel)</label>
       <textarea class="textarea" id="order-note" rows="2" style="min-height:50px">${existingNote !== undefined ? escHtml(existingNote) : ''}</textarea>
     </div>
-    <button class="btn btn-primary btn-block" onclick="saveOrder()" style="margin-top:8px">${editingOrderId ? 'Update Order' : 'Save Order'}</button>
+    <button class="btn btn-primary btn-block" onclick="saveOrder()" style="margin-top:8px">${editingOrderId ? 'Siparişi Güncelle' : 'Siparişi Kaydet'}</button>
   `);
 }
 
@@ -1501,13 +1514,13 @@ function changeOrderItemQty(idx, delta) {
   const newQty = (tempOrderItems[idx].qty || 1) + delta;
   if (newQty < 1) return;
   tempOrderItems[idx].qty = newQty;
-  renderOrderFormModal(editingOrderId ? 'Edit Order' : 'New Order');
+  renderOrderFormModal(editingOrderId ? 'Sipariş Düzenle' : 'Yeni Sipariş');
 }
 
 function setOrderItemQty(idx, qty) {
   if (!tempOrderItems[idx]) return;
   tempOrderItems[idx].qty = Math.max(1, qty);
-  renderOrderFormModal(editingOrderId ? 'Edit Order' : 'New Order');
+  renderOrderFormModal(editingOrderId ? 'Sipariş Düzenle' : 'Yeni Sipariş');
 }
 
 function openProductPicker() {
@@ -1536,7 +1549,7 @@ function closeProductPicker() {
 
 function doneProductPicker() {
   closeProductPicker();
-  renderOrderFormModal(editingOrderId ? 'Edit Order' : 'New Order');
+  renderOrderFormModal(editingOrderId ? 'Sipariş Düzenle' : 'Yeni Sipariş');
 }
 
 function updateDoneBtn() {
@@ -1645,7 +1658,7 @@ function updateOrderItem(idx, field, value) {
     const price = tempOrderCustomerId != null ? getPrice(tempOrderCustomerId, value) : (S.catalog.find(c => c.name === value)?.price || 0);
     tempOrderItems[idx].price = price;
   }
-  renderOrderFormModal(editingOrderId ? 'Edit Order' : 'New Order');
+  renderOrderFormModal(editingOrderId ? 'Sipariş Düzenle' : 'Yeni Sipariş');
 }
 
 function updateOrderPrices() {
@@ -1654,7 +1667,7 @@ function updateOrderPrices() {
       item.price = tempOrderCustomerId != null ? getPrice(tempOrderCustomerId, item.name) : (S.catalog.find(c => c.name === item.name)?.price || 0);
     }
   });
-  renderOrderFormModal(editingOrderId ? 'Edit Order' : 'New Order');
+  renderOrderFormModal(editingOrderId ? 'Sipariş Düzenle' : 'Yeni Sipariş');
 }
 
 function addOrderItem() {
@@ -1664,7 +1677,7 @@ function addOrderItem() {
 function removeOrderItem(idx) {
   tempOrderItems.splice(idx, 1);
   if (tempOrderItems.length === 0) tempOrderItems.push({ name: '', qty: 1, price: 0 });
-  renderOrderFormModal(editingOrderId ? 'Edit Order' : 'New Order');
+  renderOrderFormModal(editingOrderId ? 'Sipariş Düzenle' : 'Yeni Sipariş');
 }
 
 function saveOrder() {
@@ -1678,12 +1691,14 @@ function saveOrder() {
   }
 
   const note = document.getElementById('order-note')?.value || '';
+  const deliveryDate = document.getElementById('order-delivery-date')?.value || '';
 
   if (editingOrderId && S.orders[editingOrderId]) {
     // Update existing order
     const order = S.orders[editingOrderId];
     order.items = items.map(i => ({ name: i.name, qty: i.qty, price: i.price }));
     order.note = note;
+    order.deliveryDate = deliveryDate;
   } else {
     // Create new order
     const id = uid();
@@ -1692,6 +1707,7 @@ function saveOrder() {
       customerId: parseInt(tempOrderCustomerId),
       items: items.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
       note: note,
+      deliveryDate: deliveryDate,
       status: 'pending',
       payMethod: null,
       createdAt: new Date().toISOString(),
@@ -1946,7 +1962,7 @@ function renderProfile() {
       html += `
         <div class="order-card">
           <div class="order-card-head">
-            <div class="order-card-date">${formatDateTime(o.createdAt)}</div>
+            <div class="order-card-date">${formatDateTime(o.createdAt)}${o.deliveryDate ? ` · Teslimat: ${o.deliveryDate}` : ''}</div>
             <span class="badge badge-warning">pending</span>
           </div>
           <div class="order-card-items">${o.items.map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>
