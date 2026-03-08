@@ -841,6 +841,20 @@ async function geocodeStop(stop, opts = {}) {
   return false;
 }
 
+async function geocodeAllStops() {
+  const missing = STOPS.filter(s => !S.geo[s.id] || !S.geo[s.id].lat);
+  if (missing.length === 0) { appAlert('Tüm müşteriler zaten geocode edilmiş.'); return; }
+  appAlert(`${missing.length} müşteri geocode ediliyor...`);
+  let done = 0;
+  for (const stop of missing) {
+    await geocodeStop(stop, { force: true, silent: true });
+    done++;
+    if (done < missing.length) await new Promise(r => setTimeout(r, 1100));
+  }
+  appAlert(`${done} müşteri geocode edildi.`);
+  if (curPage === 'map') refreshMapMarkers();
+}
+
 function getCurrentWeek() {
   const now = new Date();
   // Reference: 2 March 2026 (Monday) = Week A
@@ -3464,6 +3478,13 @@ function renderSettings() {
             <div>
               <div class="settings-item-label">View Map</div>
               <div class="settings-item-desc">See all customers on map</div>
+            </div>
+            <span style="color:var(--text-muted)">&rarr;</span>
+          </div>
+          <div class="settings-item" onclick="geocodeAllStops()" style="cursor:pointer">
+            <div>
+              <div class="settings-item-label">Tümünü Geocode Et</div>
+              <div class="settings-item-desc">Koordinatı olmayan müşterileri geocode et</div>
             </div>
             <span style="color:var(--text-muted)">&rarr;</span>
           </div>
