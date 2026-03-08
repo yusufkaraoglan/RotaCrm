@@ -982,9 +982,6 @@ function openModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-overlay').classList.add('active');
   document.body.style.overflow = 'hidden';
-  // Hide pull-to-refresh indicator if visible
-  const ptrEl = document.getElementById('ptr-indicator');
-  if (ptrEl) ptrEl.style.transform = 'translateY(-100%)';
 }
 
 function closeModal() {
@@ -4297,48 +4294,6 @@ function init() {
     if (!document.hidden && SB_CONFIGURED && navigator.onLine) syncFromSupabase();
   });
 
-  // Pull to refresh
-  let ptr_startY = 0, ptr_pulling = false, ptr_ready = false;
-  const ptr_indicator = document.createElement('div');
-  ptr_indicator.id = 'ptr-indicator';
-  ptr_indicator.style.cssText = 'position:fixed;top:0;left:0;right:0;text-align:center;padding:8px;background:var(--primary);color:#fff;font-size:13px;font-weight:600;z-index:9999;transform:translateY(-100%);transition:transform .3s;pointer-events:none';
-  document.body.appendChild(ptr_indicator);
-
-  function isModalOpen() { return document.getElementById('modal-overlay')?.classList.contains('active'); }
-  document.addEventListener('touchstart', e => {
-    if (window.scrollY <= 1 && !isModalOpen()) { ptr_startY = e.touches[0].clientY; ptr_pulling = true; ptr_ready = false; }
-  }, { passive: true });
-  document.addEventListener('touchmove', e => {
-    if (!ptr_pulling || isModalOpen()) { ptr_pulling = false; return; }
-    const diff = e.touches[0].clientY - ptr_startY;
-    if (diff > 80) {
-      ptr_ready = true;
-      ptr_indicator.textContent = 'Bırak — Yenile';
-      ptr_indicator.style.transform = 'translateY(0)';
-    }
-  }, { passive: true });
-  document.addEventListener('touchend', () => {
-    if (!ptr_pulling) return;
-    ptr_pulling = false;
-    if (ptr_ready) {
-      ptr_ready = false;
-      ptr_indicator.textContent = 'Senkronize ediliyor...';
-      if (SB_CONFIGURED && navigator.onLine) {
-        syncFromSupabase().then(() => {
-          ptr_indicator.textContent = 'Güncellendi!';
-          setTimeout(() => { ptr_indicator.style.transform = 'translateY(-100%)'; }, 800);
-        }).catch(() => {
-          ptr_indicator.textContent = 'Hata oluştu';
-          setTimeout(() => { ptr_indicator.style.transform = 'translateY(-100%)'; }, 800);
-        });
-      } else {
-        loadState();
-        showPage(curPage);
-        ptr_indicator.textContent = 'Yenilendi!';
-        setTimeout(() => { ptr_indicator.style.transform = 'translateY(-100%)'; }, 800);
-      }
-    }
-  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
