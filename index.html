@@ -3283,6 +3283,7 @@ function calcProductSalesReport() {
       const parts = [{ text: formatCurrency(entry.amount), type: payMethod }];
       if (payMethod === 'cash') totalCash += entry.amount;
       else totalBank += entry.amount;
+      totalUnpaid = Math.max(0, totalUnpaid - entry.amount);
       rows.push({
         name: stop.n,
         rawDate: entry.date || '',
