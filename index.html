@@ -754,6 +754,167 @@ function calcOrderTotal(order) {
   return order.items.reduce((s, i) => s + (i.qty || 0) * (i.price || 0), 0);
 }
 
+function roundMoney(n) {
+  return Math.round((n || 0) * 100) / 100;
+}
+
+function getTrackedCatalogItem(name) {
+  return S.catalog.find(c => c.name === name && c.stock != null);
+}
+
+function buildItemQtyMap(items) {
+  const map = {};
+  (items || []).forEach(item => {
+    if (!item || !item.name) return;
+    map[item.name] = (map[item.name] || 0) + (parseInt(item.qty, 10) || 0);
+  });
+  return map;
+}
+
+function validateTrackedStockChange(prevItems, nextItems) {
+  const prevMap = buildItemQtyMap(prevItems);
+  const nextMap = buildItemQtyMap(nextItems);
+  const names = [...new Set([...Object.keys(prevMap), ...Object.keys(nextMap)])];
+  const shortages = [];
+
+  names.forEach(name => {
+    const catItem = getTrackedCatalogItem(name);
+    if (!catItem) return;
+    const available = (catItem.stock || 0) + (prevMap[name] || 0);
+    const needed = nextMap[name] || 0;
+    if (needed > available) shortages.push(`${name} (${available} mevcut, ${needed} istendi)`);
+  });
+
+  return shortages;
+}
+
+function applyTrackedStockChange(prevItems, nextItems) {
+  const prevMap = buildItemQtyMap(prevItems);
+  const nextMap = buildItemQtyMap(nextItems);
+  const names = [...new Set([...Object.keys(prevMap), ...Object.keys(nextMap)])];
+  const touched = [];
+
+  names.forEach(name => {
+    const catItem = getTrackedCatalogItem(name);
+    if (!catItem) return;
+    const prevQty = prevMap[name] || 0;
+    const nextQty = nextMap[name] || 0;
+    if (prevQty === nextQty) return;
+    catItem.stock = Math.max(0, (catItem.stock || 0) - (nextQty - prevQty));
+    touched.push(catItem);
+  });
+
+  return {
+    changed: touched.length > 0,
+    lowStockWarnings: touched
+      .filter(item => item.stock <= 5)
+      .map(item => `${item.name}: ${item.stock} kaldi`)
+  };
+}
+
+function createDebtHistoryEntry(stopId, entry) {
+  if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
+  const debtEntry = { id: uid(), ...entry };
+  S.debtHistory[stopId].unshift(debtEntry);
+  return debtEntry;
+}
+
+function getOrderDebtImpact(order) {
+  if (!order || order.status !== 'delivered') return 0;
+  const total = roundMoney(calcOrderTotal(order));
+  if (order.payMethod === 'unpaid') return total;
+  if (order.payMethod === 'cash') {
+    const paid = roundMoney(Math.max(0, Math.min(total, parseFloat(order.cashPaid) || 0)));
+    return roundMoney(Math.max(0, total - paid));
+  }
+  return 0;
+}
+
+function getOrderDebtNote(order) {
+  const impact = getOrderDebtImpact(order);
+  if (impact <= 0) return '';
+  if (order.payMethod === 'unpaid') return 'Teslimat - odenmedi';
+  return `Teslimat - eksik nakit (${formatCurrency(impact)})`;
+}
+
+function addOrderDebtEffect(order) {
+  const impact = getOrderDebtImpact(order);
+  if (impact <= 0) {
+    order.debtEntryIds = [];
+    return 0;
+  }
+  const entry = createDebtHistoryEntry(order.customerId, {
+    date: order.deliveredAt || new Date().toISOString(),
+    amount: impact,
+    type: 'add',
+    note: getOrderDebtNote(order),
+    orderId: order.id
+  });
+  order.debtEntryIds = [entry.id];
+  S.debts[order.customerId] = roundMoney((S.debts[order.customerId] || 0) + impact);
+  return impact;
+}
+
+function removeLinkedOrderDebtEntries(order) {
+  const ids = Array.isArray(order?.debtEntryIds) ? order.debtEntryIds : [];
+  if (!ids.length) return 0;
+  const history = S.debtHistory[order.customerId] || [];
+  let removed = 0;
+
+  ids.forEach(id => {
+    const idx = history.findIndex(entry => entry.id === id);
+    if (idx >= 0) {
+      removed = roundMoney(removed + (history[idx].amount || 0));
+      history.splice(idx, 1);
+    }
+  });
+
+  order.debtEntryIds = [];
+  return removed;
+}
+
+function addDebtAdjustmentEntry(stopId, amount, note, orderId) {
+  if (amount <= 0) return;
+  createDebtHistoryEntry(stopId, {
+    date: new Date().toISOString(),
+    amount,
+    type: 'adjust',
+    note,
+    orderId
+  });
+}
+
+function reconcileOrderDebtEffect(prevOrder, nextOrder) {
+  const order = nextOrder || prevOrder;
+  if (!order) return false;
+  const stopId = order.customerId;
+  let changed = false;
+
+  if (prevOrder) {
+    const prevImpact = getOrderDebtImpact(prevOrder);
+    const removed = removeLinkedOrderDebtEntries(prevOrder);
+    if (removed > 0) {
+      S.debts[stopId] = Math.max(0, roundMoney((S.debts[stopId] || 0) - removed));
+      changed = true;
+    }
+    const unresolved = roundMoney(Math.max(0, prevImpact - removed));
+    if (unresolved > 0) {
+      S.debts[stopId] = Math.max(0, roundMoney((S.debts[stopId] || 0) - unresolved));
+      addDebtAdjustmentEntry(stopId, unresolved, 'Siparis borc duzeltmesi', prevOrder.id);
+      changed = true;
+    }
+  }
+
+  if (nextOrder && getOrderDebtImpact(nextOrder) > 0) {
+    addOrderDebtEffect(nextOrder);
+    changed = true;
+  } else if (nextOrder) {
+    nextOrder.debtEntryIds = [];
+  }
+
+  return changed;
+}
+
 function getWeekMondayStr(date) {
   const d = new Date(date);
   const day = d.getDay();
@@ -1284,18 +1445,15 @@ function confirmVisitWithPayment() {
   }
 
   const now = new Date().toISOString();
-  // Clear debt
   const cleared = Math.min(payAmount, debt);
   S.debts[stopId] = Math.max(0, debt - cleared);
-  if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
-  S.debtHistory[stopId].unshift({
+  createDebtHistoryEntry(stopId, {
     date: now, amount: cleared, type: 'clear',
     note: `Visit payment (${visitPayMethod})`
   });
   save.debts();
   save.debtHistory();
 
-  // Mark visited
   const visitNote = document.getElementById('visit-note')?.value?.trim() || '';
   const vid = uid();
   S.orders[vid] = {
@@ -1345,20 +1503,24 @@ function updateCashRemainder() {
 function confirmDelivery() {
   try {
     if (!deliveryStopId && deliveryStopId !== 0) { appAlert('Hata: stopId yok'); return; }
-    if (!deliveryPayMethod) { appAlert('Lütfen ödeme yöntemi seçin.'); return; }
+    if (!deliveryPayMethod) { appAlert('Lutfen odeme yontemi secin.'); return; }
     const stopId = parseInt(deliveryStopId);
     const allPending = getStopOrders(stopId, 'pending');
     const pending = deliveryOrderIds ? allPending.filter(o => deliveryOrderIds.includes(o.id)) : allPending;
-    if (pending.length === 0) { appAlert('Bekleyen sipariş bulunamadı.'); closeModal(); return; }
+    if (pending.length === 0) { appAlert('Bekleyen siparis bulunamadi.'); closeModal(); return; }
     const now = new Date().toISOString();
     const grandTotal = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
 
-    // Handle partial cash payment
-    let unpaidAmount = 0;
+    const cashAllocations = new Map();
     if (deliveryPayMethod === 'cash') {
       const cashInput = document.getElementById('cash-amount-input');
-      const cashPaid = cashInput ? (parseFloat(cashInput.value) || 0) : grandTotal;
-      unpaidAmount = Math.max(0, grandTotal - cashPaid);
+      let remainingCash = roundMoney(Math.max(0, cashInput ? (parseFloat(cashInput.value) || 0) : grandTotal));
+      pending.forEach(o => {
+        const orderTotal = roundMoney(calcOrderTotal(o));
+        const paidForOrder = roundMoney(Math.min(orderTotal, Math.max(0, remainingCash)));
+        cashAllocations.set(o.id, paidForOrder);
+        remainingCash = roundMoney(Math.max(0, remainingCash - paidForOrder));
+      });
     }
 
     const deliveryNote = document.getElementById('delivery-note')?.value?.trim() || '';
@@ -1368,27 +1530,17 @@ function confirmDelivery() {
       o.payMethod = deliveryPayMethod;
       if (deliveryNote) o.deliveryNote = deliveryNote;
       if (deliveryPayMethod === 'cash') {
-        const cashInput = document.getElementById('cash-amount-input');
-        o.cashPaid = cashInput ? (parseFloat(cashInput.value) || 0) : grandTotal;
+        o.cashPaid = cashAllocations.get(o.id) || 0;
+      } else {
+        delete o.cashPaid;
       }
     });
 
-    if (deliveryPayMethod === 'unpaid') {
-      S.debts[stopId] = (S.debts[stopId] || 0) + grandTotal;
-      if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
-      S.debtHistory[stopId].unshift({
-        date: now, amount: grandTotal, type: 'add',
-        note: `Delivery - ${pending.length} order(s) (not paid)`
-      });
-      save.debts();
-      save.debtHistory();
-    } else if (deliveryPayMethod === 'cash' && unpaidAmount > 0.01) {
-      S.debts[stopId] = (S.debts[stopId] || 0) + unpaidAmount;
-      if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
-      S.debtHistory[stopId].unshift({
-        date: now, amount: unpaidAmount, type: 'add',
-        note: `Delivery - partial cash (paid ${formatCurrency(grandTotal - unpaidAmount)}, remainder ${formatCurrency(unpaidAmount)})`
-      });
+    let debtChanged = false;
+    pending.forEach(o => {
+      if (addOrderDebtEffect(o) > 0) debtChanged = true;
+    });
+    if (debtChanged) {
       save.debts();
       save.debtHistory();
     }
@@ -1399,14 +1551,11 @@ function confirmDelivery() {
     else if (curPage === 'profile') renderProfile();
     else rerenderRouteKeepScroll();
   } catch (err) {
-    appAlert('Teslimat hatası: ' + err.message);
+    appAlert('Teslimat hatasi: ' + err.message);
     console.error('confirmDelivery error:', err);
   }
 }
 
-// ══════════════════════════════════════════════════════════════
-// ORDERS PAGE
-// ══════════════════════════════════════════════════════════════
 function renderOrders(fullRender) {
   const isSearchUpdate = !fullRender && document.getElementById('orders-results');
 
@@ -1499,10 +1648,7 @@ function showDeliveryFromOrder(orderId) {
 }
 
 async function deleteOrderFromList(orderId) {
-  if (!(await appConfirm('Remove this order?'))) return;
-  delete S.orders[orderId];
-  save.orders();
-  renderOrders();
+  await deleteOrder(orderId);
 }
 
 let editingOrderId = null;
@@ -1777,53 +1923,45 @@ function saveOrder() {
   if (tempOrderCustomerId == null) { appAlert('Please select a customer.'); return; }
   const items = tempOrderItems.filter(i => i.name && i.qty > 0);
   if (items.length === 0) { appAlert('Please add at least one item.'); return; }
-  // Check stock availability
-  if (!editingOrderId) {
-    const oos = items.filter(i => { const c = S.catalog.find(x => x.name === i.name); return c && c.stock != null && c.stock <= 0; });
-    if (oos.length > 0) { appAlert('Stokta yok: ' + oos.map(i => i.name).join(', ')); return; }
+
+  const existingOrder = editingOrderId ? S.orders[editingOrderId] : null;
+  const previousItems = existingOrder ? (existingOrder.items || []) : [];
+  const stockIssues = validateTrackedStockChange(previousItems, items);
+  if (stockIssues.length > 0) {
+    appAlert('Yetersiz stok: ' + stockIssues.join(', '));
+    return;
   }
 
   const note = document.getElementById('order-note')?.value || '';
   const deliveryDate = document.getElementById('order-delivery-date')?.value || '';
 
-  if (editingOrderId && S.orders[editingOrderId]) {
-    // Update existing order
-    const order = S.orders[editingOrderId];
-    order.items = items.map(i => ({ name: i.name, qty: i.qty, price: i.price }));
-    order.note = note;
-    order.deliveryDate = deliveryDate;
+  if (editingOrderId && existingOrder) {
+    existingOrder.items = items.map(i => ({ name: i.name, qty: i.qty, price: i.price }));
+    existingOrder.note = note;
+    existingOrder.deliveryDate = deliveryDate;
   } else {
-    // Create new order
     const id = uid();
     S.orders[id] = {
-      id: id,
+      id,
       customerId: parseInt(tempOrderCustomerId),
       items: items.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
-      note: note,
-      deliveryDate: deliveryDate,
+      note,
+      deliveryDate,
       status: 'pending',
       payMethod: null,
       createdAt: new Date().toISOString(),
       deliveredAt: null
     };
   }
-  // Deduct stock for new orders
-  if (!editingOrderId) {
-    let lowStockWarnings = [];
-    items.forEach(item => {
-      const catItem = S.catalog.find(c => c.name === item.name);
-      if (catItem && catItem.stock != null) {
-        catItem.stock = Math.max(0, catItem.stock - item.qty);
-        if (catItem.stock <= 5) lowStockWarnings.push(`${catItem.name}: ${catItem.stock} kaldı`);
-      }
-    });
-    if (lowStockWarnings.length > 0) {
-      save.catalog();
-      setTimeout(() => appAlert('⚠️ Düşük stok:<br>' + lowStockWarnings.join('<br>')), 300);
-    } else if (items.some(i => S.catalog.find(c => c.name === i.name && c.stock != null))) {
-      save.catalog();
+
+  const stockChange = applyTrackedStockChange(previousItems, items);
+  if (stockChange.changed) {
+    save.catalog();
+    if (stockChange.lowStockWarnings.length > 0) {
+      setTimeout(() => appAlert('Dusuk stok:<br>' + stockChange.lowStockWarnings.join('<br>')), 300);
     }
   }
+
   editingOrderId = null;
   save.orders();
   closeModal();
@@ -2142,8 +2280,19 @@ function renderProfile() {
 }
 
 async function deleteOrder(orderId) {
-  if (!(await appConfirm('Bu kaydı silmek istediğinize emin misiniz?'))) return;
+  if (!(await appConfirm('Bu kaydi silmek istediginize emin misiniz?'))) return;
+  const order = S.orders[orderId];
+  if (!order) return;
+
+  const stockChange = applyTrackedStockChange(order.items || [], []);
+  const debtChanged = reconcileOrderDebtEffect(order, null);
   delete S.orders[orderId];
+
+  if (stockChange.changed) save.catalog();
+  if (debtChanged) {
+    save.debts();
+    save.debtHistory();
+  }
   save.orders();
   if (curPage === 'profile') renderProfile();
   else if (curPage === 'orders') renderOrders();
@@ -2155,10 +2304,12 @@ function showEditDeliveredOrderModal(orderId) {
   const isVisit = o.payMethod === 'visit';
   const dt = o.deliveredAt ? new Date(o.deliveredAt) : new Date();
   const dateVal = dt.toISOString().slice(0, 16);
+  const total = calcOrderTotal(o);
+  const cashValue = roundMoney(Math.min(total, o.cashPaid !== undefined ? o.cashPaid : total));
 
   let modalHtml = `
     <div class="modal-handle"></div>
-    <div class="modal-title">${isVisit ? 'Ziyaret Düzenle' : 'Teslimat Düzenle'}</div>
+    <div class="modal-title">${isVisit ? 'Ziyaret Duzenle' : 'Teslimat Duzenle'}</div>
     <div class="form-group">
       <label class="form-label">Tarih</label>
       <input class="input" type="datetime-local" id="edit-del-date" value="${dateVal}">
@@ -2173,12 +2324,18 @@ function showEditDeliveredOrderModal(orderId) {
   } else {
     modalHtml += `
     <div class="form-group">
-      <label class="form-label">Ödeme Yöntemi</label>
-      <select class="input" id="edit-del-pay">
+      <label class="form-label">Odeme Yontemi</label>
+      <select class="input" id="edit-del-pay" onchange="toggleEditDeliveredCash(this.value)">
         <option value="cash" ${o.payMethod==='cash'?'selected':''}>Cash</option>
         <option value="bank" ${o.payMethod==='bank'?'selected':''}>Bank</option>
         <option value="unpaid" ${o.payMethod==='unpaid'?'selected':''}>Not Paid</option>
       </select>
+    </div>
+    <div class="form-group ${o.payMethod==='cash'?'':'hidden'}" id="edit-del-cash-wrap">
+      <label class="form-label">Nakit Alinan Tutar</label>
+      <input class="input" type="number" step="0.01" id="edit-del-cash" value="${cashValue.toFixed(2)}"
+             data-total="${total}" oninput="updateEditDeliveredCashHint()">
+      <div class="text-muted" style="font-size:12px;margin-top:4px" id="edit-del-cash-hint"></div>
     </div>
     <div class="form-group">
       <label class="form-label">Teslimat Notu</label>
@@ -2189,25 +2346,58 @@ function showEditDeliveredOrderModal(orderId) {
   modalHtml += `
     <button class="btn btn-primary btn-block mt-2" onclick="saveEditDeliveredOrder('${orderId}')">Kaydet</button>`;
   openModal(modalHtml);
+  if (!isVisit) updateEditDeliveredCashHint();
+}
+
+function toggleEditDeliveredCash(method) {
+  const wrap = document.getElementById('edit-del-cash-wrap');
+  if (!wrap) return;
+  wrap.classList.toggle('hidden', method !== 'cash');
+  if (method === 'cash') updateEditDeliveredCashHint();
+}
+
+function updateEditDeliveredCashHint() {
+  const input = document.getElementById('edit-del-cash');
+  const hint = document.getElementById('edit-del-cash-hint');
+  if (!input || !hint) return;
+  const total = roundMoney(parseFloat(input.dataset.total) || 0);
+  const paid = roundMoney(Math.max(0, parseFloat(input.value) || 0));
+  const remaining = roundMoney(Math.max(0, total - paid));
+  hint.innerHTML = remaining > 0 ? `<span style="color:var(--danger)">${formatCurrency(remaining)} borca eklenecek</span>` : '';
 }
 
 function saveEditDeliveredOrder(orderId) {
   const o = S.orders[orderId];
   if (!o) return;
+  const prevOrder = JSON.parse(JSON.stringify(o));
   const dateInput = document.getElementById('edit-del-date');
   if (dateInput && dateInput.value) {
     o.deliveredAt = new Date(dateInput.value).toISOString();
-    o.createdAt = o.deliveredAt;
   }
-  const isVisit = o.payMethod === 'visit';
+  const isVisit = prevOrder.payMethod === 'visit';
+  let debtChanged = false;
   if (isVisit) {
     const note = document.getElementById('edit-del-note')?.value?.trim() || '';
     o.note = note;
     o.deliveryNote = note;
   } else {
     const pay = document.getElementById('edit-del-pay')?.value;
-    if (pay) o.payMethod = pay;
+    if (pay) {
+      o.payMethod = pay;
+      if (pay === 'cash') {
+        const total = calcOrderTotal(o);
+        const cashInput = document.getElementById('edit-del-cash');
+        o.cashPaid = roundMoney(Math.max(0, Math.min(total, parseFloat(cashInput?.value) || total)));
+      } else {
+        delete o.cashPaid;
+      }
+    }
     o.deliveryNote = document.getElementById('edit-del-note')?.value?.trim() || '';
+    debtChanged = reconcileOrderDebtEffect(prevOrder, o);
+  }
+  if (debtChanged) {
+    save.debts();
+    save.debtHistory();
   }
   save.orders();
   closeModal();
@@ -2504,11 +2694,12 @@ function selectClearMethod(method, el) {
 }
 
 function clearDebt() {
-  const amount = parseFloat(document.getElementById('clear-amount').value) || 0;
+  const debt = S.debts[profileStopId] || 0;
+  const requested = parseFloat(document.getElementById('clear-amount').value) || 0;
+  const amount = roundMoney(Math.min(debt, Math.max(0, requested)));
   if (amount <= 0) return;
-  S.debts[profileStopId] = Math.max(0, (S.debts[profileStopId] || 0) - amount);
-  if (!S.debtHistory[profileStopId]) S.debtHistory[profileStopId] = [];
-  S.debtHistory[profileStopId].unshift({
+  S.debts[profileStopId] = Math.max(0, roundMoney(debt - amount));
+  createDebtHistoryEntry(profileStopId, {
     date: new Date().toISOString(), amount: amount, type: 'clear',
     note: 'Payment received (' + clearDebtMethod + ')'
   });
@@ -3640,7 +3831,11 @@ function renderDeliveryHistory() {
 
       // Week summary
       const totalRev = filtered.reduce((s, o) => s + calcOrderTotal(o), 0);
-      const cashTotal = filtered.filter(o => o.payMethod === 'cash').reduce((s, o) => s + calcOrderTotal(o), 0);
+      const cashTotal = filtered.filter(o => o.payMethod === 'cash').reduce((s, o) => {
+        const total = calcOrderTotal(o);
+        const paid = (o.cashPaid !== undefined) ? Math.min(o.cashPaid, total) : total;
+        return s + paid;
+      }, 0);
       const bankTotal = filtered.filter(o => o.payMethod === 'bank').reduce((s, o) => s + calcOrderTotal(o), 0);
       const visitCount = filtered.filter(o => o.payMethod === 'visit').length;
       const deliveryCount = filtered.filter(o => o.payMethod !== 'visit').length;
