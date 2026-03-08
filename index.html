@@ -722,6 +722,64 @@ function formatDateTime(d) {
 }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
+function buildStopAddress(stop) {
+  const parts = [stop.a, stop.c, stop.p]
+    .map(v => String(v || '').trim())
+    .filter(Boolean);
+  if (!parts.length) return '';
+  parts.push('United Kingdom');
+  return parts.join(', ');
+}
+
+function getStopAddressKey(stop) {
+  return [stop.a || '', stop.c || '', stop.p || '']
+    .map(v => v.trim().toUpperCase())
+    .join('|');
+}
+
+async function geocodeStop(stop, opts = {}) {
+  const { force = false, silent = false } = opts;
+  if (!stop) return false;
+
+  const query = buildStopAddress(stop);
+  if (!query.trim()) {
+    delete S.geo[stop.id];
+    save.geo();
+    return false;
+  }
+
+  const cached = S.geo[stop.id];
+  if (!force && cached && cached.lat && cached.lng && cached.query === query) {
+    return true;
+  }
+
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=gb&q=${encodeURIComponent(query)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const results = await res.json();
+    const first = Array.isArray(results) ? results[0] : null;
+
+    if (!first || !first.lat || !first.lon) {
+      delete S.geo[stop.id];
+      save.geo();
+      if (!silent) appAlert('Bu adres haritada bulunamadi.');
+      return false;
+    }
+
+    S.geo[stop.id] = {
+      lat: Number(first.lat),
+      lng: Number(first.lon),
+      query,
+      updatedAt: new Date().toISOString()
+    };
+    save.geo();
+    return true;
+  } catch (err) {
+    if (!silent) appAlert('Adres konumu guncellenemedi: ' + err.message);
+    return false;
+  }
+}
+
 function getCurrentWeek() {
   const now = new Date();
   // Reference: 2 March 2026 (Monday) = Week A
@@ -2079,11 +2137,11 @@ function showAddCustomerModal() {
   `);
 }
 
-function saveNewCustomer() {
+async function saveNewCustomer() {
   const name = document.getElementById('add-cust-name').value.trim();
   if (!name) { appAlert('Name is required.'); return; }
   const maxId = STOPS.reduce((m, s) => Math.max(m, s.id), 0);
-  STOPS.push({
+  const stop = {
     id: maxId + 1,
     n: name.toUpperCase(),
     a: document.getElementById('add-cust-addr').value.trim(),
@@ -2092,8 +2150,10 @@ function saveNewCustomer() {
     cn: document.getElementById('add-cust-cn').value.trim(),
     ph: document.getElementById('add-cust-ph').value.trim(),
     em: document.getElementById('add-cust-em').value.trim()
-  });
+  };
+  STOPS.push(stop);
   save.stops();
+  await geocodeStop(stop, { force: true, silent: true });
   closeModal();
   renderCustomers();
 }
@@ -2440,9 +2500,10 @@ function showEditCustomerModal() {
   `);
 }
 
-function saveEditCustomer() {
+async function saveEditCustomer() {
   const stop = getStop(profileStopId);
   if (!stop) return;
+  const previousAddressKey = getStopAddressKey(stop);
   stop.n = (document.getElementById('edit-cust-name').value.trim() || stop.n).toUpperCase();
   stop.a = document.getElementById('edit-cust-addr').value.trim();
   stop.c = document.getElementById('edit-cust-city').value.trim();
@@ -2451,6 +2512,12 @@ function saveEditCustomer() {
   stop.ph = document.getElementById('edit-cust-ph').value.trim();
   stop.em = document.getElementById('edit-cust-em').value.trim();
   save.stops();
+  if (previousAddressKey !== getStopAddressKey(stop)) {
+    delete S.geo[stop.id];
+    save.geo();
+    await geocodeStop(stop, { force: true, silent: true });
+    if (leafletMap) refreshMapMarkers();
+  }
   closeModal();
   renderProfile();
 }
@@ -3980,6 +4047,7 @@ function refreshMapMarkers() {
     const dayLabel = dayObj ? `Week ${dayObj.week} - ${dayObj.label}` : 'Unassigned';
     const popupHtml = `<div style="min-width:160px">
       <b>${orderNum ? orderNum + '. ' : ''}${escHtml(stop.n)}</b><br>
+      ${stop.a ? `<span style="font-size:12px;color:#666">${escHtml(stop.a)}</span><br>` : ''}
       <span style="font-size:12px;color:#666">${escHtml(stop.c)} &middot; ${escHtml(stop.p)}</span><br>
       <span style="font-size:12px;color:${color}">${dayLabel}</span><br>
       <button onclick="showMapAssignModal(${stop.id})" style="margin-top:6px;padding:4px 10px;font-size:12px;background:${color};color:#fff;border:none;border-radius:6px;cursor:pointer">Assign Day</button>
