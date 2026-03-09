@@ -367,6 +367,13 @@ a{text-decoration:none;color:inherit}
 .catalog-edit-form{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
 .catalog-edit-form .input{flex:1;min-width:0}
 
+/* === ORDER FORM FULL PAGE === */
+.order-form-overlay{position:fixed;inset:0;background:var(--bg);z-index:250;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.order-form-overlay .order-form-header{padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.order-form-overlay .order-form-header h2{flex:1;font-size:17px;font-weight:700;margin:0}
+.order-form-overlay .order-form-body{flex:1;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(80px + var(--safe-b))}
+.order-form-overlay .order-form-footer{position:fixed;bottom:0;left:0;right:0;padding:12px 16px calc(12px + var(--safe-b));background:var(--card);border-top:1px solid var(--border);z-index:251}
+
 </style>
 </head>
 <body>
@@ -866,7 +873,7 @@ function roundMoney(n) {
 }
 
 function getTrackedCatalogItem(name) {
-  return S.catalog.find(c => c.name === name && c.stock != null);
+  return S.catalog.find(c => c.name === name && c.trackStock !== false && c.stock != null);
 }
 
 function buildItemQtyMap(items) {
@@ -1719,11 +1726,13 @@ function renderOrderResults() {
     orders.forEach(o => {
       const stop = getStop(o.customerId);
       const total = calcOrderTotal(o);
+      const dayId = S.assign[o.customerId];
+      const dayObj = dayId ? DAYS.find(d => d.id === dayId) : null;
       html += `
         <div class="order-card">
           <div class="order-card-head">
             <div onclick="showProfile(${o.customerId})" style="cursor:pointer">
-              <div class="order-card-name">${stop ? escHtml(stop.n) : 'Unknown'}</div>
+              <div class="order-card-name">${stop ? escHtml(stop.n) : 'Unknown'}${dayObj ? ` <span class="badge" style="background:${dayObj.color}20;color:${dayObj.color};font-size:10px;font-weight:600;vertical-align:middle">Week ${dayObj.week} - ${dayObj.label.slice(0,3)}</span>` : ''}</div>
               <div class="order-card-date">${formatDateTime(o.createdAt)}${o.deliveryDate ? ` · Teslimat: ${o.deliveryDate}` : ''}</div>
             </div>
             <span class="badge ${o.status==='pending' ? 'badge-warning' : 'badge-success'}">${o.status}</span>
@@ -1767,6 +1776,12 @@ function quickReorder(customerId, lastOrderId) {
   renderOrderFormModal('Tekrar Sipariş', lastOrder.note || '');
 }
 
+function closeOrderForm() {
+  const el = document.getElementById('order-form-overlay');
+  if (el) el.remove();
+  document.body.style.overflow = '';
+}
+
 function showNewOrderModal(preCustomerId) {
   editingOrderId = null;
   tempOrderItems = [{ name: '', qty: 1, price: 0 }];
@@ -1787,6 +1802,11 @@ function showEditOrderModal(orderId) {
 }
 
 function renderOrderFormModal(title, existingNote) {
+  // Preserve note from existing form if re-rendering
+  if (existingNote === undefined) {
+    const noteEl = document.getElementById('order-note');
+    if (noteEl) existingNote = noteEl.value;
+  }
   const selectedStop = tempOrderCustomerId !== null && tempOrderCustomerId !== undefined ? getStop(tempOrderCustomerId) : null;
 
   let itemsHtml = '';
@@ -1799,7 +1819,14 @@ function renderOrderFormModal(title, existingNote) {
       <div class="order-item-card">
         <div class="order-item-card-info">
           <div class="order-item-card-name">${escHtml(item.name)}</div>
-          <div class="order-item-card-price">${formatCurrency(item.price)} each</div>
+          <div class="order-item-card-price" style="display:flex;align-items:center;gap:4px">
+            <span style="color:var(--text-sec)">£</span>
+            <input type="number" step="0.01" value="${item.price}" min="0"
+                   onchange="setOrderItemPrice(${idx},parseFloat(this.value)||0)"
+                   onclick="this.select()"
+                   style="width:55px;font-size:12px;border:1px solid var(--border);border-radius:4px;padding:2px 4px;background:var(--bg);color:var(--text)">
+            <span style="color:var(--text-sec);font-size:11px">each</span>
+          </div>
         </div>
         <div class="order-item-card-controls">
           <button class="qty-btn" onclick="changeOrderItemQty(${idx},-1)">−</button>
@@ -1816,40 +1843,57 @@ function renderOrderFormModal(title, existingNote) {
   const hasEmptyItems = tempOrderItems.some(i => !i.name);
   const itemCount = tempOrderItems.filter(i => i.name).length;
 
-  openModal(`
-    <div class="modal-handle"></div>
-    <div class="modal-title">${title}</div>
-    <div class="form-group">
-      <label class="form-label">Customer</label>
-      <div class="input" id="cust-display"
-           onclick="${editingOrderId ? '' : 'openCustomerPicker()'}"
-           style="cursor:${editingOrderId ? 'default' : 'pointer'};color:${selectedStop ? 'var(--text)' : 'var(--text-muted)'};${editingOrderId ? 'opacity:0.6' : ''}">
-        ${selectedStop ? escHtml(selectedStop.n) : 'Tap to select customer...'}
+  // Close any existing modal first
+  closeModal();
+  // Remove existing order form overlay if any
+  const existingOverlay = document.getElementById('order-form-overlay');
+  if (existingOverlay) existingOverlay.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'order-form-overlay';
+  overlay.id = 'order-form-overlay';
+  overlay.innerHTML = `
+    <div class="order-form-header">
+      <button class="btn-ghost" onclick="closeOrderForm()" style="font-size:20px;padding:4px">&larr;</button>
+      <h2>${title}</h2>
+    </div>
+    <div class="order-form-body">
+      <div class="form-group">
+        <label class="form-label">Customer</label>
+        <div class="input" id="cust-display"
+             onclick="${editingOrderId ? '' : 'openCustomerPicker()'}"
+             style="cursor:${editingOrderId ? 'default' : 'pointer'};color:${selectedStop ? 'var(--text)' : 'var(--text-muted)'};${editingOrderId ? 'opacity:0.6' : ''}">
+          ${selectedStop ? escHtml(selectedStop.n) : 'Tap to select customer...'}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Items${itemCount > 0 ? ' (' + itemCount + ')' : ''}</label>
+        <div id="order-items-list">${itemsHtml || '<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:13px">No items added yet</div>'}</div>
+        <button class="btn btn-outline btn-block mt-1" onclick="openProductPicker()" style="gap:6px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Item
+        </button>
+      </div>
+      <div class="flex-between mb-2" style="padding:12px;background:var(--card);border-radius:var(--radius-sm)">
+        <span style="font-weight:700;font-size:16px">Total</span>
+        <span style="font-weight:700;font-size:18px;color:var(--primary)" id="order-total">${formatCurrency(total)}</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Teslimat Tarihi</label>
+        <input class="input" type="date" id="order-delivery-date" value="${tempOrderDeliveryDate}" min="${new Date().toISOString().split('T')[0]}" onchange="tempOrderDeliveryDate=this.value">
+        <div class="text-muted" style="font-size:11px;margin-top:4px">${tempOrderDeliveryDate ? '' : 'Boş bırakılırsa bugün için geçerli'}</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Not (opsiyonel)</label>
+        <textarea class="textarea" id="order-note" rows="2" style="min-height:50px">${existingNote !== undefined ? escHtml(existingNote) : ''}</textarea>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Items${itemCount > 0 ? ' (' + itemCount + ')' : ''}</label>
-      <div id="order-items-list">${itemsHtml || '<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:13px">No items added yet</div>'}</div>
-      <button class="btn btn-outline btn-block mt-1" onclick="openProductPicker()" style="gap:6px">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add Item
-      </button>
+    <div class="order-form-footer">
+      <button class="btn btn-primary btn-block" onclick="saveOrder()">${editingOrderId ? 'Siparişi Güncelle' : 'Siparişi Kaydet'}</button>
     </div>
-    <div class="flex-between mb-2" style="padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
-      <span style="font-weight:700;font-size:16px">Total</span>
-      <span style="font-weight:700;font-size:18px;color:var(--primary)" id="order-total">${formatCurrency(total)}</span>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Teslimat Tarihi</label>
-      <input class="input" type="date" id="order-delivery-date" value="${tempOrderDeliveryDate}" min="${new Date().toISOString().split('T')[0]}" onchange="tempOrderDeliveryDate=this.value">
-      <div class="text-muted" style="font-size:11px;margin-top:4px">${tempOrderDeliveryDate ? '' : 'Boş bırakılırsa bugün için geçerli'}</div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Not (opsiyonel)</label>
-      <textarea class="textarea" id="order-note" rows="2" style="min-height:50px">${existingNote !== undefined ? escHtml(existingNote) : ''}</textarea>
-    </div>
-    <button class="btn btn-primary btn-block" onclick="saveOrder()" style="margin-top:8px">${editingOrderId ? 'Siparişi Güncelle' : 'Siparişi Kaydet'}</button>
-  `);
+  `;
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
 }
 
 function changeOrderItemQty(idx, delta) {
@@ -1863,6 +1907,12 @@ function changeOrderItemQty(idx, delta) {
 function setOrderItemQty(idx, qty) {
   if (!tempOrderItems[idx]) return;
   tempOrderItems[idx].qty = Math.max(1, qty);
+  renderOrderFormModal(editingOrderId ? 'Sipariş Düzenle' : 'Yeni Sipariş');
+}
+
+function setOrderItemPrice(idx, price) {
+  if (!tempOrderItems[idx]) return;
+  tempOrderItems[idx].price = Math.max(0, price);
   renderOrderFormModal(editingOrderId ? 'Sipariş Düzenle' : 'Yeni Sipariş');
 }
 
@@ -1913,10 +1963,10 @@ function filterProductPicker(q) {
 
   list.innerHTML = filtered.map(c => {
     const isSelected = selectedNames.includes(c.name);
-    const outOfStock = c.stock != null && c.stock <= 0;
+    const outOfStock = c.trackStock !== false && c.stock != null && c.stock <= 0;
     return `<div class="ppick-item${isSelected ? ' selected' : ''}${outOfStock ? ' out-of-stock' : ''}" onclick="${outOfStock ? '' : `toggleProductInOrder('${escHtml(c.name)}')`}" style="${outOfStock ? 'opacity:0.4;pointer-events:none' : ''}">
       <div class="ppick-item-info">
-        <div class="ppick-item-name">${escHtml(c.name)}${outOfStock ? ' <span style="color:var(--danger);font-size:11px">(Stok yok)</span>' : (c.stock != null ? ` <span style="color:var(--text-sec);font-size:11px">(${c.stock})</span>` : '')}</div>
+        <div class="ppick-item-name">${escHtml(c.name)}${outOfStock ? ' <span style="color:var(--danger);font-size:11px">(Stok yok)</span>' : (c.trackStock !== false && c.stock != null ? ` <span style="color:var(--text-sec);font-size:11px">(${c.stock})</span>` : '')}</div>
         <div class="ppick-item-detail">${escHtml(c.unit || 'No unit')}</div>
       </div>
       <div class="ppick-item-price">${formatCurrency(tempOrderCustomerId != null ? getPrice(tempOrderCustomerId, c.name) : c.price)}</div>
@@ -2068,6 +2118,7 @@ function saveOrder() {
 
   editingOrderId = null;
   save.orders();
+  closeOrderForm();
   closeModal();
   if (curPage === 'orders') renderOrders();
   else if (curPage === 'profile') renderProfile();
@@ -3575,20 +3626,37 @@ function renderCatalog() {
               <button class="btn-icon-sm" style="color:var(--danger);font-size:14px" onclick="removeCatalogItem(${i})">&#128465;</button>
             </div>
           </div>
+          ${c.trackStock === false ? `
           <div class="catalog-card-bottom">
-            <div style="font-size:12px;color:var(--text-sec);font-weight:600">Stok</div>
+            <div style="font-size:12px;color:var(--text-muted);font-style:italic">Stok takibi yok (günlük ürün)</div>
+          </div>` : `
+          <div class="catalog-card-bottom" id="cat-stock-row-${i}">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-size:12px;color:var(--text-sec);font-weight:600">Mevcut:</div>
+              <div style="font-size:18px;font-weight:700;min-width:36px;text-align:center">${c.stock != null ? c.stock : '—'}</div>
+            </div>
             <div style="display:flex;align-items:center;gap:4px">
               <button style="color:var(--danger);font-size:18px;width:36px;height:36px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer" onclick="event.stopPropagation();adjustStock(${i},-1)">−</button>
-              <input class="input" type="number" value="${c.stock != null ? c.stock : ''}" onchange="setStock(${i},this.value)" onclick="this.select()" placeholder="—" style="width:52px;height:36px;text-align:center;padding:4px;font-size:15px;font-weight:700;border-radius:8px">
-              <button style="color:var(--success);font-size:18px;width:36px;height:36px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer" onclick="event.stopPropagation();adjustStock(${i},1)">+</button>
+              <input class="input" type="number" id="cat-stock-add-${i}" placeholder="+" onkeydown="if(event.key==='Enter'){addToStock(${i});}" style="width:52px;height:36px;text-align:center;padding:4px;font-size:15px;font-weight:700;border-radius:8px">
+              <button style="color:var(--success);font-size:18px;width:36px;height:36px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer" onclick="event.stopPropagation();addToStock(${i})">+</button>
             </div>
-          </div>
+          </div>`}
           ${isEditing ? `
           <div class="catalog-edit-form">
             <input class="input" id="cat-edit-name-${i}" value="${escHtml(c.name)}" placeholder="Ürün adı" style="flex:2;min-width:100px">
             <input class="input" id="cat-edit-unit-${i}" value="${escHtml(c.unit || '')}" placeholder="Birim" style="flex:1;min-width:60px">
             <input class="input" id="cat-edit-price-${i}" value="${c.price}" type="number" step="0.01" placeholder="Fiyat" style="flex:1;min-width:70px">
             <button class="btn btn-primary btn-sm" onclick="saveCatalogEdit(${i})" style="flex-shrink:0">Kaydet</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="cat-edit-nostock-${i}" ${c.trackStock === false ? 'checked' : ''} style="width:18px;height:18px">
+              Stok takibi yapma (günlük ürün)
+            </label>
+            ${c.trackStock !== false ? `<div style="display:flex;align-items:center;gap:4px;margin-left:auto">
+              <span style="font-size:12px;color:var(--text-sec)">Stok:</span>
+              <input class="input" id="cat-edit-stock-${i}" value="${c.stock != null ? c.stock : ''}" type="number" placeholder="—" style="width:60px;height:32px;text-align:center;font-size:14px;font-weight:600">
+            </div>` : ''}
           </div>` : ''}
         </div>`;
     });
@@ -3606,7 +3674,28 @@ function adjustStock(idx, delta) {
     S.catalog[idx].stock = Math.max(0, cur + delta);
   }
   save.catalog();
-  renderCatalog();
+  updateStockDisplay(idx);
+}
+
+function addToStock(idx) {
+  if (!S.catalog[idx]) return;
+  const input = document.getElementById('cat-stock-add-' + idx);
+  if (!input) return;
+  const val = parseInt(input.value);
+  if (!val || val <= 0) return;
+  const cur = S.catalog[idx].stock;
+  S.catalog[idx].stock = (cur != null ? cur : 0) + val;
+  save.catalog();
+  input.value = '';
+  updateStockDisplay(idx);
+}
+
+function updateStockDisplay(idx) {
+  const row = document.getElementById('cat-stock-row-' + idx);
+  if (!row) return;
+  const c = S.catalog[idx];
+  const stockDisplay = row.querySelector('div[style*="font-size:18px"]');
+  if (stockDisplay) stockDisplay.textContent = c.stock != null ? c.stock : '—';
 }
 
 function setStock(idx, val) {
@@ -3615,7 +3704,6 @@ function setStock(idx, val) {
   if (trimmed === '') { S.catalog[idx].stock = null; }
   else { S.catalog[idx].stock = Math.max(0, parseInt(trimmed) || 0); }
   save.catalog();
-  renderCatalog();
 }
 
 function toggleCatalogEdit(idx) {
@@ -3630,7 +3718,18 @@ function saveCatalogEdit(idx) {
   if (!name) { appAlert('Ürün adı gerekli.'); return; }
   const oldName = S.catalog[idx].name;
   if (name !== oldName && S.catalog.some(c => c.name === name)) { appAlert('Bu ürün zaten var.'); return; }
-  S.catalog[idx] = { name, unit, price, stock: S.catalog[idx].stock };
+  const noStockChecked = document.getElementById('cat-edit-nostock-' + idx)?.checked;
+  let stock = S.catalog[idx].stock;
+  if (noStockChecked) {
+    stock = null;
+  } else {
+    const stockInput = document.getElementById('cat-edit-stock-' + idx);
+    if (stockInput) {
+      const sv = stockInput.value.trim();
+      stock = sv === '' ? null : Math.max(0, parseInt(sv) || 0);
+    }
+  }
+  S.catalog[idx] = { name, unit, price, stock, trackStock: noStockChecked ? false : true };
   save.catalog();
   editingCatalogIdx = -1;
   renderCatalog();
