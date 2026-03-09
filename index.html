@@ -658,6 +658,7 @@ function loadState() {
   S.ordersFilter = 'all';
   S.ordersSearch = '';
   S.ordersSort = 'date';
+  S.ordersManualOrder = [];
   S.customersFilter = 'all';
   S.customersSearch = '';
   S.reportRange = 'month';
@@ -1688,17 +1689,18 @@ function renderOrders(fullRender) {
           <input type="text" placeholder="Search by customer..." value="${escHtml(S.ordersSearch)}" oninput="S.ordersSearch=this.value;renderOrderResults()">
         </div>
         <div class="chip-group">
-          <button class="chip ${S.ordersFilter==='all'?'active':''}" onclick="S.ordersFilter='all';renderOrderResults()">All</button>
-          <button class="chip ${S.ordersFilter==='pending'?'active':''}" onclick="S.ordersFilter='pending';renderOrderResults()">Pending</button>
-          <button class="chip ${S.ordersFilter==='delivered'?'active':''}" onclick="S.ordersFilter='delivered';renderOrderResults()">Delivered</button>
+          <button class="chip ${S.ordersFilter==='all'?'active':''}" onclick="S.ordersFilter='all';renderOrders(true)">All</button>
+          <button class="chip ${S.ordersFilter==='pending'?'active':''}" onclick="S.ordersFilter='pending';renderOrders(true)">Pending</button>
+          <button class="chip ${S.ordersFilter==='delivered'?'active':''}" onclick="S.ordersFilter='delivered';renderOrders(true)">Delivered</button>
         </div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;padding:0 4px">
           <span style="font-size:11px;color:var(--text-sec);font-weight:600">Sırala:</span>
           <div class="chip-group" style="margin:0">
-            <button class="chip ${S.ordersSort==='date'?'active':''}" onclick="S.ordersSort='date';renderOrderResults()" style="font-size:11px;padding:4px 10px">Tarih</button>
-            <button class="chip ${S.ordersSort==='name'?'active':''}" onclick="S.ordersSort='name';renderOrderResults()" style="font-size:11px;padding:4px 10px">İsim</button>
-            <button class="chip ${S.ordersSort==='total'?'active':''}" onclick="S.ordersSort='total';renderOrderResults()" style="font-size:11px;padding:4px 10px">Tutar</button>
-            <button class="chip ${S.ordersSort==='day'?'active':''}" onclick="S.ordersSort='day';renderOrderResults()" style="font-size:11px;padding:4px 10px">Gün</button>
+            <button class="chip ${S.ordersSort==='date'?'active':''}" onclick="S.ordersSort='date';renderOrders(true)" style="font-size:11px;padding:4px 10px">Tarih</button>
+            <button class="chip ${S.ordersSort==='name'?'active':''}" onclick="S.ordersSort='name';renderOrders(true)" style="font-size:11px;padding:4px 10px">İsim</button>
+            <button class="chip ${S.ordersSort==='total'?'active':''}" onclick="S.ordersSort='total';renderOrders(true)" style="font-size:11px;padding:4px 10px">Tutar</button>
+            <button class="chip ${S.ordersSort==='day'?'active':''}" onclick="S.ordersSort='day';renderOrders(true)" style="font-size:11px;padding:4px 10px">Gün</button>
+            <button class="chip ${S.ordersSort==='manual'?'active':''}" onclick="S.ordersSort='manual';renderOrders(true)" style="font-size:11px;padding:4px 10px">Manuel</button>
           </div>
         </div>
         <div id="orders-results"></div>
@@ -1723,22 +1725,34 @@ function renderOrderResults() {
     const q = S.ordersSearch.toLowerCase();
     orders = orders.filter(o => { const stop = getStop(o.customerId); return stop && stop.n.toLowerCase().includes(q); });
   }
-  orders.sort((a, b) => {
-    if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
-    const sort = S.ordersSort || 'date';
-    if (sort === 'name') {
-      const na = (getStop(a.customerId)?.n || '').toLowerCase();
-      const nb = (getStop(b.customerId)?.n || '').toLowerCase();
-      return na.localeCompare(nb);
-    } else if (sort === 'total') {
-      return calcOrderTotal(b) - calcOrderTotal(a);
-    } else if (sort === 'day') {
-      const da = S.assign[a.customerId] || '';
-      const db = S.assign[b.customerId] || '';
-      return da.localeCompare(db);
-    }
-    return (b.createdAt || '').localeCompare(a.createdAt || '');
-  });
+  const sort = S.ordersSort || 'date';
+  if (sort === 'manual') {
+    const mo = S.ordersManualOrder || [];
+    // Add any orders not in manual order list
+    orders.forEach(o => { if (!mo.includes(o.id)) mo.push(o.id); });
+    S.ordersManualOrder = mo.filter(id => orders.some(o => o.id === id));
+    orders.sort((a, b) => {
+      const ai = S.ordersManualOrder.indexOf(a.id);
+      const bi = S.ordersManualOrder.indexOf(b.id);
+      return ai - bi;
+    });
+  } else {
+    orders.sort((a, b) => {
+      if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
+      if (sort === 'name') {
+        const na = (getStop(a.customerId)?.n || '').toLowerCase();
+        const nb = (getStop(b.customerId)?.n || '').toLowerCase();
+        return na.localeCompare(nb);
+      } else if (sort === 'total') {
+        return calcOrderTotal(b) - calcOrderTotal(a);
+      } else if (sort === 'day') {
+        const da = S.assign[a.customerId] || '';
+        const db = S.assign[b.customerId] || '';
+        return da.localeCompare(db);
+      }
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+  }
 
   // Update badge
   const badge = document.getElementById('orders-pending-badge');
@@ -1748,13 +1762,19 @@ function renderOrderResults() {
   if (orders.length === 0) {
     html = `<div class="empty-state"><p><b>No orders found</b></p><p>Create a new order with the + button</p></div>`;
   } else {
-    orders.forEach(o => {
+    const isManual = sort === 'manual';
+    orders.forEach((o, oIdx) => {
       const stop = getStop(o.customerId);
       const total = calcOrderTotal(o);
       const dayId = S.assign[o.customerId];
       const dayObj = dayId ? DAYS.find(d => d.id === dayId) : null;
       html += `
-        <div class="order-card">
+        <div class="order-card" style="${isManual ? 'display:flex;gap:8px;align-items:stretch' : ''}">
+          ${isManual ? `<div style="display:flex;flex-direction:column;justify-content:center;gap:4px;padding-right:4px;flex-shrink:0">
+            <button style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;color:var(--text-sec)${oIdx === 0 ? ';opacity:0.3;pointer-events:none' : ''}" onclick="moveOrder('${o.id}',-1)">&#9650;</button>
+            <button style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;color:var(--text-sec)${oIdx === orders.length - 1 ? ';opacity:0.3;pointer-events:none' : ''}" onclick="moveOrder('${o.id}',1)">&#9660;</button>
+          </div>` : ''}
+          <div style="flex:1;min-width:0">
           <div class="order-card-head">
             <div onclick="showProfile(${o.customerId})" style="cursor:pointer">
               <div class="order-card-name">${stop ? escHtml(stop.n) : 'Unknown'}${dayObj ? ` <span class="badge" style="background:${dayObj.color}20;color:${dayObj.color};font-size:10px;font-weight:600;vertical-align:middle">Week ${dayObj.week} - ${dayObj.label.slice(0,3)}</span>` : ''}</div>
@@ -1774,6 +1794,7 @@ function renderOrderResults() {
             ` : ''}
             <button class="btn btn-sm" style="flex:1;color:var(--danger);border:1px solid var(--danger)" onclick="deleteOrderFromList('${o.id}')">Remove</button>
           </div>
+          ${isManual ? '</div>' : ''}
         </div>`;
     });
   }
@@ -1787,6 +1808,16 @@ function showDeliveryFromOrder(orderId) {
 
 async function deleteOrderFromList(orderId) {
   await deleteOrder(orderId);
+}
+
+function moveOrder(orderId, direction) {
+  const mo = S.ordersManualOrder;
+  const idx = mo.indexOf(orderId);
+  if (idx < 0) return;
+  const newIdx = idx + direction;
+  if (newIdx < 0 || newIdx >= mo.length) return;
+  [mo[idx], mo[newIdx]] = [mo[newIdx], mo[idx]];
+  renderOrderResults();
 }
 
 let editingOrderId = null;
@@ -2173,10 +2204,10 @@ function renderCustomers(fullRender) {
           <input type="text" placeholder="Search customers..." value="${escHtml(S.customersSearch)}" oninput="S.customersSearch=this.value;renderCustomerResults()">
         </div>
         <div class="chip-group">
-          <button class="chip ${S.customersFilter==='all'?'active':''}" onclick="S.customersFilter='all';renderCustomerResults()">All</button>
-          <button class="chip ${S.customersFilter==='A'?'active':''}" onclick="S.customersFilter='A';renderCustomerResults()">Week A</button>
-          <button class="chip ${S.customersFilter==='B'?'active':''}" onclick="S.customersFilter='B';renderCustomerResults()">Week B</button>
-          <button class="chip ${S.customersFilter==='none'?'active':''}" onclick="S.customersFilter='none';renderCustomerResults()">Unassigned</button>
+          <button class="chip ${S.customersFilter==='all'?'active':''}" onclick="S.customersFilter='all';renderCustomers(true)">All</button>
+          <button class="chip ${S.customersFilter==='A'?'active':''}" onclick="S.customersFilter='A';renderCustomers(true)">Week A</button>
+          <button class="chip ${S.customersFilter==='B'?'active':''}" onclick="S.customersFilter='B';renderCustomers(true)">Week B</button>
+          <button class="chip ${S.customersFilter==='none'?'active':''}" onclick="S.customersFilter='none';renderCustomers(true)">Unassigned</button>
         </div>
         <div id="customers-results"></div>
       </div>`;
@@ -3640,34 +3671,33 @@ function renderCatalog() {
     S.catalog.forEach((c, i) => {
       const isEditing = editingCatalogIdx === i;
       html += `
-        <div class="catalog-card">
+        <div class="catalog-card" id="cat-card-${i}">
           <div class="catalog-card-top">
             <div class="catalog-card-info">
               <div class="catalog-card-name">${escHtml(c.name)}</div>
-              <div class="catalog-card-unit">${escHtml(c.unit || 'No unit')} &middot; ${formatCurrency(c.price)}</div>
+              <div class="catalog-card-unit">${escHtml(c.unit || '')} &middot; ${formatCurrency(c.price)}</div>
             </div>
-            <div class="catalog-card-actions">
-              <button class="btn-icon-sm" style="color:var(--info);font-size:14px" onclick="toggleCatalogEdit(${i})">
+            <div style="display:flex;align-items:center;gap:6px">
+              ${c.trackStock === false
+                ? '<span style="font-size:11px;color:var(--text-muted);font-style:italic">Günlük</span>'
+                : `<span id="cat-stock-badge-${i}" style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;padding:4px 8px;border-radius:12px;font-size:14px;font-weight:700;background:${c.stock != null && c.stock <= 5 ? 'var(--danger)' : c.stock != null && c.stock <= 20 ? 'var(--warning)' : 'var(--success)'};color:#fff">${c.stock != null ? c.stock : '—'}</span>`
+              }
+              <button style="width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;color:var(--info)" onclick="toggleCatalogEdit(${i})">
                 ${isEditing ? '&#10005;' : '&#9998;'}
               </button>
-              <button class="btn-icon-sm" style="color:var(--danger);font-size:14px" onclick="removeCatalogItem(${i})">&#128465;</button>
             </div>
           </div>
-          ${c.trackStock === false ? `
-          <div class="catalog-card-bottom">
-            <div style="font-size:12px;color:var(--text-muted);font-style:italic">Stok takibi yok (günlük ürün)</div>
-          </div>` : `
+          ${c.trackStock !== false ? `
           <div class="catalog-card-bottom" id="cat-stock-row-${i}">
-            <div style="display:flex;align-items:center;gap:8px">
-              <div style="font-size:12px;color:var(--text-sec);font-weight:600">Mevcut:</div>
-              <div style="font-size:18px;font-weight:700;min-width:36px;text-align:center">${c.stock != null ? c.stock : '—'}</div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <button style="color:var(--danger);font-size:16px;width:32px;height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer" onclick="event.stopPropagation();adjustStock(${i},-1)">−</button>
+              <button style="color:var(--success);font-size:16px;width:32px;height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer" onclick="event.stopPropagation();adjustStock(${i},1)">+</button>
             </div>
             <div style="display:flex;align-items:center;gap:4px">
-              <button style="color:var(--danger);font-size:18px;width:36px;height:36px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer" onclick="event.stopPropagation();adjustStock(${i},-1)">−</button>
-              <input class="input" type="number" id="cat-stock-add-${i}" placeholder="+" onkeydown="if(event.key==='Enter'){addToStock(${i});}" style="width:52px;height:36px;text-align:center;padding:4px;font-size:15px;font-weight:700;border-radius:8px">
-              <button style="color:var(--success);font-size:18px;width:36px;height:36px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer" onclick="event.stopPropagation();addToStock(${i})">+</button>
+              <input class="input" type="number" id="cat-stock-add-${i}" placeholder="Stok ekle" onkeydown="if(event.key==='Enter'){addToStock(${i});}" style="width:80px;height:32px;text-align:center;padding:4px;font-size:13px;border-radius:8px">
+              <button style="font-size:12px;padding:6px 12px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-weight:600;white-space:nowrap" onclick="addToStock(${i})">Ekle</button>
             </div>
-          </div>`}
+          </div>` : ''}
           ${isEditing ? `
           <div class="catalog-edit-form">
             <input class="input" id="cat-edit-name-${i}" value="${escHtml(c.name)}" placeholder="Ürün adı" style="flex:2;min-width:100px">
@@ -3684,6 +3714,9 @@ function renderCatalog() {
               <span style="font-size:12px;color:var(--text-sec)">Stok:</span>
               <input class="input" id="cat-edit-stock-${i}" value="${c.stock != null ? c.stock : ''}" type="number" placeholder="—" style="width:60px;height:32px;text-align:center;font-size:14px;font-weight:600">
             </div>` : ''}
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+            <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="removeCatalogItem(${i})">Ürünü Sil</button>
           </div>` : ''}
         </div>`;
     });
@@ -3718,11 +3751,14 @@ function addToStock(idx) {
 }
 
 function updateStockDisplay(idx) {
-  const row = document.getElementById('cat-stock-row-' + idx);
-  if (!row) return;
   const c = S.catalog[idx];
-  const stockDisplay = row.querySelector('div[style*="font-size:18px"]');
-  if (stockDisplay) stockDisplay.textContent = c.stock != null ? c.stock : '—';
+  if (!c) return;
+  const badge = document.getElementById('cat-stock-badge-' + idx);
+  if (badge) {
+    badge.textContent = c.stock != null ? c.stock : '—';
+    const bg = c.stock != null && c.stock <= 5 ? 'var(--danger)' : c.stock != null && c.stock <= 20 ? 'var(--warning)' : 'var(--success)';
+    badge.style.background = bg;
+  }
 }
 
 function setStock(idx, val) {

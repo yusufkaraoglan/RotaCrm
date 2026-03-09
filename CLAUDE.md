@@ -13,17 +13,17 @@
 - **Dil:** Türkçe UI, İngilizce kod
 - **Teknoloji:** Vanilla HTML/CSS/JS + Leaflet.js + Supabase
 
-**Tek dosya mimarisi** — her şey `index.html` içinde:
-- CSS (satır 9–350)
-- HTML sayfaları + modallar (satır 352–963)
-- JavaScript (satır 966–3487)
+**Tek dosya mimarisi** — her şey `index.html` içinde (~4571 satır):
+- CSS (style bölümü)
+- HTML sayfaları + modallar (body)
+- JavaScript (script bölümü)
 
 ---
 
 ## Dosya Yapısı
 
 ```
-index.html              ← Tek kaynak dosya, tüm uygulama burada (~3487 satır)
+index.html              ← Tek kaynak dosya, tüm uygulama burada (~4571 satır)
 CLAUDE.md               ← Bu dosya (Claude Code talimatları)
 PROJECT.md              ← Proje detayları, mimari, veri yapıları
 FEATURES.md             ← Tüm özellikler ve fonksiyon referansı
@@ -62,13 +62,27 @@ save.debts();  // ← MUTLAKA çağır
 ### 5. Yeni Sayfa Ekleme
 Yeni sayfa eklerken 3 şeyi güncelle:
 1. HTML'de `<div class="page" id="page-ISIM">` ekle
-2. `showPage()` fonksiyonuna `if(name==='ISIM') renderISIM();` ekle
-3. Nav'a `<button class="ni" id="nav-ISIM">` ekle (eğer ana navigasyona dahil edilecekse)
+2. `showPage()` fonksiyonuna `case 'ISIM': renderISIM(); break;` ekle
+3. Nav'a buton ekle (eğer ana navigasyona dahilse)
 
-**Not:** Şu an 6 buton ana navigasyonda: map, rota, plan, dash, katalog, diğer. "Diğer" butonu popup menü açar ve adresler + borçlar sayfalarına erişim sağlar. Profil sayfası (`page-profil`) adresler listesinden müşteri adına tıklayarak açılır.
+**Mevcut sayfalar:** route, orders, customers, profile, reports, settings, catalog, map, delivery-history
+
+**Alt navigasyon (5 buton):** Route, Orders, Customers, Reports, Settings
 
 ### 6. Türkçe UI
 Tüm kullanıcıya görünen metinler Türkçe olmalı. Kod yorumları İngilizce veya Türkçe olabilir.
+
+### 7. Scroll Pozisyonu Koruma
+Sayfa içi güncellemelerde (stok değişimi, edit toggle) innerHTML yeniden yazılırsa scroll pozisyonunu kaydet/geri yükle:
+```js
+const pageEl = document.getElementById('page-xyz');
+const scrollPos = pageEl ? pageEl.scrollTop : 0;
+renderXyz();
+if (pageEl) pageEl.scrollTop = scrollPos;
+```
+
+### 8. Sipariş Formu Tam Sayfa
+Yeni sipariş/düzenleme formu `openModal()` yerine tam sayfa overlay (`order-form-overlay`) kullanır. `closeOrderForm()` ile kapatılır.
 
 ---
 
@@ -83,16 +97,7 @@ Tablo: cr4_store (key TEXT PRIMARY KEY, value JSONB, updated_at TIMESTAMPTZ)
 RLS: kapalı (DISABLE ROW LEVEL SECURITY)
 ```
 
-Tablo SQL:
-```sql
-DROP TABLE IF EXISTS cr4_store;
-CREATE TABLE cr4_store (
-  key TEXT PRIMARY KEY,
-  value JSONB,
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-ALTER TABLE cr4_store DISABLE ROW LEVEL SECURITY;
-```
+Supabase SDK kullanılmıyor — saf `fetch()` ile REST API çağrısı yapılıyor.
 
 ---
 
@@ -107,8 +112,6 @@ ALTER TABLE cr4_store DISABLE ROW LEVEL SECURITY;
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js">
 ```
-
-Supabase SDK kullanılmıyor — saf `fetch()` ile REST API çağrısı yapılıyor.
 
 ---
 
