@@ -251,33 +251,70 @@ function showToast(message, type = 'info', duration = 3000) {
 // ── Init ───────────────────────────────────────────────────
 
 async function init() {
-  // Try new DB first, fall back to legacy
-  const migrated = cacheGet('db_migrated', false);
+  let dataLoaded = false;
 
+  // 1) Try new DB tables first (if previously migrated or has cache)
+  const migrated = cacheGet('db_migrated', false);
   if (migrated) {
     await loadStateFromDB();
-  } else {
-    // Load from legacy localStorage
-    loadStateLegacy();
+    dataLoaded = STOPS.length > 0;
+    console.log('Init: loaded from new DB, STOPS:', STOPS.length);
+  }
 
-    // Check if migration is needed (has old data + new tables exist)
+  // 2) If no data yet, try to fetch from new tables directly
+  if (!dataLoaded) {
     try {
-      const needed = await checkMigrationNeeded();
-      if (needed === 'already_done') {
-        // Data already in new tables, just load from DB
+      const customers = await dbSelect('customers', 'select=id&limit=1');
+      if (customers && customers.length > 0) {
+        console.log('Init: new tables have data, loading from DB');
+        cacheSet('db_migrated', true);
         await loadStateFromDB();
-      } else if (needed) {
-        showToast('Veriler yeni sisteme aktarılıyor...', 'info', 10000);
-        const ok = await runMigration();
-        if (ok) {
-          cacheSet('db_migrated', true);
-          await loadStateFromDB();
-          showToast('Veri göçü tamamlandı!', 'success');
-        }
+        dataLoaded = STOPS.length > 0;
       }
     } catch (e) {
-      console.warn('Migration check failed, using legacy:', e.message);
+      console.warn('Init: new tables check failed:', e.message);
     }
+  }
+
+  // 3) If still no data, try legacy cr4_store sync from Supabase
+  if (!dataLoaded) {
+    console.log('Init: trying legacy cr4_store sync');
+    // First load from local cache (instant)
+    loadStateLegacy();
+    dataLoaded = STOPS.length > 0;
+
+    // Then sync from Supabase cr4_store (may take a moment)
+    if (!dataLoaded) {
+      try {
+        await syncFromSupabase();
+        dataLoaded = STOPS.length > 0;
+        console.log('Init: after legacy sync, STOPS:', STOPS.length);
+
+        // If we got data, try to migrate to new tables
+        if (dataLoaded) {
+          try {
+            const needed = await checkMigrationNeeded();
+            if (needed === true) {
+              showToast('Veriler yeni sisteme aktarılıyor...', 'info', 10000);
+              const ok = await runMigration();
+              if (ok) {
+                cacheSet('db_migrated', true);
+                await loadStateFromDB();
+                showToast('Veri göçü tamamlandı!', 'success');
+              }
+            }
+          } catch (e) {
+            console.warn('Migration failed, continuing with legacy:', e.message);
+          }
+        }
+      } catch (e) {
+        console.warn('Init: legacy sync failed:', e.message);
+      }
+    }
+  }
+
+  if (!dataLoaded) {
+    console.log('Init: no data found in any source');
   }
 
   // Set initial report range
@@ -305,7 +342,7 @@ async function init() {
     showPage(savedPage);
   }
 
-  // Periodic sync (re-check flag since migration may have just completed)
+  // Periodic sync
   const useNewDB = cacheGet('db_migrated', false);
   if (useNewDB) {
     setInterval(() => { if (navigator.onLine) syncAll(); }, 5 * 60 * 1000);
@@ -314,8 +351,7 @@ async function init() {
       if (!document.hidden && navigator.onLine) syncAll();
     });
   } else {
-    // Legacy sync
-    syncFromSupabase();
+    // Legacy periodic sync
     setInterval(() => { if (navigator.onLine) syncFromSupabase(); }, 5 * 60 * 1000);
     window.addEventListener('online', () => syncFromSupabase());
     document.addEventListener('visibilitychange', () => {
