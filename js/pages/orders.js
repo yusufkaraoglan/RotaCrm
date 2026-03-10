@@ -335,7 +335,7 @@ function renderOrderFormModal(title, existingNote) {
                      style="width:50px;font-size:14px;font-weight:600;border:none;background:transparent;color:var(--text);padding:0;outline:none;-moz-appearance:textfield">
             </div>
           </div>
-          <div style="font-size:15px;font-weight:700;flex-shrink:0">${formatCurrency(lineTotal)}</div>
+          <div id="order-line-total-${idx}" style="font-size:15px;font-weight:700;flex-shrink:0">${formatCurrency(lineTotal)}</div>
         </div>
       </div>`;
   });
@@ -407,13 +407,26 @@ function changeOrderItemQty(idx, delta) {
 function setOrderItemQty(idx, qty) {
   if (!tempOrderItems[idx]) return;
   tempOrderItems[idx].qty = Math.max(1, qty);
-  renderOrderFormModal(editingOrderId ? 'Sipariş Düzenle' : 'Yeni Sipariş');
+  updateOrderFormTotals();
 }
 
 function setOrderItemPrice(idx, price) {
   if (!tempOrderItems[idx]) return;
   tempOrderItems[idx].price = Math.max(0, price);
-  renderOrderFormModal(editingOrderId ? 'Sipariş Düzenle' : 'Yeni Sipariş');
+  updateOrderFormTotals();
+}
+
+function updateOrderFormTotals() {
+  let total = 0;
+  tempOrderItems.forEach((item, idx) => {
+    if (!item.name) return;
+    const lineTotal = (item.qty || 0) * (item.price || 0);
+    total += lineTotal;
+    const lineEl = document.getElementById('order-line-total-' + idx);
+    if (lineEl) lineEl.textContent = formatCurrency(lineTotal);
+  });
+  const totalEl = document.getElementById('order-total');
+  if (totalEl) totalEl.textContent = formatCurrency(total);
 }
 
 function openProductPicker() {
@@ -589,14 +602,15 @@ function saveOrder() {
   const note = document.getElementById('order-note')?.value || '';
   const deliveryDate = document.getElementById('order-delivery-date')?.value || '';
 
+  let newOrderId = null;
   if (editingOrderId && existingOrder) {
     existingOrder.items = items.map(i => ({ name: i.name, qty: i.qty, price: i.price }));
     existingOrder.note = note;
     existingOrder.deliveryDate = deliveryDate;
   } else {
-    const id = uid();
-    S.orders[id] = {
-      id,
+    newOrderId = uid();
+    S.orders[newOrderId] = {
+      id: newOrderId,
       customerId: parseInt(tempOrderCustomerId),
       items: items.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
       note,
@@ -616,8 +630,11 @@ function saveOrder() {
     }
   }
 
+  const savedOrderId = editingOrderId || newOrderId;
   editingOrderId = null;
   save.orders();
+  // Persist to DB
+  if (S.orders[savedOrderId]) DB.saveOrder(S.orders[savedOrderId]);
   closeOrderForm();
   closeModal();
   if (curPage === 'orders') renderOrders();

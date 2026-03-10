@@ -126,18 +126,32 @@ function initUIState() {
 // ── Save helpers (write to both state + DB) ────────────────
 
 const save = {
-  stops:       () => { /* customers saved individually via DB.saveCustomer */ },
-  assign:      () => { /* saved via DB.setAssignment */ },
-  routeOrder:  () => { /* saved via DB.saveRouteOrder */ },
-  geo:         () => { /* geo stored in customers table */ },
-  orders:      () => { /* saved via DB.saveOrder */ },
-  debts:       () => { /* saved via DB.setDebt */ },
-  debtHistory: () => { /* saved via DB.addDebtHistoryEntry */ },
-  cnotes:      () => { /* saved via DB.saveCustomer */ },
-  catalog:     () => { /* saved via DB.saveProduct */ },
-  pricing:     () => { /* saved via DB.setCustomerPricing */ },
+  stops: () => {
+    cacheSet('customers', STOPS.map(s => ({
+      id: s.id, name: s.n, address: s.a, city: s.c, postcode: s.p,
+      lat: (S.geo[s.id] && S.geo[s.id].lat) || null,
+      lng: (S.geo[s.id] && S.geo[s.id].lng) || null,
+      note: S.cnotes[s.id] || '', contact_name: s.cn || '',
+      phone: s.ph || '', email: s.em || ''
+    })));
+  },
+  assign: () => { cacheSet('assignments', S.assign); },
+  routeOrder: () => { cacheSet('route_order', S.routeOrder); },
+  geo: () => { /* stored in customers table via save.stops */ },
+  orders: () => { cacheSet('orders', S.orders); },
+  debts: () => { cacheSet('debts', S.debts); },
+  debtHistory: () => { cacheSet('debt_history', S.debtHistory); },
+  cnotes: () => { /* stored in customers table via save.stops */ },
+  catalog: () => {
+    cacheSet('products', S.catalog.map(c => ({
+      name: c.name, unit: c.unit || '1', price: c.price || 0,
+      stock: c.stock ?? null, track_stock: c.trackStock !== false,
+      sort_order: c.sort_order || 0
+    })));
+  },
+  pricing: () => { cacheSet('customer_pricing', S.customerPricing); },
   customerProducts: () => cacheSet('customer_products', S.customerProducts),
-  recurringOrders: () => { /* saved via DB.setRecurringOrder */ }
+  recurringOrders: () => { cacheSet('recurring_orders', S.recurringOrders); }
 };
 
 // Legacy save helpers (still used by existing code during transition)
@@ -194,11 +208,13 @@ function renderCurrentPage() {
 function openModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-overlay').classList.add('show');
+  document.body.classList.add('modal-open');
 }
 
 function closeModal() {
   document.getElementById('modal-overlay').classList.remove('show');
   document.getElementById('modal-content').innerHTML = '';
+  document.body.classList.remove('modal-open');
 }
 
 // ── Alert / Confirm ────────────────────────────────────────

@@ -406,6 +406,7 @@ function confirmVisitOnly() {
     payMethod: 'visit', createdAt: now, deliveredAt: now
   };
   save.orders();
+  DB.saveOrder(S.orders[vid]);
   closeModal();
   rerenderRouteKeepScroll();
 }
@@ -429,6 +430,7 @@ function confirmVisitWithPayment() {
   });
   save.debts();
   save.debtHistory();
+  DB.setDebt(stopId, S.debts[stopId]);
 
   const visitNote = document.getElementById('visit-note')?.value?.trim() || '';
   const vid = uid();
@@ -438,6 +440,7 @@ function confirmVisitWithPayment() {
     payMethod: visitPayMethod, createdAt: now, deliveredAt: now
   };
   save.orders();
+  DB.saveOrder(S.orders[vid]);
   closeModal();
   rerenderRouteKeepScroll();
 }
@@ -519,9 +522,14 @@ function confirmDelivery() {
     if (debtChanged) {
       save.debts();
       save.debtHistory();
+      // Persist debts to DB
+      const stopId = parseInt(deliveryStopId);
+      DB.setDebt(stopId, S.debts[stopId] || 0);
     }
 
     save.orders();
+    // Persist each delivered order to DB
+    pending.forEach(o => DB.saveOrder(o));
     closeModal();
     if (curPage === 'orders') renderOrders();
     else if (curPage === 'profile') renderProfile();

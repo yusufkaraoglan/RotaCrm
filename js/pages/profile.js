@@ -189,8 +189,10 @@ async function deleteOrder(orderId) {
   if (debtChanged) {
     save.debts();
     save.debtHistory();
+    DB.setDebt(order.customerId, S.debts[order.customerId] || 0);
   }
   save.orders();
+  DB.deleteOrder(orderId);
   if (curPage === 'profile') renderProfile();
   else if (curPage === 'orders') renderOrders();
 }
@@ -295,8 +297,10 @@ function saveEditDeliveredOrder(orderId) {
   if (debtChanged) {
     save.debts();
     save.debtHistory();
+    DB.setDebt(o.customerId, S.debts[o.customerId] || 0);
   }
   save.orders();
+  DB.saveOrder(o);
   closeModal();
   if (curPage === 'profile') renderProfile();
 }
@@ -564,6 +568,7 @@ function addDebt() {
   });
   save.debts();
   save.debtHistory();
+  DB.setDebt(profileStopId, S.debts[profileStopId]);
   closeModal();
   renderProfile();
 }
@@ -607,6 +612,7 @@ function clearDebt() {
   });
   save.debts();
   save.debtHistory();
+  DB.setDebt(profileStopId, S.debts[profileStopId]);
   closeModal();
   renderProfile();
 }
@@ -617,6 +623,7 @@ async function removeAllDebt() {
   if (!(await appConfirm(formatCurrency(debt) + ' tutarındaki tüm borcu silmek istediğinize emin misiniz?<br>Bu işlem ödeme kaydı oluşturmaz.'))) return;
   S.debts[profileStopId] = 0;
   save.debts();
+  DB.setDebt(profileStopId, 0);
   renderProfile();
 }
 
@@ -656,6 +663,7 @@ function saveEditDebtHistory(stopId, idx) {
   S.debts[stopId] = Math.max(0, S.debts[stopId]);
   save.debts();
   save.debtHistory();
+  DB.setDebt(stopId, S.debts[stopId]);
   closeModal();
   renderProfile();
 }
@@ -674,6 +682,7 @@ async function removeDebtHistory(stopId, idx) {
   dh.splice(idx, 1);
   save.debts();
   save.debtHistory();
+  DB.setDebt(stopId, S.debts[stopId]);
   renderProfile();
 }
 
