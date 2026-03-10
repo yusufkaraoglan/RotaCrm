@@ -1,8 +1,6 @@
 'use strict';
 // REPORTS PAGE
 // ══════════════════════════════════════════════════════════════
-let reportTab = 'overview';
-
 function renderReports() {
   const data = calcReportData();
 
@@ -531,8 +529,6 @@ function exportProductReportExcel() {
 // ══════════════════════════════════════════════════════════════
 // DELIVERY HISTORY PAGE
 // ══════════════════════════════════════════════════════════════
-let dhSearchTerm = '';
-
 function renderDeliveryHistoryContent() {
   // Group all delivered orders by week
   const delivered = Object.values(S.orders).filter(o => o.status === 'delivered' && o.deliveredAt);
