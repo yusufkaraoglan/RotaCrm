@@ -187,31 +187,30 @@ const save = {
       DB.setDebt(customerId, amount);
     });
   },
-  debtHistory: () => {
+  debtHistory: (changedCustomerIds) => {
     cacheSet('debt_history', S.debtHistory);
-    // Persist debt history entries to Supabase
-    Object.entries(S.debtHistory).forEach(([customerId, entries]) => {
-      if (Array.isArray(entries)) {
-        entries.forEach(entry => {
-          DB.addDebtHistoryEntry(customerId, entry);
-        });
-      }
-    });
+    // Only persist new entries for changed customers
+    if (changedCustomerIds && Array.isArray(changedCustomerIds)) {
+      changedCustomerIds.forEach(customerId => {
+        const entries = S.debtHistory[customerId];
+        if (Array.isArray(entries) && entries.length > 0 && entries[0]._new) {
+          delete entries[0]._new;
+          DB.addDebtHistoryEntry(customerId, entries[0]);
+        }
+      });
+    }
   },
   cnotes: () => { /* stored in customers table via save.stops */ },
   catalog: () => {
-    cacheSet('products', S.catalog.map(c => ({
+    const mapped = S.catalog.map(c => ({
       name: c.name, unit: c.unit || '1', price: c.price || 0,
       stock: c.stock ?? null, track_stock: c.trackStock !== false,
       sort_order: c.sort_order || 0
-    })));
-    // Persist each product to Supabase
-    S.catalog.forEach(c => {
-      DB.saveProduct({
-        name: c.name, unit: c.unit || '1', price: c.price || 0,
-        stock: c.stock ?? null, track_stock: c.trackStock !== false,
-        sort_order: c.sort_order || 0
-      });
+    }));
+    cacheSet('products', mapped);
+    // Persist to Supabase without cache updates (cache already set above)
+    mapped.forEach(p => {
+      dbInsert('products', p, { upsert: true }).catch(e => console.warn('save product failed:', p.name, e));
     });
   },
   pricing: () => {
@@ -298,35 +297,46 @@ function closeModal() {
 
 // ── Alert / Confirm ────────────────────────────────────────
 
+let _alertResolve = null;
+let _confirmResolve = null;
+
 function appAlert(msg) {
   return new Promise(resolve => {
+    _alertResolve = resolve;
     openModal(`
       <div class="modal-handle"></div>
       <div style="padding:24px 20px;text-align:center">
         <p style="font-size:15px;margin-bottom:20px">${msg}</p>
-        <button class="btn btn-primary btn-block" onclick="closeModal();(${resolve})()">OK</button>
+        <button class="btn btn-primary btn-block" onclick="_appAlertOk()">OK</button>
       </div>
     `);
   });
 }
 
+function _appAlertOk() {
+  closeModal();
+  if (_alertResolve) { _alertResolve(); _alertResolve = null; }
+}
+
 function appConfirm(msg) {
   return new Promise(resolve => {
-    const yes = () => { closeModal(); resolve(true); };
-    const no = () => { closeModal(); resolve(false); };
+    _confirmResolve = resolve;
     openModal(`
       <div class="modal-handle"></div>
       <div style="padding:24px 20px;text-align:center">
         <p style="font-size:15px;margin-bottom:20px">${msg}</p>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-outline btn-block" id="confirm-no">No</button>
-          <button class="btn btn-primary btn-block" id="confirm-yes">Yes</button>
+          <button class="btn btn-outline btn-block" onclick="_appConfirmAnswer(false)">No</button>
+          <button class="btn btn-primary btn-block" onclick="_appConfirmAnswer(true)">Yes</button>
         </div>
       </div>
     `);
-    document.getElementById('confirm-yes').onclick = yes;
-    document.getElementById('confirm-no').onclick = no;
   });
+}
+
+function _appConfirmAnswer(val) {
+  closeModal();
+  if (_confirmResolve) { _confirmResolve(val); _confirmResolve = null; }
 }
 
 // ── Toast Notifications ────────────────────────────────────

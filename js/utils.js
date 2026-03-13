@@ -207,7 +207,7 @@ function applyTrackedStockChange(prevItems, nextItems) {
 
 function createDebtHistoryEntry(stopId, entry) {
   if (!S.debtHistory[stopId]) S.debtHistory[stopId] = [];
-  const debtEntry = { id: uid(), ...entry };
+  const debtEntry = { id: uid(), _new: true, ...entry };
   S.debtHistory[stopId].unshift(debtEntry);
   return debtEntry;
 }

@@ -188,7 +188,7 @@ async function deleteOrder(orderId) {
   if (stockChange.changed) save.catalog();
   if (debtChanged) {
     save.debts();
-    save.debtHistory();
+    save.debtHistory([order.customerId]);
     DB.setDebt(order.customerId, S.debts[order.customerId] || 0);
   }
   save.orders([orderId]);
@@ -295,7 +295,7 @@ function saveEditDeliveredOrder(orderId) {
   }
   if (debtChanged) {
     save.debts();
-    save.debtHistory();
+    save.debtHistory([o.customerId]);
     DB.setDebt(o.customerId, S.debts[o.customerId] || 0);
   }
   save.orders([o.id]);
@@ -616,7 +616,7 @@ function clearDebt() {
     note: 'Payment received (' + clearDebtMethod + ')'
   });
   save.debts();
-  save.debtHistory();
+  save.debtHistory([profileStopId]);
   DB.setDebt(profileStopId, S.debts[profileStopId]);
   closeModal();
   renderProfile();

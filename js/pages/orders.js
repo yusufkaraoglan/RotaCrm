@@ -383,7 +383,7 @@ function renderOrderFormModal(title, existingNote) {
       </div>
       <div class="form-group">
         <label class="form-label">Delivery Date</label>
-        <input class="input" type="date" id="order-delivery-date" value="${tempOrderDeliveryDate}" min="${new Date().toISOString().split('T')[0]}" onchange="tempOrderDeliveryDate=this.value">
+        <input class="input" type="date" id="order-delivery-date" value="${tempOrderDeliveryDate}" onchange="tempOrderDeliveryDate=this.value">
         <div class="text-muted" style="font-size:11px;margin-top:4px">${tempOrderDeliveryDate ? '' : 'If left empty, defaults to today'}</div>
       </div>
       <div class="form-group">

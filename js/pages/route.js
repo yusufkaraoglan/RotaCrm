@@ -540,6 +540,10 @@ function showDeliveryModal(stopId, singleOrderId) {
         <p class="text-muted" style="font-size:12px;margin-top:4px" id="cash-remainder-msg"></p>
       </div>
       <div style="margin-top:12px">
+        <label class="form-label">Delivery Date & Time</label>
+        <input class="input" type="datetime-local" id="delivery-datetime" value="${new Date().toISOString().slice(0,16)}" style="font-size:14px">
+      </div>
+      <div style="margin-top:12px">
         <label class="form-label">Delivery Note (optional)</label>
         <textarea class="textarea" id="delivery-note" rows="2" placeholder="Add a note..." style="width:100%;font-size:14px;padding:8px;border:1px solid var(--border);border-radius:8px;resize:vertical"></textarea>
       </div>
@@ -598,7 +602,7 @@ function confirmVisitWithPayment() {
     note: `Visit payment (${visitPayMethod})`
   });
   save.debts();
-  save.debtHistory();
+  save.debtHistory([stopId]);
   DB.setDebt(stopId, S.debts[stopId]);
 
   const visitNote = document.getElementById('visit-note')?.value?.trim() || '';
@@ -654,7 +658,8 @@ function confirmDelivery() {
     const allPending = getStopOrders(stopId, 'pending');
     const pending = deliveryOrderIds ? allPending.filter(o => deliveryOrderIds.includes(o.id)) : allPending;
     if (pending.length === 0) { appAlert('No pending orders found.'); closeModal(); return; }
-    const now = new Date().toISOString();
+    const dtInput = document.getElementById('delivery-datetime');
+    const now = dtInput && dtInput.value ? new Date(dtInput.value).toISOString() : new Date().toISOString();
     const grandTotal = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
 
     const cashAllocations = new Map();
@@ -688,7 +693,7 @@ function confirmDelivery() {
     });
     if (debtChanged) {
       save.debts();
-      save.debtHistory();
+      save.debtHistory([parseInt(deliveryStopId)]);
       const stopId = parseInt(deliveryStopId);
       DB.setDebt(stopId, S.debts[stopId] || 0);
     }

@@ -108,7 +108,6 @@ function renderNewOrderPage() {
                    style="cursor:pointer">
             <input type="date" id="neworder-delivery-date-hidden"
                    value="${tempOrderDeliveryDate}"
-                   min="${new Date().toISOString().split('T')[0]}"
                    onchange="newOrderSetDeliveryDate(this.value)"
                    style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer">
           </div>

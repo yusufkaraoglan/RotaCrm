@@ -106,7 +106,7 @@ function showAddCustomerModal() {
       <label class="form-label">Email</label>
       <input class="input" id="add-cust-em" type="email" placeholder="email@ornek.com">
     </div>
-    <button class="btn btn-primary btn-block" onclick="saveNewCustomer()">Save Customer</button>
+    <button class="btn btn-primary btn-block" onclick="btnLock(saveNewCustomer)()">Save Customer</button>
   `);
 }
 
