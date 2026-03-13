@@ -96,7 +96,7 @@ function renderSettings() {
               <div class="settings-item-label">Supabase Sync</div>
               <div class="settings-item-desc" id="db-status-text">${_dbReady ? '<span style="color:var(--success)">Connected — tables OK</span>' : '<span style="color:var(--danger)">Tables not found — cache-only mode</span>'}</div>
             </div>
-            ${!_dbReady ? `<button class="btn btn-primary btn-sm" onclick="showDbSetupModal()">Setup</button>` : `<button class="btn btn-outline btn-sm" onclick="forceSyncNow()">Sync Now</button>`}
+            ${!_dbReady ? `<button class="btn btn-primary btn-sm" onclick="showDbSetupModal()">Setup</button>` : `<div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" onclick="uploadAllData()">Upload</button><button class="btn btn-outline btn-sm" onclick="forceSyncNow()">Pull</button></div>`}
           </div>
         </div>
       </div>
@@ -338,6 +338,62 @@ async function verifyDbSetup() {
 
     cacheSet('db_migrated', true);
     showToast('All data uploaded!', 'success');
+    renderSettings();
+  } catch (e) {
+    showToast('Upload error: ' + e.message, 'error', 5000);
+  }
+}
+
+async function uploadAllData() {
+  if (!_dbReady) { appAlert('Database tables not found. Run Setup first.'); return; }
+  showToast('Uploading all data...', 'info', 10000);
+  try {
+    // Step 1: Customers + Products (no FK deps)
+    const cp = [];
+    STOPS.forEach(s => cp.push(DB.saveCustomer({
+      id: s.id, name: s.n, address: s.a, city: s.c, postcode: s.p,
+      lat: (S.geo[s.id] && S.geo[s.id].lat) || null,
+      lng: (S.geo[s.id] && S.geo[s.id].lng) || null,
+      note: S.cnotes[s.id] || '', contact_name: s.cn || '',
+      phone: s.ph || '', email: s.em || ''
+    })));
+    S.catalog.forEach(c => cp.push(DB.saveProduct({
+      name: c.name, unit: c.unit || '1', price: c.price || 0,
+      stock: c.stock ?? null, track_stock: c.trackStock !== false,
+      sort_order: c.sort_order || 0
+    })));
+    await Promise.all(cp);
+    showToast('Customers & products uploaded. Uploading orders...', 'info', 5000);
+
+    // Step 2: Everything that references customers
+    const s2 = [];
+    Object.entries(S.assign).forEach(([cid, dayId]) => {
+      s2.push(DB.setAssignment(cid, dayId));
+    });
+    Object.entries(S.routeOrder).forEach(([dayId, cids]) => {
+      s2.push(DB.saveRouteOrder(dayId, Array.isArray(cids) ? cids : []));
+    });
+    Object.values(S.orders).forEach(order => {
+      s2.push(DB.saveOrder(order));
+    });
+    Object.entries(S.debts).forEach(([cid, amount]) => {
+      s2.push(DB.setDebt(cid, amount));
+    });
+    Object.entries(S.debtHistory).forEach(([cid, entries]) => {
+      if (Array.isArray(entries)) {
+        entries.forEach(entry => s2.push(DB.addDebtHistoryEntry(cid, entry)));
+      }
+    });
+    Object.entries(S.customerPricing || {}).forEach(([cid, pm]) => {
+      s2.push(DB.setCustomerPricing(cid, pm || {}));
+    });
+    Object.entries(S.recurringOrders || {}).forEach(([cid, data]) => {
+      s2.push(DB.setRecurringOrder(cid, data));
+    });
+    await Promise.all(s2);
+
+    cacheSet('db_migrated', true);
+    showToast('All data uploaded to cloud!', 'success');
     renderSettings();
   } catch (e) {
     showToast('Upload error: ' + e.message, 'error', 5000);

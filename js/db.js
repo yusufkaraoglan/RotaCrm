@@ -70,13 +70,15 @@ async function dbInsert(table, data, opts = {}) {
     });
     if (!r.ok) {
       const body = await r.text().catch(() => '');
-      throw new Error(`HTTP ${r.status}: ${body}`);
+      let detail = `HTTP ${r.status}`;
+      try { const j = JSON.parse(body); detail = j.message || j.details || detail; } catch {}
+      throw new Error(detail);
     }
     if (opts.returnData) return await r.json();
     return true;
   } catch (e) {
-    if (typeof dbLog === 'function') dbLog(`INSERT ${table} FAILED: ${e.message}`);
-    else console.error(`dbInsert ${table} FAILED:`, e.message);
+    if (typeof dbLog === 'function') dbLog(`INSERT ${table}: ${e.message}`);
+    else console.error(`dbInsert ${table}:`, e.message);
     if (!navigator.onLine) {
       offlineQueue.push({ action: 'insert', table, data, opts });
     }
