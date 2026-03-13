@@ -335,6 +335,47 @@ function showToast(message, type = 'info', duration = 3000) {
   }, duration);
 }
 
+// ── Mobile Debug Log ────────────────────────────────────────
+// Shows DB errors on screen (tap Settings title 5x to toggle)
+
+const _debugLog = [];
+let _debugVisible = false;
+let _debugTapCount = 0;
+
+function dbLog(msg) {
+  const entry = new Date().toLocaleTimeString() + ' ' + msg;
+  _debugLog.push(entry);
+  if (_debugLog.length > 50) _debugLog.shift();
+  console.error('[DB]', msg);
+  // Show toast for errors
+  if (msg.includes('FAILED')) showToast(msg.slice(0, 80), 'error', 5000);
+  if (_debugVisible) _renderDebugPanel();
+}
+
+function toggleDebugPanel() {
+  _debugTapCount++;
+  setTimeout(() => _debugTapCount = 0, 2000);
+  if (_debugTapCount >= 5) {
+    _debugVisible = !_debugVisible;
+    _debugTapCount = 0;
+    if (_debugVisible) _renderDebugPanel();
+    else { const p = document.getElementById('debug-panel'); if (p) p.remove(); }
+  }
+}
+
+function _renderDebugPanel() {
+  let panel = document.getElementById('debug-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'debug-panel';
+    panel.style.cssText = 'position:fixed;bottom:60px;left:0;right:0;max-height:40vh;overflow:auto;background:#111;color:#0f0;font:11px/1.4 monospace;padding:8px;z-index:99999;border-top:2px solid #0f0';
+    document.body.appendChild(panel);
+  }
+  panel.innerHTML = '<b>DB Log</b> <button onclick="_debugVisible=false;this.parentElement.remove()" style="float:right;color:#f00;background:none;border:none;font-size:14px">✕</button><br>'
+    + (_debugLog.length ? _debugLog.map(l => `<div style="border-bottom:1px solid #333;padding:2px 0">${l}</div>`).join('') : '<i>No logs yet</i>');
+  panel.scrollTop = panel.scrollHeight;
+}
+
 // ── Init ───────────────────────────────────────────────────
 
 async function init() {

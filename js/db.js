@@ -49,7 +49,8 @@ async function dbInsert(table, data, opts = {}) {
     if (opts.returnData) return await r.json();
     return true;
   } catch (e) {
-    console.error(`dbInsert ${table} FAILED:`, e.message);
+    if (typeof dbLog === 'function') dbLog(`INSERT ${table} FAILED: ${e.message}`);
+    else console.error(`dbInsert ${table} FAILED:`, e.message);
     if (!navigator.onLine) {
       offlineQueue.push({ action: 'insert', table, data, opts });
     }
@@ -71,7 +72,8 @@ async function dbUpdate(table, match, data) {
     }
     return true;
   } catch (e) {
-    console.error(`dbUpdate ${table} FAILED:`, e.message);
+    if (typeof dbLog === 'function') dbLog(`UPDATE ${table} FAILED: ${e.message}`);
+    else console.error(`dbUpdate ${table} FAILED:`, e.message);
     if (!navigator.onLine) {
       offlineQueue.push({ action: 'update', table, match, data });
     }
@@ -92,7 +94,8 @@ async function dbDelete(table, match) {
     }
     return true;
   } catch (e) {
-    console.error(`dbDelete ${table} FAILED:`, e.message);
+    if (typeof dbLog === 'function') dbLog(`DELETE ${table} FAILED: ${e.message}`);
+    else console.error(`dbDelete ${table} FAILED:`, e.message);
     if (!navigator.onLine) {
       offlineQueue.push({ action: 'delete', table, match });
     }
@@ -327,7 +330,7 @@ const DB = {
 
   async saveOrder(order) {
     // Upsert order row
-    await dbUpsert('orders', {
+    const ok = await dbUpsert('orders', {
       id: order.id, customer_id: order.customerId,
       status: order.status, pay_method: order.payMethod || null,
       cash_paid: order.cashPaid ?? null,
@@ -335,6 +338,10 @@ const DB = {
       note: order.note || '', created_at: order.createdAt,
       delivered_at: order.deliveredAt || null
     });
+    if (!ok) {
+      if (typeof dbLog === 'function') dbLog(`saveOrder ${order.id} FAILED at upsert (status=${order.status})`);
+      return;
+    }
     // Replace order items
     await dbDelete('order_items', { order_id: order.id });
     if (order.items && order.items.length > 0) {
@@ -342,6 +349,7 @@ const DB = {
         order_id: order.id, product_name: i.name, qty: i.qty, price: i.price
       })));
     }
+    if (typeof dbLog === 'function') dbLog(`saveOrder OK: ${order.id} status=${order.status}`);
     // Update cache
     const map = cacheGet('orders', {});
     map[order.id] = order;

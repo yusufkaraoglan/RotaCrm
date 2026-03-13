@@ -4,7 +4,7 @@
 function renderSettings() {
   let html = `
     <header class="topbar">
-      <h1>Settings</h1>
+      <h1 onclick="toggleDebugPanel()">Settings</h1>
     </header>
     <div class="page-body">
 
