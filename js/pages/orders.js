@@ -1,5 +1,4 @@
 'use strict';
-let _btnLock = false;
 
 function renderOrders(fullRender) {
   const isSearchUpdate = !fullRender && document.getElementById('orders-results');
