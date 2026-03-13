@@ -479,6 +479,16 @@ const DB = {
     });
   },
 
+  async deleteDebtHistoryEntry(entryId) {
+    if (entryId == null) return;
+    await dbDelete('debt_history', { id: entryId });
+  },
+
+  async deleteDebtHistoryByOrderId(orderId) {
+    if (!orderId) return;
+    await dbDelete('debt_history', { order_id: orderId });
+  },
+
   // -- Customer Pricing --
   async getCustomerPricing() {
     const cached = cacheGet('customer_pricing', null);

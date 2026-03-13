@@ -274,24 +274,37 @@ function removeLinkedOrderDebtEntries(order) {
   const ids = Array.isArray(order?.debtEntryIds) ? order.debtEntryIds : [];
   const history = S.debtHistory[order.customerId] || [];
   let removed = 0;
+  const removedIds = [];
 
   // Try matching by entry ID first
   if (ids.length) {
     ids.forEach(id => {
       const idx = history.findIndex(entry => entry.id === id);
-      if (idx >= 0) { removed = roundMoney(removed + (history[idx].amount || 0)); history.splice(idx, 1); }
+      if (idx >= 0) {
+        removed = roundMoney(removed + (history[idx].amount || 0));
+        removedIds.push(history[idx].id);
+        history.splice(idx, 1);
+      }
     });
   }
 
-  // Fallback: if no entries removed by ID, match by orderId + type 'add'
+  // Fallback: if no entries removed by ID, match by orderId (any type linked to this order)
   if (removed === 0 && order.id) {
     for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].orderId === order.id && history[i].type === 'add') {
-        removed = roundMoney(removed + (history[i].amount || 0));
+      if (history[i].orderId === order.id && (history[i].type === 'add' || history[i].type === 'adjust')) {
+        if (history[i].type === 'add') removed = roundMoney(removed + (history[i].amount || 0));
+        removedIds.push(history[i].id);
         history.splice(i, 1);
       }
     }
   }
+
+  // Delete removed entries from Supabase so they don't return on sync
+  if (removedIds.length > 0) {
+    removedIds.forEach(id => DB.deleteDebtHistoryEntry(id));
+  }
+  // Also delete all Supabase entries linked to this order
+  if (order.id) DB.deleteDebtHistoryByOrderId(order.id);
 
   order.debtEntryIds = [];
   return removed;
@@ -311,14 +324,14 @@ function reconcileOrderDebtEffect(prevOrder, nextOrder) {
   let changed = false;
   if (prevOrder) {
     const removed = removeLinkedOrderDebtEntries(prevOrder);
-    if (removed > 0) { S.debts[stopId] = Math.max(0, roundMoney((S.debts[stopId] || 0) - removed)); changed = true; }
     const prevImpact = getOrderDebtImpact(prevOrder);
-    const unresolved = roundMoney(Math.max(0, prevImpact - removed));
-    if (unresolved > 0) {
-      S.debts[stopId] = Math.max(0, roundMoney((S.debts[stopId] || 0) - unresolved));
-      addDebtAdjustmentEntry(stopId, unresolved, 'Order debt correction', prevOrder.id);
+    // Subtract whatever was removed OR the full expected impact (whichever is greater)
+    const toSubtract = Math.max(removed, prevImpact);
+    if (toSubtract > 0) {
+      S.debts[stopId] = Math.max(0, roundMoney((S.debts[stopId] || 0) - toSubtract));
       changed = true;
     }
+    // No correction entry — just adjust the balance directly to avoid entry buildup
   }
   if (nextOrder && getOrderDebtImpact(nextOrder) > 0) { addOrderDebtEffect(nextOrder); changed = true; }
   else if (nextOrder) { nextOrder.debtEntryIds = []; }

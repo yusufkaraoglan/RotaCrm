@@ -690,6 +690,8 @@ async function removeDebtHistory(stopId, idx) {
   } else {
     S.debts[stopId] = (S.debts[stopId] || 0) + h.amount;
   }
+  // Delete from Supabase so it doesn't return on sync
+  if (h.id != null) DB.deleteDebtHistoryEntry(h.id);
   dh.splice(idx, 1);
   save.debts();
   save.debtHistory();
