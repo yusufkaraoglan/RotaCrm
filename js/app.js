@@ -180,7 +180,13 @@ const save = {
       });
     }
   },
-  debts: () => { cacheSet('debts', S.debts); },
+  debts: () => {
+    cacheSet('debts', S.debts);
+    // Persist each debt to Supabase
+    Object.entries(S.debts).forEach(([customerId, amount]) => {
+      DB.setDebt(customerId, amount);
+    });
+  },
   debtHistory: () => {
     cacheSet('debt_history', S.debtHistory);
     // Persist debt history entries to Supabase
@@ -446,6 +452,13 @@ async function init() {
 
   if (!dataLoaded) {
     console.log('Init: no data found in any source');
+  }
+
+  // Notify user if DB tables are missing
+  if (!_dbReady) {
+    setTimeout(() => {
+      showToast('Database tables not found — data is only saved locally. Go to Settings to set up cloud sync.', 'error', 8000);
+    }, 1500);
   }
 
   // Set initial report range
