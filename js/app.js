@@ -382,6 +382,53 @@ function _renderDebugPanel() {
   panel.scrollTop = panel.scrollHeight;
 }
 
+// ── Initial Upload (local → Supabase, respects FK order) ───
+
+async function _initialUpload() {
+  // Step 1: customers + products (no FK deps)
+  const step1 = [];
+  STOPS.forEach(s => step1.push(DB.saveCustomer({
+    id: s.id, name: s.n, address: s.a, city: s.c, postcode: s.p,
+    lat: (S.geo[s.id] && S.geo[s.id].lat) || null,
+    lng: (S.geo[s.id] && S.geo[s.id].lng) || null,
+    note: S.cnotes[s.id] || '', contact_name: s.cn || '',
+    phone: s.ph || '', email: s.em || ''
+  })));
+  S.catalog.forEach(c => step1.push(DB.saveProduct({
+    name: c.name, unit: c.unit || '1', price: c.price || 0,
+    stock: c.stock ?? null, track_stock: c.trackStock !== false,
+    sort_order: c.sort_order || 0
+  })));
+  await Promise.all(step1);
+
+  // Step 2: everything that references customers
+  const step2 = [];
+  Object.entries(S.assign).forEach(([cid, dayId]) => {
+    step2.push(DB.setAssignment(cid, dayId));
+  });
+  Object.entries(S.routeOrder).forEach(([dayId, cids]) => {
+    step2.push(DB.saveRouteOrder(dayId, Array.isArray(cids) ? cids : []));
+  });
+  Object.values(S.orders).forEach(order => {
+    step2.push(DB.saveOrder(order));
+  });
+  Object.entries(S.debts).forEach(([cid, amount]) => {
+    step2.push(DB.setDebt(cid, amount));
+  });
+  Object.entries(S.debtHistory || {}).forEach(([cid, entries]) => {
+    if (Array.isArray(entries)) {
+      entries.forEach(entry => step2.push(DB.addDebtHistoryEntry(cid, entry)));
+    }
+  });
+  Object.entries(S.customerPricing || {}).forEach(([cid, pm]) => {
+    step2.push(DB.setCustomerPricing(cid, pm || {}));
+  });
+  Object.entries(S.recurringOrders || {}).forEach(([cid, data]) => {
+    step2.push(DB.setRecurringOrder(cid, data));
+  });
+  await Promise.all(step2);
+}
+
 // ── Init ───────────────────────────────────────────────────
 
 async function init() {
@@ -413,37 +460,17 @@ async function init() {
     }
   }
 
-  // 3) If still no data, try legacy cr4_store sync from Supabase
+  // 3) If still no data, try legacy localStorage / cr4_store
   if (!dataLoaded) {
-    console.log('Init: trying legacy cr4_store sync');
-    // First load from local cache (instant)
+    console.log('Init: trying legacy data');
     loadStateLegacy();
     dataLoaded = STOPS.length > 0;
 
-    // Then sync from Supabase cr4_store (may take a moment)
     if (!dataLoaded) {
       try {
         await syncFromSupabase();
         dataLoaded = STOPS.length > 0;
         console.log('Init: after legacy sync, STOPS:', STOPS.length);
-
-        // If we got data, try to migrate to new tables
-        if (dataLoaded) {
-          try {
-            const needed = await checkMigrationNeeded();
-            if (needed === true) {
-              showToast('Migrating data to new system...', 'info', 10000);
-              const ok = await runMigration();
-              if (ok) {
-                cacheSet('db_migrated', true);
-                await loadStateFromDB();
-                showToast('Data migration complete!', 'success');
-              }
-            }
-          } catch (e) {
-            console.warn('Migration failed, continuing with legacy:', e.message);
-          }
-        }
       } catch (e) {
         console.warn('Init: legacy sync failed:', e.message);
       }
@@ -452,6 +479,22 @@ async function init() {
 
   if (!dataLoaded) {
     console.log('Init: no data found in any source');
+  }
+
+  // 4) Auto-upload: tables exist + we have local data + DB is empty
+  if (dataLoaded && _dbReady && !cacheGet('db_migrated', false)) {
+    try {
+      const dbCustomers = await dbSelect('customers', 'select=id&limit=1');
+      if (!dbCustomers || dbCustomers.length === 0) {
+        console.log('Init: DB tables empty, auto-uploading local data...');
+        showToast('Uploading data to cloud...', 'info', 10000);
+        await _initialUpload();
+        showToast('Data uploaded to cloud!', 'success');
+      }
+      cacheSet('db_migrated', true);
+    } catch (e) {
+      console.warn('Init: auto-upload failed:', e.message);
+    }
   }
 
   // Notify user if DB tables are missing
