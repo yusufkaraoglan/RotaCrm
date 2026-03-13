@@ -94,9 +94,9 @@ function renderSettings() {
           <div class="settings-item">
             <div>
               <div class="settings-item-label">Supabase Sync</div>
-              <div class="settings-item-desc" id="db-status-text">${_dbReady ? '<span style="color:var(--success)">Connected — tables OK</span>' : '<span style="color:var(--danger)">Tables not found — cache-only mode</span>'}</div>
+              <div class="settings-item-desc" id="db-status-text">${_dbReady ? '<span style="color:var(--success)">Connected — Auto Sync</span>' : '<span style="color:var(--danger)">Tables not found — cache-only mode</span>'}</div>
             </div>
-            ${!_dbReady ? `<button class="btn btn-primary btn-sm" onclick="showDbSetupModal()">Setup</button>` : `<div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" onclick="uploadAllData()">Upload</button><button class="btn btn-outline btn-sm" onclick="forceSyncNow()">Pull</button></div>`}
+            ${!_dbReady ? `<button class="btn btn-primary btn-sm" onclick="showDbSetupModal()">Setup</button>` : `<span style="color:var(--success);font-size:20px">&#10003;</span>`}
           </div>
         </div>
       </div>
