@@ -272,13 +272,27 @@ function addOrderDebtEffect(order) {
 
 function removeLinkedOrderDebtEntries(order) {
   const ids = Array.isArray(order?.debtEntryIds) ? order.debtEntryIds : [];
-  if (!ids.length) return 0;
   const history = S.debtHistory[order.customerId] || [];
   let removed = 0;
-  ids.forEach(id => {
-    const idx = history.findIndex(entry => entry.id === id);
-    if (idx >= 0) { removed = roundMoney(removed + (history[idx].amount || 0)); history.splice(idx, 1); }
-  });
+
+  // Try matching by entry ID first
+  if (ids.length) {
+    ids.forEach(id => {
+      const idx = history.findIndex(entry => entry.id === id);
+      if (idx >= 0) { removed = roundMoney(removed + (history[idx].amount || 0)); history.splice(idx, 1); }
+    });
+  }
+
+  // Fallback: if no entries removed by ID, match by orderId + type 'add'
+  if (removed === 0 && order.id) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].orderId === order.id && history[i].type === 'add') {
+        removed = roundMoney(removed + (history[i].amount || 0));
+        history.splice(i, 1);
+      }
+    }
+  }
+
   order.debtEntryIds = [];
   return removed;
 }
