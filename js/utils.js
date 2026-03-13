@@ -4,6 +4,32 @@
 // ═══════════════════════════════════════════════════════════
 
 function uid() { return 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+function repairDebtHistoryTypes(dhMap) {
+  if (!dhMap || typeof dhMap !== 'object') return {};
+  Object.keys(dhMap).forEach(cid => {
+    const entries = dhMap[cid];
+    if (!Array.isArray(entries)) return;
+    entries.forEach(e => {
+      if (!e.type) {
+        if (/payment received|paid/i.test(e.note)) e.type = 'clear';
+        else if (/correction|adjust/i.test(e.note)) e.type = 'adjust';
+        else if (/visit/i.test(e.note)) e.type = 'visit';
+        else e.type = 'add';
+      }
+      if (!e.id) e.id = uid();
+    });
+    // Deduplicate
+    const seen = new Set();
+    dhMap[cid] = entries.filter(e => {
+      const key = e.date + '|' + e.amount + '|' + e.note;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  });
+  return dhMap;
+}
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function formatCurrency(n) { return '\u00A3' + (n || 0).toFixed(2); }
 

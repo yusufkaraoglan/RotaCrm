@@ -173,6 +173,39 @@ function cacheSet(key, value) {
   try { localStorage.setItem('cr5_' + key, JSON.stringify(value)); } catch {}
 }
 
+// ── Debt history helpers ──────────────────────────────────
+function parseDebtHistoryRow(r) {
+  let note = r.note || '';
+  let type = undefined;
+  if (note.includes('|||')) {
+    const parts = note.split('|||');
+    note = parts[0];
+    type = parts[1] || undefined;
+  }
+  // Infer type from note if not encoded
+  if (!type) {
+    if (/payment received|paid/i.test(note)) type = 'clear';
+    else if (/correction|adjust/i.test(note)) type = 'adjust';
+    else if (/visit/i.test(note)) type = 'visit';
+    else type = 'add';
+  }
+  return {
+    id: r.id || uid(),
+    date: r.created_at, amount: parseFloat(r.amount),
+    type, note, orderId: r.order_id || undefined
+  };
+}
+
+function dedupeDebtHistory(entries) {
+  const seen = new Set();
+  return entries.filter(e => {
+    const key = e.date + '|' + e.amount + '|' + e.note;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // ── Legacy cr4 read (for migration) ───────────────────────
 
 function legacyGet(key, fallback) {
@@ -426,11 +459,10 @@ const DB = {
       rows.forEach(r => {
         const cid = r.customer_id;
         if (!map[cid]) map[cid] = [];
-        map[cid].push({
-          date: r.created_at, amount: parseFloat(r.amount),
-          note: r.note || '', orderId: r.order_id || undefined
-        });
+        map[cid].push(parseDebtHistoryRow(r));
       });
+      // Deduplicate per customer
+      Object.keys(map).forEach(cid => { map[cid] = dedupeDebtHistory(map[cid]); });
       cacheSet('debt_history', map);
       return map;
     }
@@ -438,9 +470,10 @@ const DB = {
   },
 
   async addDebtHistoryEntry(customerId, entry) {
+    const encodedNote = (entry.note || '') + (entry.type ? '|||' + entry.type : '');
     await dbInsert('debt_history', {
       customer_id: customerId, amount: entry.amount,
-      note: entry.note || '', order_id: entry.orderId || null,
+      note: encodedNote, order_id: entry.orderId || null,
       created_at: entry.date || new Date().toISOString()
     });
     const map = cacheGet('debt_history', {});
@@ -594,11 +627,9 @@ async function syncAll() {
       debtHistory.forEach(r => {
         const cid = r.customer_id;
         if (!map[cid]) map[cid] = [];
-        map[cid].push({
-          date: r.created_at, amount: parseFloat(r.amount),
-          note: r.note || '', orderId: r.order_id || undefined
-        });
+        map[cid].push(parseDebtHistoryRow(r));
       });
+      Object.keys(map).forEach(cid => { map[cid] = dedupeDebtHistory(map[cid]); });
       cacheSet('debt_history', map);
     }
     if (pricing) {

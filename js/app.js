@@ -62,7 +62,7 @@ function loadStateLegacy() {
   S.geo = legacyGet('geo', {});
   S.orders = legacyGet('ordersV2', {});
   S.debts = legacyGet('debts', {});
-  S.debtHistory = legacyGet('debtHistory', {});
+  S.debtHistory = repairDebtHistoryTypes(legacyGet('debtHistory', {}));
   S.cnotes = legacyGet('cnotes', {});
   S.catalog = legacyGet('catalog', []);
   S.customerPricing = legacyGet('customerPricing', null);
@@ -104,7 +104,7 @@ async function loadStateFromDB() {
   });
   S.orders = orders;
   S.debts = debts;
-  S.debtHistory = debtHistory;
+  S.debtHistory = repairDebtHistoryTypes(debtHistory);
   S.cnotes = {};
   customers.forEach(c => { if (c.note) S.cnotes[c.id] = c.note; });
   S.catalog = products.map(p => ({
