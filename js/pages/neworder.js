@@ -77,29 +77,19 @@ function renderNewOrderPage() {
         </div>
       </div>
 
-      <!-- PRODUCTS SECTION -->
+      <!-- PRODUCTS SECTION (merged with cart) -->
       <div class="neworder-section">
         <div class="neworder-section-title" style="justify-content:space-between">
           <div style="display:flex;align-items:center;gap:6px">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-            Products
+            Products${selectedCount > 0 ? ' (' + selectedCount + ')' : ''}
           </div>
           <button class="btn-ghost" onclick="openNewOrderProductPicker()" style="font-size:13px;color:var(--primary);font-weight:600;padding:4px 8px">
-            + Add Products
+            + Add
           </button>
         </div>
-        ${buildNewOrderSelectedProductsList()}
+        ${buildNewOrderProductsCartMerged(cartItems)}
       </div>
-
-      <!-- CART / QUANTITIES SECTION -->
-      ${cartItems.length > 0 ? `
-      <div class="neworder-section">
-        <div class="neworder-section-title">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-          Cart (${cartItems.length})
-        </div>
-        ${buildNewOrderCartHtml(cartItems)}
-      </div>` : ''}
 
       <!-- DETAILS SECTION -->
       <div class="neworder-section">
@@ -156,18 +146,20 @@ function newOrderSetDeliveryDate(val) {
   if (display) display.value = val ? formatDateForDisplay(val) : '';
 }
 
-// ── Product selection as list items (compact) ──
+// ── Merged Products + Cart ──
 
-function buildNewOrderSelectedProductsList() {
-  const cartItems = tempOrderItems.filter(i => i.name);
+function buildNewOrderProductsCartMerged(cartItems) {
   if (cartItems.length === 0) {
-    return `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:13px">
-      No products added yet. Tap "+ Add Products" to select.
+    return `<div style="text-align:center;padding:20px 16px;color:var(--text-muted)">
+      <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 8px;display:block;opacity:0.4"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      <div style="font-size:13px">Tap <b>+ Add</b> to select products</div>
     </div>`;
   }
 
   let html = '';
   cartItems.forEach(item => {
+    const actualIdx = tempOrderItems.indexOf(item);
+    const lineTotal = (item.qty || 0) * (item.price || 0);
     const cat = S.catalog.find(c => c.name === item.name);
     const isCustomProduct = tempOrderCustomerId != null &&
       S.customerProducts[tempOrderCustomerId] &&
@@ -177,17 +169,37 @@ function buildNewOrderSelectedProductsList() {
       S.customerPricing[tempOrderCustomerId][item.name] !== undefined;
 
     html += `
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:4px">
-            ${escHtml(item.name)}
-            ${isCustomProduct ? '<span class="badge badge-purple" style="font-size:9px;padding:1px 5px">Assigned</span>' : ''}
-            ${hasCustomPrice ? '<span class="badge badge-info" style="font-size:9px;padding:1px 5px">Special Price</span>' : ''}
+      <div class="no-product-row">
+        <div class="no-product-row-top">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+              ${escHtml(item.name)}
+              ${isCustomProduct ? '<span class="badge badge-purple" style="font-size:9px;padding:1px 5px">Assigned</span>' : ''}
+              ${hasCustomPrice ? '<span class="badge badge-info" style="font-size:9px;padding:1px 5px">Special</span>' : ''}
+            </div>
           </div>
-          <div style="font-size:12px;color:var(--text-sec)">${cat ? escHtml(cat.unit || 'unit') : ''} &middot; ${formatCurrency(item.price)}</div>
+          <div style="font-size:15px;font-weight:700;flex-shrink:0">${formatCurrency(lineTotal)}</div>
+          <button class="no-product-remove" onclick="newOrderRemoveItem(${actualIdx})">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
-        <span style="font-size:13px;color:var(--text-sec)">&times;${item.qty}</span>
-        <span style="font-size:14px;font-weight:700;min-width:50px;text-align:right">${formatCurrency(item.qty * item.price)}</span>
+        <div class="no-product-row-bottom">
+          <div style="display:flex;align-items:center;gap:4px">
+            <span style="font-size:12px;color:var(--text-sec)">&pound;</span>
+            <input type="number" step="0.01" value="${item.price.toFixed(2)}"
+                   onchange="newOrderSetPrice(${actualIdx},parseFloat(this.value)||0)"
+                   onclick="this.select()"
+                   class="no-price-input">
+            <span style="font-size:11px;color:var(--text-muted)">/${cat ? escHtml(cat.unit || 'ea') : 'ea'}</span>
+          </div>
+          <div class="no-qty-controls">
+            <button class="qty-btn" onclick="newOrderChangeQty(${actualIdx},-1)">&minus;</button>
+            <input type="number" class="qty-input" value="${item.qty}" min="1"
+                   onchange="newOrderSetQty(${actualIdx},parseInt(this.value)||1)"
+                   onclick="this.select()">
+            <button class="qty-btn" onclick="newOrderChangeQty(${actualIdx},1)">+</button>
+          </div>
+        </div>
       </div>`;
   });
   return html;
@@ -306,40 +318,6 @@ function toggleNewOrderProductFromPicker(productName) {
   filterNewOrderProductPicker(searchInput ? searchInput.value : '');
 }
 
-// ── Cart with editable prices ──
-
-function buildNewOrderCartHtml(cartItems) {
-  let html = '';
-  cartItems.forEach((item) => {
-    const actualIdx = tempOrderItems.indexOf(item);
-    const lineTotal = (item.qty || 0) * (item.price || 0);
-    html += `
-      <div class="neworder-cart-item">
-        <div class="neworder-cart-item-info">
-          <div class="neworder-cart-item-name">${escHtml(item.name)}</div>
-          <div style="display:flex;align-items:center;gap:4px;margin-top:2px">
-            <span style="font-size:12px;color:var(--text-sec)">&pound;</span>
-            <input type="number" step="0.01" value="${item.price.toFixed(2)}"
-                   onchange="newOrderSetPrice(${actualIdx},parseFloat(this.value)||0)"
-                   onclick="this.select()"
-                   style="width:60px;font-size:13px;font-weight:600;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);text-align:center">
-            <span style="font-size:11px;color:var(--text-muted)">each</span>
-          </div>
-        </div>
-        <div class="neworder-cart-item-controls">
-          <button class="qty-btn" onclick="newOrderChangeQty(${actualIdx},-1)">&minus;</button>
-          <input type="number" class="qty-input" value="${item.qty}" min="1"
-                 onchange="newOrderSetQty(${actualIdx},parseInt(this.value)||1)"
-                 onclick="this.select()">
-          <button class="qty-btn" onclick="newOrderChangeQty(${actualIdx},1)">+</button>
-        </div>
-        <div class="neworder-cart-item-total">${formatCurrency(lineTotal)}</div>
-        <button style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);flex-shrink:0" onclick="newOrderRemoveItem(${actualIdx})">&#10005;</button>
-      </div>`;
-  });
-  return html;
-}
-
 function rerenderNewOrderKeepScroll() {
   const body = document.getElementById('neworder-body');
   const scrollPos = body ? body.scrollTop : 0;
@@ -359,16 +337,7 @@ function newOrderChangeQty(idx, delta) {
 function newOrderSetQty(idx, qty) {
   if (!tempOrderItems[idx]) return;
   tempOrderItems[idx].qty = Math.max(1, qty);
-  // Update totals in-place
-  const cartItems = tempOrderItems.filter(i => i.name);
-  const total = cartItems.reduce((s, i) => s + (i.qty || 0) * (i.price || 0), 0);
-  const totalEl = document.querySelector('.neworder-total-value');
-  if (totalEl) totalEl.textContent = formatCurrency(total);
-  // Update line total
-  const lineTotal = tempOrderItems[idx].qty * tempOrderItems[idx].price;
-  const cartIdx = cartItems.indexOf(tempOrderItems[idx]);
-  const lineTotalEls = document.querySelectorAll('.neworder-cart-item-total');
-  if (lineTotalEls[cartIdx]) lineTotalEls[cartIdx].textContent = formatCurrency(lineTotal);
+  rerenderNewOrderKeepScroll();
 }
 
 function newOrderSetPrice(idx, price) {
