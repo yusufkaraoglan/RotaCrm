@@ -33,16 +33,6 @@ function renderRoute() {
   const unlockedStops = allSorted.filter(id => !routeLockedStops.includes(id));
   const sorted = [...lockedStops, ...unlockedStops];
 
-  // Filter by search
-  let filtered = sorted;
-  if (routeSearchTerm) {
-    const q = routeSearchTerm.toLowerCase();
-    filtered = sorted.filter(id => {
-      const stop = getStop(id);
-      return stop && (stop.n.toLowerCase().includes(q) || (stop.c||'').toLowerCase().includes(q) || (stop.p||'').toLowerCase().includes(q));
-    });
-  }
-
   // Current date info
   const dateInfo = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -64,6 +54,14 @@ function renderRoute() {
         </button>
       </div>
     </header>
+    <div class="route-search-bar">
+      <div class="search-bar" style="margin:0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="Search all customers..." value="${escHtml(routeSearchTerm)}" oninput="routeSearchTerm=this.value;renderRouteSearchResults()">
+      </div>
+    </div>
+    <div id="route-search-results" class="${routeSearchTerm ? '' : 'hidden'}"></div>
+    <div id="route-main-content" class="${routeSearchTerm ? 'hidden' : ''}">
     <div class="week-toggle">
       <button class="week-btn ${week==='A'?'active':''}" onclick="setRouteWeek('A')">Week A</button>
       <button class="week-btn ${week==='B'?'active':''}" onclick="setRouteWeek('B')">Week B</button>
@@ -79,14 +77,13 @@ function renderRoute() {
       }).join('')}
     </div>
     <div class="page-body">
-      <div class="search-bar" style="margin-bottom:10px">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="Search route..." value="${escHtml(routeSearchTerm)}" oninput="routeSearchTerm=this.value;renderRouteList()">
-      </div>
       <div id="route-list">`;
 
-  html += buildRouteListHtml(filtered, dayObj, sorted);
+  html += buildRouteListHtml(sorted, dayObj, sorted);
   html += `</div></div>`;
+
+  // Close route-main-content
+  html += `</div>`;
 
   // Summary bar
   const deliveredCount = sorted.filter(id => isDeliveredThisWeek(id)).length;
@@ -107,9 +104,6 @@ function renderRoute() {
 
 function buildRouteListHtml(filtered, dayObj, allSorted) {
   if (filtered.length === 0) {
-    if (routeSearchTerm) {
-      return `<div class="empty-state"><p><b>No matching customers</b></p></div>`;
-    }
     return `<div class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
       <p><b>No customers assigned to this day</b></p>
@@ -179,20 +173,63 @@ function renderRouteList() {
   const unlockedStops = allSorted.filter(id => !routeLockedStops.includes(id));
   const sorted = [...lockedStops, ...unlockedStops];
 
-  let filtered = sorted;
-  if (routeSearchTerm) {
-    const q = routeSearchTerm.toLowerCase();
-    filtered = sorted.filter(id => {
-      const stop = getStop(id);
-      return stop && (stop.n.toLowerCase().includes(q) || (stop.c||'').toLowerCase().includes(q) || (stop.p||'').toLowerCase().includes(q));
-    });
-  }
-
   const container = document.getElementById('route-list');
   if (container) {
-    container.innerHTML = buildRouteListHtml(filtered, dayObj, sorted);
+    container.innerHTML = buildRouteListHtml(sorted, dayObj, sorted);
     initRouteDragDrop();
   }
+}
+
+function renderRouteSearchResults() {
+  const searchContainer = document.getElementById('route-search-results');
+  const mainContent = document.getElementById('route-main-content');
+  if (!searchContainer || !mainContent) return;
+
+  if (!routeSearchTerm) {
+    searchContainer.classList.add('hidden');
+    mainContent.classList.remove('hidden');
+    return;
+  }
+
+  searchContainer.classList.remove('hidden');
+  mainContent.classList.add('hidden');
+
+  const q = routeSearchTerm.toLowerCase();
+  const results = STOPS.filter(s =>
+    s.n.toLowerCase().includes(q) ||
+    (s.c||'').toLowerCase().includes(q) ||
+    (s.p||'').toLowerCase().includes(q) ||
+    (s.a||'').toLowerCase().includes(q)
+  ).slice(0, 20);
+
+  if (results.length === 0) {
+    searchContainer.innerHTML = `<div style="padding:30px 16px" class="empty-state"><p>No customers found</p></div>`;
+    return;
+  }
+
+  let html = `<div style="padding:8px 16px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch">`;
+  results.forEach(s => {
+    const dayId = S.assign[s.id];
+    const dayObj = dayId ? DAYS.find(d => d.id === dayId) : null;
+    const pending = getStopOrders(s.id, 'pending');
+    const debt = S.debts[s.id] || 0;
+
+    html += `
+      <div class="customer-card" onclick="routeSearchTerm='';showProfile(${s.id})">
+        <div class="customer-avatar">${escHtml(s.n.substring(0,2).toUpperCase())}</div>
+        <div class="customer-info">
+          <div class="customer-name">${escHtml(s.n)}</div>
+          <div class="customer-area">${escHtml(s.c || '')}${s.p ? ' · ' + escHtml(s.p) : ''}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+          ${dayObj ? `<span class="badge" style="background:${dayObj.color}20;color:${dayObj.color};font-size:10px">${dayObj.week}-${dayObj.label.slice(0,3)}</span>` : ''}
+          ${pending.length > 0 ? `<span class="badge badge-warning" style="font-size:10px">${pending.length} pending</span>` : ''}
+          ${debt > 0 ? `<span class="badge badge-danger" style="font-size:10px">${formatCurrency(debt)}</span>` : ''}
+        </div>
+      </div>`;
+  });
+  html += `</div>`;
+  searchContainer.innerHTML = html;
 }
 
 function toggleRouteLock(stopId) {
