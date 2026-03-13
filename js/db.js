@@ -476,10 +476,6 @@ const DB = {
       note: encodedNote, order_id: entry.orderId || null,
       created_at: entry.date || new Date().toISOString()
     });
-    const map = cacheGet('debt_history', {});
-    if (!map[customerId]) map[customerId] = [];
-    map[customerId].unshift(entry);
-    cacheSet('debt_history', map);
   },
 
   // -- Customer Pricing --

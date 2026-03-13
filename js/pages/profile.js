@@ -566,14 +566,13 @@ function addDebt() {
   const note = document.getElementById('debt-note').value.trim() || 'Manual entry';
 
   S.debts[profileStopId] = (S.debts[profileStopId] || 0) + amount;
+  const debtEntry = { date: new Date().toISOString(), amount, type: 'add', note };
   if (!S.debtHistory[profileStopId]) S.debtHistory[profileStopId] = [];
-  S.debtHistory[profileStopId].unshift({
-    date: new Date().toISOString(), amount: amount, type: 'add', note: note
-  });
+  S.debtHistory[profileStopId].unshift(debtEntry);
   save.debts();
   save.debtHistory();
   DB.setDebt(profileStopId, S.debts[profileStopId]);
-  DB.addDebtHistoryEntry(profileStopId, {amount, note, date: new Date().toISOString()});
+  DB.addDebtHistoryEntry(profileStopId, debtEntry);
   closeModal();
   renderProfile();
 }
