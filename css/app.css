@@ -402,6 +402,10 @@ body.modal-open .page{touch-action:none}
 .chip-group::-webkit-scrollbar,.date-range-bar::-webkit-scrollbar{display:none}
 .chip-group,.date-range-bar{-ms-overflow-style:none;scrollbar-width:none}
 
+/* === ROUTE GLOBAL SEARCH === */
+.route-search-bar{padding:8px 16px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+#route-search-results{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
 /* === ROUTE LOCK COLUMN === */
 .route-lock-col{display:flex;align-items:center;flex-shrink:0}
 .draggable-route{cursor:grab}
