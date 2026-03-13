@@ -482,7 +482,7 @@ async function init() {
   }
 
   // 4) Auto-upload: tables exist + we have local data + DB is empty
-  if (dataLoaded && _dbReady && !cacheGet('db_migrated', false)) {
+  if (dataLoaded && _dbReady) {
     try {
       const dbCustomers = await dbSelect('customers', 'select=id&limit=1');
       if (!dbCustomers || dbCustomers.length === 0) {
