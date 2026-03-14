@@ -190,17 +190,16 @@ const save = {
     });
   },
   debtHistory: (changedCustomerIds) => {
+    // Clean _new flags before saving
+    Object.values(S.debtHistory).forEach(entries => {
+      if (Array.isArray(entries)) entries.forEach(e => delete e._new);
+    });
     cacheSet('debt_history', S.debtHistory);
-    // Only persist new entries for changed customers
-    if (changedCustomerIds && Array.isArray(changedCustomerIds)) {
-      changedCustomerIds.forEach(customerId => {
-        const entries = S.debtHistory[customerId];
-        if (Array.isArray(entries) && entries.length > 0 && entries[0]._new) {
-          delete entries[0]._new;
-          DB.addDebtHistoryEntry(customerId, entries[0]);
-        }
-      });
-    }
+    // Full replace: delete all + re-insert for changed customers
+    const ids = changedCustomerIds || (profileStopId ? [profileStopId] : []);
+    ids.forEach(customerId => {
+      DB.replaceDebtHistory(customerId, S.debtHistory[customerId] || []);
+    });
   },
   cnotes: () => { /* stored in customers table via save.stops */ },
   catalog: () => {

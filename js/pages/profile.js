@@ -570,9 +570,8 @@ function addDebt() {
   if (!S.debtHistory[profileStopId]) S.debtHistory[profileStopId] = [];
   S.debtHistory[profileStopId].unshift(debtEntry);
   save.debts();
-  save.debtHistory();
+  save.debtHistory([profileStopId]);
   DB.setDebt(profileStopId, S.debts[profileStopId]);
-  DB.addDebtHistoryEntry(profileStopId, debtEntry);
   closeModal();
   renderProfile();
 }
@@ -673,7 +672,7 @@ function saveEditDebtHistory(stopId, idx) {
   }
   S.debts[stopId] = Math.max(0, S.debts[stopId]);
   save.debts();
-  save.debtHistory();
+  save.debtHistory([stopId]);
   DB.setDebt(stopId, S.debts[stopId]);
   closeModal();
   renderProfile();
@@ -690,11 +689,9 @@ async function removeDebtHistory(stopId, idx) {
   } else {
     S.debts[stopId] = (S.debts[stopId] || 0) + h.amount;
   }
-  // Delete from Supabase so it doesn't return on sync
-  if (h.id != null) DB.deleteDebtHistoryEntry(h.id);
   dh.splice(idx, 1);
   save.debts();
-  save.debtHistory();
+  save.debtHistory([stopId]);
   DB.setDebt(stopId, S.debts[stopId]);
   renderProfile();
 }

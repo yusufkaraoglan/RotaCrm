@@ -274,7 +274,6 @@ function removeLinkedOrderDebtEntries(order) {
   const ids = Array.isArray(order?.debtEntryIds) ? order.debtEntryIds : [];
   const history = S.debtHistory[order.customerId] || [];
   let removed = 0;
-  const removedIds = [];
 
   // Try matching by entry ID first
   if (ids.length) {
@@ -282,7 +281,6 @@ function removeLinkedOrderDebtEntries(order) {
       const idx = history.findIndex(entry => entry.id === id);
       if (idx >= 0) {
         removed = roundMoney(removed + (history[idx].amount || 0));
-        removedIds.push(history[idx].id);
         history.splice(idx, 1);
       }
     });
@@ -293,19 +291,12 @@ function removeLinkedOrderDebtEntries(order) {
     for (let i = history.length - 1; i >= 0; i--) {
       if (history[i].orderId === order.id && (history[i].type === 'add' || history[i].type === 'adjust')) {
         if (history[i].type === 'add') removed = roundMoney(removed + (history[i].amount || 0));
-        removedIds.push(history[i].id);
         history.splice(i, 1);
       }
     }
   }
 
-  // Delete removed entries from Supabase so they don't return on sync
-  if (removedIds.length > 0) {
-    removedIds.forEach(id => DB.deleteDebtHistoryEntry(id));
-  }
-  // Also delete all Supabase entries linked to this order
-  if (order.id) DB.deleteDebtHistoryByOrderId(order.id);
-
+  // Supabase sync handled by save.debtHistory() via full replace
   order.debtEntryIds = [];
   return removed;
 }

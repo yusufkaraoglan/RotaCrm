@@ -479,6 +479,22 @@ const DB = {
     });
   },
 
+  async replaceDebtHistory(customerId, entries) {
+    // Delete ALL existing entries for this customer from Supabase
+    await dbDelete('debt_history', { customer_id: customerId });
+    // Re-insert current entries
+    if (entries && entries.length > 0) {
+      const rows = entries.map(e => ({
+        customer_id: customerId,
+        amount: e.amount,
+        note: (e.note || '') + (e.type ? '|||' + e.type : ''),
+        order_id: e.orderId || null,
+        created_at: e.date || new Date().toISOString()
+      }));
+      await dbInsert('debt_history', rows);
+    }
+  },
+
   async deleteDebtHistoryEntry(entryId) {
     if (entryId == null) return;
     await dbDelete('debt_history', { id: entryId });
