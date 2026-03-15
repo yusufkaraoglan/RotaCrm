@@ -36,7 +36,6 @@ let profilePreviousPage = 'customers';
 let leafletMap = null;
 let mapMarkers = [];
 let mapRouteLines = [];
-let editingCatalogIdx = -1;
 let editingOrderId = null;
 let reportTab = 'overview';
 let dhSearchTerm = '';
@@ -230,20 +229,6 @@ const save = {
     });
   }
 };
-
-// Legacy save helpers (still used by existing code during transition)
-function lsSave(k, v) {
-  try { localStorage.setItem('cr4_' + k, JSON.stringify(v)); } catch {}
-  sbSet(k, v);
-}
-
-function lsGet(k, d) {
-  try { const v = localStorage.getItem('cr4_' + k); return v !== null ? JSON.parse(v) : d; } catch { return d; }
-}
-
-function lsSaveLocal(k, v) {
-  try { localStorage.setItem('cr4_' + k, JSON.stringify(v)); } catch {}
-}
 
 // ── Navigation ─────────────────────────────────────────────
 
@@ -589,23 +574,13 @@ async function syncFromSupabase() {
   }
 }
 
-async function pushAllToSupabase() {
-  const keys = ['stops','assign','routeOrder','geo','ordersV2','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','recurringOrders'];
-  for (const k of keys) {
-    const v = legacyGet(k, null);
-    if (v !== null) await sbSet(k, v);
-  }
-  showToast('All data uploaded to cloud.', 'success');
-}
-
 document.addEventListener('DOMContentLoaded', init);
 
 // Register service worker
 if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE = 'costadoro-v5';
+    const CACHE = 'costadoro-v6';
     const URLS = ['./', 'css/app.css', 'js/db.js', 'js/utils.js', 'js/app.js',
-      'js/migrate.js',
       'js/pages/route.js', 'js/pages/orders.js', 'js/pages/customers.js', 'js/pages/profile.js',
       'js/pages/reports.js', 'js/pages/settings.js', 'js/pages/catalog.js', 'js/pages/map.js',
       'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',

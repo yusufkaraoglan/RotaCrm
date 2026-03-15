@@ -11,6 +11,8 @@ function repairDebtHistoryTypes(dhMap) {
     const entries = dhMap[cid];
     if (!Array.isArray(entries)) return;
     entries.forEach(e => {
+      // Fix entries incorrectly marked as 'clear' due to old regex matching "unpaid"
+      if (e.type === 'clear' && /unpaid/i.test(e.note)) e.type = 'add';
       if (!e.type) {
         if (/payment received|(?<!un)paid/i.test(e.note)) e.type = 'clear';
         else if (/correction|adjust/i.test(e.note)) e.type = 'adjust';
@@ -299,13 +301,6 @@ function removeLinkedOrderDebtEntries(order) {
   // Supabase sync handled by save.debtHistory() via full replace
   order.debtEntryIds = [];
   return removed;
-}
-
-function addDebtAdjustmentEntry(stopId, amount, note, orderId) {
-  if (amount <= 0) return;
-  createDebtHistoryEntry(stopId, {
-    date: new Date().toISOString(), amount, type: 'adjust', note, orderId
-  });
 }
 
 function reconcileOrderDebtEffect(prevOrder, nextOrder) {

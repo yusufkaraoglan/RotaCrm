@@ -389,23 +389,6 @@ function setRouteDay(idx) {
   renderRoute();
 }
 
-function moveStop(stopId, dir, dayId) {
-  const ro = S.routeOrder[dayId] || [];
-  const assigned = [];
-  Object.entries(S.assign).forEach(([sid, did]) => {
-    if (did === dayId) assigned.push(parseInt(sid));
-  });
-  const sorted = [...new Set([...ro.filter(id => assigned.includes(id)), ...assigned])];
-  const idx = sorted.indexOf(stopId);
-  if (idx < 0) return;
-  const newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= sorted.length) return;
-  [sorted[idx], sorted[newIdx]] = [sorted[newIdx], sorted[idx]];
-  S.routeOrder[dayId] = sorted;
-  save.routeOrder();
-  rerenderRouteKeepScroll();
-}
-
 function calcDayRevenue(dayId) {
   const thisMonday = getWeekMondayStr(new Date());
   const assigned = [];
@@ -434,12 +417,10 @@ function calcDayRevenue(dayId) {
 // ══════════════════════════════════════════════════════════════
 // DELIVERY MODAL
 // ══════════════════════════════════════════════════════════════
-let deliveryCashAmount = 0;
 
 function showDeliveryModal(stopId, singleOrderId) {
   deliveryStopId = stopId;
   deliveryPayMethod = null;
-  deliveryCashAmount = 0;
   deliveryOrderIds = singleOrderId ? [singleOrderId] : null;
   const stop = getStop(stopId);
   if (!stop) return;

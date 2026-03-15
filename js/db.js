@@ -221,32 +221,6 @@ function legacyGet(key, fallback) {
   } catch { return fallback; }
 }
 
-// ── Old cr4_store helpers (kept for backward compat) ───────
-
-async function sbGet(key) {
-  try {
-    const r = await fetch(`${SB_URL}/rest/v1/cr4_store?key=eq.${encodeURIComponent(key)}&select=value`, {
-      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
-    });
-    const data = await r.json();
-    return data?.[0]?.value ?? null;
-  } catch { return null; }
-}
-
-async function sbSet(key, value) {
-  try {
-    await fetch(`${SB_URL}/rest/v1/cr4_store`, {
-      method: 'POST',
-      headers: {
-        apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates'
-      },
-      body: JSON.stringify({ key, value, updated_at: new Date().toISOString() })
-    });
-  } catch {}
-}
-
 // ── CRUD Helpers per Entity ────────────────────────────────
 
 const DB = {

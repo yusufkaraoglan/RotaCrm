@@ -533,6 +533,7 @@ function exportProductReportPDF() {
     }
     tableRows += `<tr${r.isDebtPayment ? ' style="background:#f0fdf4"' : ''}>
       <td>${escHtml(r.name)}</td>
+      <td style="font-size:11px;color:#666;white-space:nowrap">${r.dateOnly || ''}</td>
       <td>${payCell}</td>
       <td>${r.isDebtPayment ? '<em style="color:#12B76A">'+r.productsSummary+'</em>' : r.productsSummary}</td>
     </tr>`;
@@ -560,11 +561,12 @@ function exportProductReportPDF() {
       Generated: ${exportDate}
     </div>
     <table>
-      <thead><tr><th>Customer</th><th>Payment</th><th>Products</th></tr></thead>
+      <thead><tr><th>Customer</th><th>Date</th><th>Payment</th><th>Products</th></tr></thead>
       <tbody>
         ${tableRows}
         <tr class="total-row">
           <td>TOTAL (${report.rows.length})</td>
+          <td></td>
           <td style="font-size:10px">
             <span style="color:#12B76A">Cash ${formatCurrency(report.totalCash)}</span> |
             <span style="color:#2E90FA">Bank ${formatCurrency(report.totalBank)}</span> |
@@ -730,11 +732,6 @@ function renderDeliveryHistoryContent() {
   }
 
   return html;
-}
-
-function renderDeliveryHistory() {
-  reportTab = 'history';
-  showPage('reports');
 }
 
 // ══════════════════════════════════════════════════════════════

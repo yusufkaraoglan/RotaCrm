@@ -241,12 +241,6 @@ body.modal-open .page{touch-action:none}
 .pay-opt.selected{border-color:var(--primary);background:var(--primary-light);color:var(--primary)}
 .pay-opt .pay-icon{font-size:20px;margin-bottom:4px}
 
-/* === CATALOG ITEM === */
-.catalog-row{display:flex;align-items:center;gap:8px;padding:12px;border-bottom:1px solid var(--border)}
-.catalog-row:last-child{border-bottom:none}
-.catalog-name{flex:1;font-weight:500}
-.catalog-detail{font-size:13px;color:var(--text-sec)}
-
 /* === DEBT === */
 .debt-card{background:var(--card);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);margin-bottom:10px}
 .debt-amount{font-size:24px;font-weight:700}
@@ -271,23 +265,6 @@ body.modal-open .page{touch-action:none}
 .gap-1{gap:8px}
 .gap-2{gap:16px}
 .hidden{display:none!important}
-
-/* === ORDER ITEM ROW (modal) === */
-.order-item-row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
-.order-item-row .select{flex:2}
-.order-item-row .input{flex:1}
-.order-item-row .btn-icon-sm{flex-shrink:0}
-
-/* === SEARCHABLE SELECT === */
-.search-select{position:relative}
-.search-select input{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:16px;background:var(--card)}
-.search-select input:focus{outline:none;border-color:var(--primary)}
-.search-select-list{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1.5px solid var(--border);border-top:none;border-radius:0 0 var(--radius-sm) var(--radius-sm);max-height:200px;overflow-y:auto;z-index:20;display:none;box-shadow:var(--shadow-md)}
-.search-select-list.open{display:block}
-.search-select-item{padding:10px 12px;font-size:14px;cursor:pointer;border-bottom:1px solid var(--border)}
-.search-select-item:last-child{border-bottom:none}
-.search-select-item:active{background:var(--primary-light)}
-.search-select-item .ss-sub{font-size:11px;color:var(--text-sec)}
 
 /* === CUSTOMER PICKER OVERLAY === */
 .customer-picker-overlay{position:fixed;inset:0;background:var(--bg);z-index:250;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
@@ -324,7 +301,6 @@ body.modal-open .page{touch-action:none}
   .order-item-card-name{font-size:13px}
   .order-item-card-total{min-width:48px;font-size:13px}
   .qty-btn{width:28px;height:28px;font-size:14px}
-  .qty-value{font-size:14px;min-width:20px}
   .catalog-edit-form{gap:4px}
   .catalog-edit-form .input{font-size:14px;padding:8px}
   .action-bar{padding:8px 12px;gap:6px}
