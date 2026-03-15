@@ -316,8 +316,8 @@ function reconcileOrderDebtEffect(prevOrder, nextOrder) {
   if (prevOrder) {
     const removed = removeLinkedOrderDebtEntries(prevOrder);
     const prevImpact = getOrderDebtImpact(prevOrder);
-    // Subtract whatever was removed OR the full expected impact (whichever is greater)
-    const toSubtract = Math.max(removed, prevImpact);
+    // Use removed amount if entries were found, otherwise fall back to expected impact
+    const toSubtract = removed > 0 ? removed : prevImpact;
     if (toSubtract > 0) {
       S.debts[stopId] = Math.max(0, roundMoney((S.debts[stopId] || 0) - toSubtract));
       changed = true;
@@ -349,8 +349,9 @@ function isDeliveredThisWeek(stopId) {
 function getDayObj(dayId) { return DAYS.find(d => d.id === dayId); }
 
 function getCustomerInitials(name) {
-  const parts = (name || '?').split(/\s+/);
-  return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.substring(0, 2).toUpperCase();
+  const safeName = name || '?';
+  const parts = safeName.split(/\s+/);
+  return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : safeName.substring(0, 2).toUpperCase();
 }
 
 function getPrice(stopId, productName) {

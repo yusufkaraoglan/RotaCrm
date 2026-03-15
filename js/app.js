@@ -196,7 +196,7 @@ const save = {
     });
     cacheSet('debt_history', S.debtHistory);
     // Full replace: delete all + re-insert for changed customers
-    const ids = changedCustomerIds || (profileStopId ? [profileStopId] : []);
+    const ids = Array.isArray(changedCustomerIds) && changedCustomerIds.length > 0 ? changedCustomerIds : (profileStopId ? [profileStopId] : []);
     ids.forEach(customerId => {
       DB.replaceDebtHistory(customerId, S.debtHistory[customerId] || []);
     });

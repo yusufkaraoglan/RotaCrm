@@ -38,8 +38,8 @@ function buildCatalogGridHtml() {
   }
 
   let html = `<div class="catalog-grid">`;
-  filtered.forEach(c => {
-    const i = S.catalog.indexOf(c);
+  filtered.forEach((c, fi) => {
+    const i = q ? S.catalog.indexOf(c) : fi;
     const stockColor = c.stock != null && c.stock <= 5 ? 'var(--danger)' : c.stock != null && c.stock <= 20 ? 'var(--warning)' : 'var(--success)';
     const isDaily = c.trackStock === false;
 

@@ -64,6 +64,10 @@ function renderReports() {
 
   html += `</div>`;
   document.getElementById('page-reports').innerHTML = html;
+
+  if (reportTab === 'overview') {
+    renderOverviewCharts(data);
+  }
 }
 
 function renderOverviewTab(data) {
@@ -111,30 +115,40 @@ function renderOverviewTab(data) {
     </div>
 
     <div class="report-section">
+      <h3>Daily Revenue</h3>
+      <div class="card chart-card"><canvas id="revenueChart"></canvas></div>
+    </div>
+
+    <div class="report-section">
       <h3>Payment Breakdown</h3>
-      <div class="card" style="padding:16px">
-        <div class="pay-breakdown-row">
-          <div class="pay-breakdown-label">
-            <span class="pay-dot" style="background:var(--success)"></span>Cash
+      <div class="card" style="padding:16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div style="width:120px;height:120px;flex-shrink:0"><canvas id="paymentChart"></canvas></div>
+        <div style="flex:1;min-width:140px">
+          <div class="pay-breakdown-row">
+            <div class="pay-breakdown-label">
+              <span class="pay-dot" style="background:var(--success)"></span>Cash
+            </div>
+            <span class="pay-breakdown-amount" style="color:var(--success)">${formatCurrency(data.payments.cash)}</span>
           </div>
-          <div class="pay-breakdown-bar"><div class="pay-breakdown-fill" style="width:${cashPct}%;background:var(--success)"></div></div>
-          <span class="pay-breakdown-amount" style="color:var(--success)">${formatCurrency(data.payments.cash)}</span>
-        </div>
-        <div class="pay-breakdown-row">
-          <div class="pay-breakdown-label">
-            <span class="pay-dot" style="background:var(--info)"></span>Bank
+          <div class="pay-breakdown-row">
+            <div class="pay-breakdown-label">
+              <span class="pay-dot" style="background:var(--info)"></span>Bank
+            </div>
+            <span class="pay-breakdown-amount" style="color:var(--info)">${formatCurrency(data.payments.bank)}</span>
           </div>
-          <div class="pay-breakdown-bar"><div class="pay-breakdown-fill" style="width:${bankPct}%;background:var(--info)"></div></div>
-          <span class="pay-breakdown-amount" style="color:var(--info)">${formatCurrency(data.payments.bank)}</span>
-        </div>
-        <div class="pay-breakdown-row">
-          <div class="pay-breakdown-label">
-            <span class="pay-dot" style="background:var(--danger)"></span>Unpaid
+          <div class="pay-breakdown-row">
+            <div class="pay-breakdown-label">
+              <span class="pay-dot" style="background:var(--danger)"></span>Unpaid
+            </div>
+            <span class="pay-breakdown-amount" style="color:var(--danger)">${formatCurrency(data.payments.unpaid)}</span>
           </div>
-          <div class="pay-breakdown-bar"><div class="pay-breakdown-fill" style="width:${unpaidPct}%;background:var(--danger)"></div></div>
-          <span class="pay-breakdown-amount" style="color:var(--danger)">${formatCurrency(data.payments.unpaid)}</span>
         </div>
       </div>
+    </div>
+
+    <div class="report-section">
+      <h3>Top Products</h3>
+      <div class="card chart-card"><canvas id="productsChart"></canvas></div>
     </div>`;
 }
 
@@ -316,6 +330,9 @@ function setReportRange(range) {
   } else if (range === 'month') {
     S.reportStart = today.toISOString().slice(0, 8) + '01';
     S.reportEnd = todayStr();
+  } else if (range === 'custom') {
+    if (!S.reportStart) S.reportStart = todayStr();
+    if (!S.reportEnd) S.reportEnd = todayStr();
   }
   renderReports();
 }
@@ -382,7 +399,14 @@ function calcReportData() {
     customers[id].revenue += calcOrderTotal(o);
   });
 
-  return { totalRevenue, deliveryCount, visitCount, avgOrder, totalDebt, products, payments, customers };
+  // Daily revenue for chart
+  const dailyRevenue = {};
+  filtered.filter(o => o.payMethod !== 'visit').forEach(o => {
+    const day = o.deliveredAt.slice(0, 10);
+    dailyRevenue[day] = (dailyRevenue[day] || 0) + calcOrderTotal(o);
+  });
+
+  return { totalRevenue, deliveryCount, visitCount, avgOrder, totalDebt, products, payments, customers, dailyRevenue };
 }
 
 function calcProductSalesReport() {
@@ -711,3 +735,106 @@ function renderDeliveryHistory() {
 }
 
 // ══════════════════════════════════════════════════════════════
+// CHARTS
+// ══════════════════════════════════════════════════════════════
+
+let _revenueChart = null;
+let _paymentChart = null;
+let _productsChart = null;
+
+function renderOverviewCharts(data) {
+  if (typeof Chart === 'undefined') return;
+
+  // Destroy previous instances
+  if (_revenueChart) { _revenueChart.destroy(); _revenueChart = null; }
+  if (_paymentChart) { _paymentChart.destroy(); _paymentChart = null; }
+  if (_productsChart) { _productsChart.destroy(); _productsChart = null; }
+
+  // ── Revenue Bar Chart ──
+  const revenueEl = document.getElementById('revenueChart');
+  if (revenueEl) {
+    const days = Object.keys(data.dailyRevenue).sort();
+    const labels = days.map(d => {
+      const dt = new Date(d + 'T00:00:00');
+      return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    });
+    const values = days.map(d => data.dailyRevenue[d]);
+
+    _revenueChart = new Chart(revenueEl, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: '#E85D3A',
+          borderRadius: 4,
+          maxBarThickness: 32
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45 } },
+          y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => '\u00A3' + v } }
+        }
+      }
+    });
+  }
+
+  // ── Payment Doughnut Chart ──
+  const payEl = document.getElementById('paymentChart');
+  if (payEl) {
+    const hasData = data.payments.cash > 0 || data.payments.bank > 0 || data.payments.unpaid > 0;
+    _paymentChart = new Chart(payEl, {
+      type: 'doughnut',
+      data: {
+        labels: ['Cash', 'Bank', 'Unpaid'],
+        datasets: [{
+          data: hasData ? [data.payments.cash, data.payments.bank, data.payments.unpaid] : [1],
+          backgroundColor: hasData ? ['#12B76A', '#2E90FA', '#F04438'] : ['#E5E7EB'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '65%',
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  // ── Top Products Horizontal Bar Chart ──
+  const prodEl = document.getElementById('productsChart');
+  if (prodEl) {
+    const sorted = Object.entries(data.products).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 8);
+    const prodLabels = sorted.map(([name]) => name.length > 15 ? name.slice(0, 15) + '\u2026' : name);
+    const prodValues = sorted.map(([, d]) => d.revenue);
+    const colors = ['#E85D3A', '#F0A500', '#12B76A', '#2E90FA', '#9E77ED', '#F63D68', '#06AED4', '#DC6803'];
+
+    _productsChart = new Chart(prodEl, {
+      type: 'bar',
+      data: {
+        labels: prodLabels,
+        datasets: [{
+          data: prodValues,
+          backgroundColor: colors.slice(0, sorted.length),
+          borderRadius: 4,
+          maxBarThickness: 24
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, grid: { display: false }, ticks: { font: { size: 10 }, callback: v => '\u00A3' + v } },
+          y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+}

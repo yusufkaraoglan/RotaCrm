@@ -537,7 +537,8 @@ function saveNote() {
   if (note) S.cnotes[profileStopId] = note;
   else delete S.cnotes[profileStopId];
   save.cnotes();
-  DB.saveCustomer({id: profileStopId, name: getStop(profileStopId).n, address: getStop(profileStopId).a, city: getStop(profileStopId).c, postcode: getStop(profileStopId).p, note: note || ''});
+  const stop = getStop(profileStopId);
+  if (stop) DB.saveCustomer({id: profileStopId, name: stop.n, address: stop.a, city: stop.c, postcode: stop.p, note: note || ''});
   closeModal();
   renderProfile();
 }
@@ -546,11 +547,16 @@ function saveNote() {
 // DEBT MANAGEMENT
 // ══════════════════════════════════════════════════════════════
 function showAddDebtModal() {
+  const today = new Date().toISOString().slice(0, 10);
   openModal(`<div class="modal-handle"></div>
     <div class="modal-title">Add Debt</div>
     <div class="form-group">
       <label class="form-label">Amount</label>
       <input class="input" type="number" step="0.01" id="debt-amount" placeholder="0.00">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Date</label>
+      <input class="input" type="date" id="debt-date" value="${today}">
     </div>
     <div class="form-group">
       <label class="form-label">Note (optional)</label>
@@ -564,9 +570,11 @@ function addDebt() {
   const amount = parseFloat(document.getElementById('debt-amount').value) || 0;
   if (amount <= 0) { appAlert('Please enter a valid amount.'); return; }
   const note = document.getElementById('debt-note').value.trim() || 'Manual entry';
+  const dateInput = document.getElementById('debt-date');
+  const debtDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date().toISOString();
 
   S.debts[profileStopId] = (S.debts[profileStopId] || 0) + amount;
-  const debtEntry = { date: new Date().toISOString(), amount, type: 'add', note };
+  const debtEntry = { date: debtDate, amount, type: 'add', note };
   if (!S.debtHistory[profileStopId]) S.debtHistory[profileStopId] = [];
   S.debtHistory[profileStopId].unshift(debtEntry);
   save.debts();
@@ -641,12 +649,17 @@ function showEditDebtHistoryModal(stopId, idx) {
   const dh = S.debtHistory[stopId];
   if (!dh || !dh[idx]) return;
   const h = dh[idx];
+  const editDate = h.date ? new Date(h.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
   openModal(`
     <div class="modal-handle"></div>
     <div class="modal-title">Edit Debt Record</div>
     <div class="form-group">
       <label class="form-label">Amount</label>
       <input class="input" type="number" step="0.01" id="edit-dh-amount" value="${h.amount}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Date</label>
+      <input class="input" type="date" id="edit-dh-date" value="${editDate}">
     </div>
     <div class="form-group">
       <label class="form-label">Note</label>
@@ -662,7 +675,9 @@ function saveEditDebtHistory(stopId, idx) {
   const oldAmount = dh[idx].amount;
   const oldType = dh[idx].type;
   const newAmount = parseFloat(document.getElementById('edit-dh-amount').value) || 0;
+  const dateInput = document.getElementById('edit-dh-date');
   dh[idx].amount = newAmount;
+  if (dateInput && dateInput.value) dh[idx].date = new Date(dateInput.value + 'T12:00:00').toISOString();
   dh[idx].note = document.getElementById('edit-dh-note').value.trim();
   // Adjust debt balance
   if (oldType === 'add') {

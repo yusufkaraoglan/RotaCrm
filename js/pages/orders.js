@@ -141,7 +141,7 @@ function toggleOrderLock(orderId) {
     locked.push(orderId);
   }
   S.ordersLockedOrders = locked;
-  lsSave('ordersLockedOrders', locked);
+  cacheSet('setting_ordersLockedOrders', locked);
   renderOrderResults();
 }
 
@@ -192,10 +192,8 @@ function initOrderDragDrop() {
     } else {
       filteredLocked.push(draggedId);
     }
-    // Lock the dragged order
-    if (!filteredLocked.includes(draggedId)) filteredLocked.push(draggedId);
     S.ordersLockedOrders = filteredLocked;
-    lsSave('ordersLockedOrders', filteredLocked);
+    cacheSet('setting_ordersLockedOrders', filteredLocked);
     renderOrderResults();
   });
 
@@ -255,9 +253,8 @@ function initOrderDragDrop() {
         } else {
           filteredLocked.push(touchDragId);
         }
-        if (!filteredLocked.includes(touchDragId)) filteredLocked.push(touchDragId);
         S.ordersLockedOrders = filteredLocked;
-        lsSave('ordersLockedOrders', filteredLocked);
+        cacheSet('setting_ordersLockedOrders', filteredLocked);
         renderOrderResults();
       }
     }

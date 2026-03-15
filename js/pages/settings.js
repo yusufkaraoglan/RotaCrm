@@ -172,7 +172,7 @@ async function importJSON(input) {
     if (d.geo) { S.geo = d.geo; save.geo(); }
     if (d.orders) { S.orders = d.orders; save.orders(Object.keys(d.orders)); }
     if (d.debts) { S.debts = d.debts; save.debts(); }
-    if (d.debtHistory) { S.debtHistory = d.debtHistory; save.debtHistory(); }
+    if (d.debtHistory) { S.debtHistory = d.debtHistory; save.debtHistory(Object.keys(d.debtHistory)); }
     if (d.cnotes) { S.cnotes = d.cnotes; save.cnotes(); }
     if (d.catalog) { S.catalog = d.catalog; save.catalog(); }
     if (d.customerPricing) { S.customerPricing = d.customerPricing; save.pricing(); }
