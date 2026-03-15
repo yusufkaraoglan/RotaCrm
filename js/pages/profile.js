@@ -294,7 +294,8 @@ function saveEditDeliveredOrder(orderId) {
       if (pay === 'cash') {
         const total = calcOrderTotal(o);
         const cashInput = document.getElementById('edit-del-cash');
-        o.cashPaid = roundMoney(Math.max(0, Math.min(total, parseFloat(cashInput?.value) || total)));
+        const cashVal = parseFloat(cashInput?.value);
+        o.cashPaid = roundMoney(Math.max(0, Math.min(total, isNaN(cashVal) ? total : cashVal)));
       } else {
         delete o.cashPaid;
       }
