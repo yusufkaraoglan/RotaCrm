@@ -25,6 +25,8 @@ index_old.html          <- Old single-file backup (4700+ lines)
 css/
   app.css               <- All CSS styles (~410 lines)
 js/
+  config.js             <- Supabase credentials (EXCLUDED from git via .gitignore)
+  config.example.js     <- Template for config.js (safe to commit)
   db.js                 <- Supabase REST + localStorage cache + offline queue
   utils.js              <- Utility functions (format, geocode, calculations)
   app.js                <- State, navigation, modal, init, service worker
@@ -55,7 +57,7 @@ README.md               <- Short project description
 - **CSS:** `css/app.css` — all styles here
 - **JS:** `js/` folder — each module has its own file, pages in `js/pages/`
 - **HTML:** `index.html` — only page divs and script loads
-- Script load order: `db.js -> utils.js -> app.js -> migrate.js -> pages/*.js`
+- Script load order: `config.js -> db.js -> utils.js -> app.js -> migrate.js -> pages/*.js`
 
 ### 2. Brace Balance Check
 Check JS brace/parenthesis balance after every change:
@@ -123,9 +125,9 @@ Use `btnLock(fn)` from app.js for actions like saving orders to prevent duplicat
 
 ```
 Project: ClientRotaCrm
-URL: https://mvvvqloqwjimlbqeotsd.supabase.co
-Anon Key: (in js/db.js)
-RLS: disabled (DISABLE ROW LEVEL SECURITY)
+URL: (see js/config.js — excluded from git)
+Anon Key: (see js/config.js — excluded from git)
+RLS: TODO — enable RLS on all tables for production security
 ```
 
 ### Old Table (preserved during transition)

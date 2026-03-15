@@ -232,7 +232,8 @@ CREATE INDEX IF NOT EXISTS idx_assignments_day ON assignments(day_id);`;
 }
 
 function showDbSetupModal() {
-  const sqlUrl = 'https://supabase.com/dashboard/project/mvvvqloqwjimlbqeotsd/sql/new';
+  const projectId = SB_URL.replace('https://', '').split('.')[0];
+  const sqlUrl = `https://supabase.com/dashboard/project/${projectId}/sql/new`;
   const sql = _getSetupSQL();
   openModal(`
     <div class="modal-handle"></div>

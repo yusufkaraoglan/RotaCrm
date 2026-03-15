@@ -3,8 +3,8 @@
 // DATABASE LAYER - Supabase REST + localStorage cache
 // ═══════════════════════════════════════════════════════════
 
-const SB_URL = 'https://mvvvqloqwjimlbqeotsd.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12dnZxbG9xd2ppbWxicWVvdHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNTYxMDAsImV4cCI6MjA4NzkzMjEwMH0.tKSiEJouyr9dhs_vIAPUbX9NqtAsFAslZroNKtG2mBk';
+// SB_URL and SB_KEY are loaded from js/config.js (excluded from git)
+// See js/config.example.js for the template
 
 const DB_HEADERS = {
   apikey: SB_KEY,

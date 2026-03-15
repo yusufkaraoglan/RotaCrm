@@ -1,0 +1,17 @@
+# Environment & secrets
+.env
+js/config.js
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Node (if used for tooling)
+node_modules/

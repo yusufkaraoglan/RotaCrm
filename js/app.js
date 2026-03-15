@@ -558,7 +558,7 @@ async function init() {
 async function syncFromSupabase() {
   try {
     const r = await fetch(`${SB_URL}/rest/v1/cr4_store?select=key,value`, {
-      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+      headers: DB_HEADERS
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const rows = await r.json();
