@@ -203,7 +203,9 @@ function showEditDeliveredOrderModal(orderId) {
   const dt = o.deliveredAt ? new Date(o.deliveredAt) : new Date();
   const dateVal = dt.toISOString().slice(0, 16);
   const total = calcOrderTotal(o);
-  const cashValue = roundMoney(Math.min(total, o.cashPaid !== undefined ? o.cashPaid : total));
+  // If order was bank/unpaid, default cash to 0 so user must enter actual received amount
+  const cashDefault = (o.payMethod === 'bank' || o.payMethod === 'unpaid') ? 0 : total;
+  const cashValue = roundMoney(Math.min(total, o.cashPaid !== undefined ? o.cashPaid : cashDefault));
 
   let modalHtml = `
     <div class="modal-handle"></div>
@@ -251,7 +253,14 @@ function toggleEditDeliveredCash(method) {
   const wrap = document.getElementById('edit-del-cash-wrap');
   if (!wrap) return;
   wrap.classList.toggle('hidden', method !== 'cash');
-  if (method === 'cash') updateEditDeliveredCashHint();
+  if (method === 'cash') {
+    // If switching TO cash from bank/unpaid, reset cash input to 0
+    const cashInput = document.getElementById('edit-del-cash');
+    if (cashInput && parseFloat(cashInput.value) === parseFloat(cashInput.dataset.total)) {
+      cashInput.value = '0.00';
+    }
+    updateEditDeliveredCashHint();
+  }
 }
 
 function updateEditDeliveredCashHint() {
