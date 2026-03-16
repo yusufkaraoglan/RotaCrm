@@ -76,11 +76,29 @@ function renderReports() {
 }
 
 function renderOverviewTab(data) {
+  const hasProductFilter = S.reportProducts.length > 0;
+  const productRevenue = hasProductFilter
+    ? Object.entries(data.products).reduce((s, [_, d]) => s + d.revenue, 0)
+    : data.totalRevenue;
+
   return `
+    ${S.catalog.length > 0 ? `
+    <div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">Filter by Product</div>
+      <div class="chip-group" style="flex-wrap:wrap">
+        <button class="chip ${S.reportProducts.length===0?'active':''}" onclick="S.reportProducts=[];renderReports()">All</button>
+        ${S.catalog.map(c => `
+          <button class="chip ${S.reportProducts.includes(c.name)?'active':''}"
+            onclick="toggleReportProduct('${escHtml(c.name)}')">${escHtml(c.name)}</button>
+        `).join('')}
+      </div>
+    </div>` : ''}
+
     <div class="report-hero-card">
-      <div class="report-hero-label">Total Revenue</div>
-      <div class="report-hero-value">${formatCurrency(data.totalRevenue)}</div>
+      <div class="report-hero-label">${hasProductFilter ? 'Filtered Revenue' : 'Total Revenue'}</div>
+      <div class="report-hero-value">${formatCurrency(hasProductFilter ? productRevenue : data.totalRevenue)}</div>
       <div class="report-hero-sub">${data.deliveryCount} deliveries &middot; ${data.visitCount} visits</div>
+      ${hasProductFilter ? `<div class="report-hero-sub" style="font-size:11px;margin-top:4px">${S.reportProducts.join(', ')}</div>` : ''}
     </div>
 
     <div class="metric-grid">

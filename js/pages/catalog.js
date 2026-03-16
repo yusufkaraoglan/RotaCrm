@@ -128,8 +128,15 @@ function showEditProductModal(idx) {
     </div>
     ${!isDaily ? `
     <div class="form-group">
-      <label class="form-label">Stock</label>
-      <input class="input" id="cat-edit-stock-${idx}" value="${c.stock != null ? c.stock : ''}" type="number" placeholder="—" style="text-align:center;font-size:18px;font-weight:700">
+      <label class="form-label">Current Stock: <b>${c.stock != null ? c.stock : '—'}</b></label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn" style="width:44px;height:44px;font-size:20px;font-weight:700;border:1px solid var(--success);color:var(--success);flex-shrink:0" onclick="toggleStockMode(${idx})">
+          <span id="cat-stock-mode-icon-${idx}">+</span>
+        </button>
+        <input class="input" id="cat-edit-stock-${idx}" value="" type="number" min="0" placeholder="Enter amount..." style="text-align:center;font-size:18px;font-weight:700;flex:1" oninput="updateStockPreview(${idx})">
+      </div>
+      <input type="hidden" id="cat-stock-mode-${idx}" value="add">
+      <div id="cat-stock-preview-${idx}" style="font-size:12px;color:var(--text-sec);margin-top:4px;text-align:center"></div>
     </div>` : ''}
     <div class="form-group">
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
@@ -139,6 +146,38 @@ function showEditProductModal(idx) {
     <button class="btn btn-primary btn-block" onclick="saveCatalogEdit(${idx})">Save Changes</button>
     <button class="btn btn-block mt-1" style="color:var(--danger);border:1px solid var(--danger)" onclick="removeCatalogItem(${idx})">Delete Product</button>
   `);
+}
+
+function toggleStockMode(idx) {
+  const modeInput = document.getElementById('cat-stock-mode-' + idx);
+  const icon = document.getElementById('cat-stock-mode-icon-' + idx);
+  const btn = icon?.parentElement;
+  if (!modeInput || !icon) return;
+  if (modeInput.value === 'add') {
+    modeInput.value = 'subtract';
+    icon.textContent = '−';
+    if (btn) { btn.style.borderColor = 'var(--danger)'; btn.style.color = 'var(--danger)'; }
+  } else {
+    modeInput.value = 'add';
+    icon.textContent = '+';
+    if (btn) { btn.style.borderColor = 'var(--success)'; btn.style.color = 'var(--success)'; }
+  }
+  updateStockPreview(idx);
+}
+
+function updateStockPreview(idx) {
+  const c = S.catalog[idx];
+  if (!c) return;
+  const preview = document.getElementById('cat-stock-preview-' + idx);
+  const input = document.getElementById('cat-edit-stock-' + idx);
+  const modeInput = document.getElementById('cat-stock-mode-' + idx);
+  if (!preview || !input || !modeInput) return;
+  const val = parseInt(input.value);
+  if (!val && val !== 0) { preview.textContent = ''; return; }
+  const cur = c.stock != null ? c.stock : 0;
+  const mode = modeInput.value;
+  const newStock = mode === 'add' ? cur + val : Math.max(0, cur - val);
+  preview.innerHTML = `${cur} ${mode === 'add' ? '+' : '−'} ${val} = <b>${newStock}</b>`;
 }
 
 function catalogModalAdjustStock(idx, delta) {
@@ -198,9 +237,17 @@ function saveCatalogEdit(idx) {
     stock = null;
   } else {
     const stockInput = document.getElementById('cat-edit-stock-' + idx);
+    const modeInput = document.getElementById('cat-stock-mode-' + idx);
     if (stockInput) {
       const sv = stockInput.value.trim();
-      stock = sv === '' ? null : Math.max(0, parseInt(sv) || 0);
+      if (sv === '') {
+        // No change entered, keep current stock
+      } else {
+        const val = Math.max(0, parseInt(sv) || 0);
+        const cur = stock != null ? stock : 0;
+        const mode = modeInput ? modeInput.value : 'add';
+        stock = mode === 'add' ? cur + val : Math.max(0, cur - val);
+      }
     }
   }
   S.catalog[idx] = { name, unit, price, stock, trackStock: noStockChecked ? false : true };
