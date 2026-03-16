@@ -155,9 +155,15 @@ function renderProfile() {
   // Add debt history entries
   dhRaw.forEach((h, i) => {
     if (h.type === 'visit' || h.amount <= 0) return;
+    let note = h.note || h.type;
+    // Enrich note with order items if orderId exists but note lacks item details
+    if (h.orderId && S.orders[h.orderId] && !note.includes('—')) {
+      const items = (S.orders[h.orderId].items || []).map(i => i.qty + 'x ' + i.name).join(', ');
+      if (items) note += ' — ' + items;
+    }
     transactions.push({
       date: h.date, amount: h.amount, type: h.type,
-      note: h.note || h.type, source: 'debt', _idx: i
+      note, source: 'debt', _idx: i, orderId: h.orderId
     });
   });
 
@@ -203,7 +209,11 @@ function renderProfile() {
           ${t.source === 'debt' ? `<div style="display:flex;gap:6px">
             <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDebtHistoryModal(${stop.id},${t._idx})">Edit</button>
             <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="removeDebtHistory(${stop.id},${t._idx})">Remove</button>
-          </div>` : `<span class="badge badge-success" style="font-size:10px">cash</span>`}
+          </div>` : `<div style="display:flex;gap:6px;align-items:center">
+            <span class="badge badge-success" style="font-size:10px">cash</span>
+            <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDeliveredOrderModal('${t.orderId}')">Edit</button>
+            <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="deleteOrder('${t.orderId}')">Delete</button>
+          </div>`}
         </div>
       </div>`;
     });

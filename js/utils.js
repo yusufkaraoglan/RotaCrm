@@ -255,8 +255,9 @@ function getOrderDebtImpact(order) {
 function getOrderDebtNote(order) {
   const impact = getOrderDebtImpact(order);
   if (impact <= 0) return '';
-  if (order.payMethod === 'unpaid') return 'Delivery - unpaid';
-  return `Delivery - short cash (${formatCurrency(impact)})`;
+  const items = (order.items || []).map(i => i.qty + 'x ' + i.name).join(', ');
+  if (order.payMethod === 'unpaid') return 'Delivery - unpaid' + (items ? ' — ' + items : '');
+  return `Delivery - short cash (${formatCurrency(impact)})` + (items ? ' — ' + items : '');
 }
 
 function addOrderDebtEffect(order) {
