@@ -203,7 +203,11 @@ function renderProfile() {
           ${t.source === 'debt' ? `<div style="display:flex;gap:6px">
             <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDebtHistoryModal(${stop.id},${t._idx})">Edit</button>
             <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="removeDebtHistory(${stop.id},${t._idx})">Remove</button>
-          </div>` : `<span class="badge badge-success" style="font-size:10px">cash</span>`}
+          </div>` : `<div style="display:flex;gap:6px;align-items:center">
+            <span class="badge badge-success" style="font-size:10px">cash</span>
+            <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDeliveredOrderModal('${t.orderId}')">Edit</button>
+            <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="deleteOrder('${t.orderId}')">Delete</button>
+          </div>`}
         </div>
       </div>`;
     });
