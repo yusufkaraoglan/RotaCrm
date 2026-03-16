@@ -148,25 +148,62 @@ function renderProfile() {
     });
   }
 
-  // Debt History (only show add/clear with actual amounts, skip visit-only entries)
+  // Transactions: combine debt history + cash-paid deliveries
   const dhRaw = S.debtHistory[stop.id] || [];
-  const dh = dhRaw.map((h, i) => ({...h, _idx: i})).filter(h => h.type !== 'visit' && h.amount > 0);
-  if (dh.length > 0) {
-    html += `<div class="section-head"><h3>Debt History</h3></div>`;
-    dh.slice(0, 15).forEach(h => {
+  const transactions = [];
+
+  // Add debt history entries
+  dhRaw.forEach((h, i) => {
+    if (h.type === 'visit' || h.amount <= 0) return;
+    transactions.push({
+      date: h.date, amount: h.amount, type: h.type,
+      note: h.note || h.type, source: 'debt', _idx: i
+    });
+  });
+
+  // Add fully cash-paid deliveries (no debt created, so not in debt history)
+  recentDelivered.forEach(o => {
+    if (o.payMethod !== 'cash') return;
+    const total = calcOrderTotal(o);
+    if (total <= 0) return;
+    const cashPaid = o.cashPaid !== undefined ? o.cashPaid : total;
+    if (cashPaid < total) return; // partial cash = already in debt history
+    // Check if there's already a debt history clear entry at same time (avoid duplicates)
+    const alreadyTracked = dhRaw.some(h =>
+      h.type === 'clear' && Math.abs(h.amount - total) < 0.01 &&
+      h.date && o.deliveredAt && h.date.slice(0, 16) === o.deliveredAt.slice(0, 16)
+    );
+    if (alreadyTracked) return;
+    transactions.push({
+      date: o.deliveredAt, amount: total, type: 'cash',
+      note: `Paid cash — ${o.items.map(i => i.qty + 'x ' + i.name).join(', ')}`,
+      source: 'order', orderId: o.id
+    });
+  });
+
+  // Sort by date, newest first
+  transactions.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  if (transactions.length > 0) {
+    html += `<div class="section-head"><h3>Transactions</h3></div>`;
+    transactions.slice(0, 20).forEach(t => {
+      const colorMap = { add: 'var(--danger)', clear: 'var(--success)', cash: 'var(--success)' };
+      const signMap = { add: '+', clear: '-', cash: '' };
+      const color = colorMap[t.type] || 'var(--text-sec)';
+      const sign = signMap[t.type] || '';
       html += `<div class="card" style="padding:10px;margin-bottom:6px">
         <div class="flex-between">
-          <span style="font-size:13px;flex:1;min-width:0">${h.note || h.type}</span>
-          <span style="font-size:13px;font-weight:600;color:${h.type === 'add' ? 'var(--danger)' : 'var(--success)'};white-space:nowrap;margin-left:8px">
-            ${h.type === 'add' ? '+' : '-'}${formatCurrency(Math.abs(h.amount))}
+          <span style="font-size:13px;flex:1;min-width:0">${t.note}</span>
+          <span style="font-size:13px;font-weight:600;color:${color};white-space:nowrap;margin-left:8px">
+            ${sign}${formatCurrency(Math.abs(t.amount))}
           </span>
         </div>
         <div class="flex-between" style="margin-top:4px">
-          <div class="text-muted" style="font-size:11px">${formatDateTime(h.date)}</div>
-          <div style="display:flex;gap:6px">
-            <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDebtHistoryModal(${stop.id},${h._idx})">Edit</button>
-            <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="removeDebtHistory(${stop.id},${h._idx})">Remove</button>
-          </div>
+          <div class="text-muted" style="font-size:11px">${formatDateTime(t.date)}</div>
+          ${t.source === 'debt' ? `<div style="display:flex;gap:6px">
+            <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDebtHistoryModal(${stop.id},${t._idx})">Edit</button>
+            <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="removeDebtHistory(${stop.id},${t._idx})">Remove</button>
+          </div>` : `<span class="badge badge-success" style="font-size:10px">cash</span>`}
         </div>
       </div>`;
     });
