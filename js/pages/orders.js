@@ -148,6 +148,15 @@ function toggleOrderLock(orderId) {
 function initOrderDragDrop() {
   const list = document.getElementById('orders-drag-list');
   if (!list) return;
+
+  // Remove old listeners by replacing the node (clears all event listeners)
+  if (list._dragInitialized) {
+    const fresh = list.cloneNode(true);
+    list.parentNode.replaceChild(fresh, list);
+    return initOrderDragDrop(); // Re-init with fresh node
+  }
+
+  list._dragInitialized = true;
   let draggedId = null;
 
   list.addEventListener('dragstart', e => {

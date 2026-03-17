@@ -3,8 +3,11 @@
 // DATABASE LAYER - Supabase REST + localStorage cache
 // ═══════════════════════════════════════════════════════════
 
-const SB_URL = 'https://mvvvqloqwjimlbqeotsd.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12dnZxbG9xd2ppbWxicWVvdHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNTYxMDAsImV4cCI6MjA4NzkzMjEwMH0.tKSiEJouyr9dhs_vIAPUbX9NqtAsFAslZroNKtG2mBk';
+// SB_URL and SB_KEY are loaded from js/config.js (excluded from git).
+// If config.js is missing, check js/config.example.js for the template.
+if (typeof SB_URL === 'undefined' || typeof SB_KEY === 'undefined') {
+  console.error('Missing Supabase credentials. Copy js/config.example.js to js/config.js and fill in your values.');
+}
 
 const DB_HEADERS = {
   apikey: SB_KEY,
@@ -184,7 +187,14 @@ async function flushOfflineQueue() {
 
 window.addEventListener('online', flushOfflineQueue);
 
+// Retry offline queue periodically in case flush was skipped (e.g., isSyncing was true)
+setInterval(() => {
+  if (navigator.onLine && offlineQueue.length > 0) flushOfflineQueue();
+}, 30000);
+
 // ── localStorage Cache ─────────────────────────────────────
+
+const CACHE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes staleness threshold
 
 function cacheGet(key, fallback) {
   try {
@@ -194,7 +204,23 @@ function cacheGet(key, fallback) {
 }
 
 function cacheSet(key, value) {
-  try { localStorage.setItem('cr5_' + key, JSON.stringify(value)); } catch {}
+  try {
+    localStorage.setItem('cr5_' + key, JSON.stringify(value));
+    localStorage.setItem('cr5_ts_' + key, Date.now().toString());
+  } catch (e) {
+    if (e.name === 'QuotaExceededError') {
+      console.warn('localStorage quota exceeded for key:', key);
+      if (typeof showToast === 'function') showToast('Storage full — some data may not be saved locally', 'error', 5000);
+    }
+  }
+}
+
+function cacheIsFresh(key) {
+  try {
+    const ts = localStorage.getItem('cr5_ts_' + key);
+    if (!ts) return false;
+    return (Date.now() - parseInt(ts)) < CACHE_MAX_AGE_MS;
+  } catch { return false; }
 }
 
 // ── Debt history helpers ──────────────────────────────────
@@ -223,7 +249,9 @@ function parseDebtHistoryRow(r) {
 function dedupeDebtHistory(entries) {
   const seen = new Set();
   return entries.filter(e => {
-    const dateKey = (e.date || '').slice(0, 16);
+    // Use seconds precision (19 chars: YYYY-MM-DDTHH:MM:SS) to avoid losing
+    // legitimate entries made within the same minute
+    const dateKey = (e.date || '').slice(0, 19);
     const key = dateKey + '|' + e.amount + '|' + e.note;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -246,10 +274,10 @@ const DB = {
   // -- Customers --
   async getCustomers() {
     const cached = cacheGet('customers', null);
-    if (cached) return cached;
+    if (cached && cacheIsFresh('customers')) return cached;
     const rows = await dbSelect('customers', 'order=name.asc');
-    if (rows) cacheSet('customers', rows);
-    return rows || [];
+    if (rows) { cacheSet('customers', rows); return rows; }
+    return cached || [];
   },
 
   async saveCustomer(c) {
@@ -260,7 +288,10 @@ const DB = {
       contact_name: c.contact_name || c.cn || '',
       phone: c.phone || c.ph || '', email: c.email || c.em || ''
     };
-    return await dbUpsert('customers', data);
+    const result = await dbUpsert('customers', data);
+    // Invalidate cache so next getCustomers() fetches fresh data
+    try { localStorage.removeItem('cr5_ts_customers'); } catch {}
+    return result;
   },
 
   async deleteCustomer(id) {
@@ -270,10 +301,10 @@ const DB = {
   // -- Products --
   async getProducts() {
     const cached = cacheGet('products', null);
-    if (cached) return cached;
+    if (cached && cacheIsFresh('products')) return cached;
     const rows = await dbSelect('products', 'order=sort_order.asc,name.asc');
-    if (rows) cacheSet('products', rows);
-    return rows || [];
+    if (rows) { cacheSet('products', rows); return rows; }
+    return cached || [];
   },
 
   async saveProduct(p) {
@@ -283,7 +314,9 @@ const DB = {
       sort_order: p.sort_order || 0
     };
     if (p.id) data.id = p.id;
-    return await dbInsert('products', data, { upsert: true, onConflict: 'name' });
+    const result = await dbInsert('products', data, { upsert: true, onConflict: 'name' });
+    try { localStorage.removeItem('cr5_ts_products'); } catch {}
+    return result;
   },
 
   async deleteProduct(name) {
@@ -293,7 +326,7 @@ const DB = {
   // -- Assignments --
   async getAssignments() {
     const cached = cacheGet('assignments', null);
-    if (cached) return cached;
+    if (cached && cacheIsFresh('assignments')) return cached;
     const rows = await dbSelect('assignments', 'select=customer_id,day_id');
     if (rows) {
       const map = {};
@@ -301,11 +334,13 @@ const DB = {
       cacheSet('assignments', map);
       return map;
     }
-    return {};
+    return cached || {};
   },
 
   async setAssignment(customerId, dayId) {
-    return await dbUpsert('assignments', { customer_id: customerId, day_id: dayId });
+    const result = await dbUpsert('assignments', { customer_id: customerId, day_id: dayId });
+    try { localStorage.removeItem('cr5_ts_assignments'); } catch {}
+    return result;
   },
 
   async removeAssignment(customerId) {
@@ -315,7 +350,7 @@ const DB = {
   // -- Route Order --
   async getRouteOrder() {
     const cached = cacheGet('route_order', null);
-    if (cached) return cached;
+    if (cached && cacheIsFresh('route_order')) return cached;
     const rows = await dbSelect('route_order', 'order=position.asc');
     if (rows) {
       const map = {};
@@ -326,7 +361,7 @@ const DB = {
       cacheSet('route_order', map);
       return map;
     }
-    return {};
+    return cached || {};
   },
 
   async saveRouteOrder(dayId, customerIds) {
@@ -342,7 +377,7 @@ const DB = {
   // -- Orders --
   async getOrders() {
     const cached = cacheGet('orders', null);
-    if (cached) return cached;
+    if (cached && cacheIsFresh('orders')) return cached;
     const rows = await dbSelect('orders', 'select=*,order_items(*)&order=created_at.desc');
     if (rows) {
       const map = {};
@@ -360,7 +395,7 @@ const DB = {
       cacheSet('orders', map);
       return map;
     }
-    return {};
+    return cached || {};
   },
 
   async saveOrder(order) {
@@ -384,6 +419,7 @@ const DB = {
         order_id: order.id, product_name: i.name, qty: i.qty, price: i.price
       })));
     }
+    try { localStorage.removeItem('cr5_ts_orders'); } catch {}
     if (typeof dbLog === 'function') dbLog(`saveOrder OK: ${order.id} status=${order.status}`);
   },
 
@@ -394,7 +430,7 @@ const DB = {
   // -- Debts --
   async getDebts() {
     const cached = cacheGet('debts', null);
-    if (cached) return cached;
+    if (cached && cacheIsFresh('debts')) return cached;
     const rows = await dbSelect('debts', 'select=customer_id,amount');
     if (rows) {
       const map = {};
@@ -402,18 +438,20 @@ const DB = {
       cacheSet('debts', map);
       return map;
     }
-    return {};
+    return cached || {};
   },
 
   async setDebt(customerId, amount) {
     const numAmount = parseFloat(amount) || 0;
-    return await dbUpsert('debts', { customer_id: customerId, amount: numAmount });
+    const result = await dbUpsert('debts', { customer_id: customerId, amount: numAmount });
+    try { localStorage.removeItem('cr5_ts_debts'); } catch {}
+    return result;
   },
 
   // -- Debt History --
   async getDebtHistory() {
     const cached = cacheGet('debt_history', null);
-    if (cached) return cached;
+    if (cached && cacheIsFresh('debt_history')) return cached;
     const rows = await dbSelect('debt_history', 'order=created_at.desc');
     if (rows) {
       const map = {};
@@ -427,7 +465,7 @@ const DB = {
       cacheSet('debt_history', map);
       return map;
     }
-    return {};
+    return cached || {};
   },
 
   async addDebtHistoryEntry(customerId, entry) {
@@ -468,7 +506,7 @@ const DB = {
   // -- Customer Pricing --
   async getCustomerPricing() {
     const cached = cacheGet('customer_pricing', null);
-    if (cached) return cached;
+    if (cached && cacheIsFresh('customer_pricing')) return cached;
     const rows = await dbSelect('customer_pricing');
     if (rows) {
       const map = {};
@@ -479,7 +517,7 @@ const DB = {
       cacheSet('customer_pricing', map);
       return map;
     }
-    return {};
+    return cached || {};
   },
 
   async setCustomerPricing(customerId, pricingMap) {
@@ -495,7 +533,7 @@ const DB = {
   // -- Recurring Orders --
   async getRecurringOrders() {
     const cached = cacheGet('recurring_orders', null);
-    if (cached) return cached;
+    if (cached && cacheIsFresh('recurring_orders')) return cached;
     const rows = await dbSelect('recurring_orders');
     if (rows) {
       const map = {};
@@ -505,7 +543,7 @@ const DB = {
       cacheSet('recurring_orders', map);
       return map;
     }
-    return {};
+    return cached || {};
   },
 
   async setRecurringOrder(customerId, data) {

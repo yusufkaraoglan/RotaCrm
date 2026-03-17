@@ -254,12 +254,20 @@ function initRouteDragDrop() {
   const list = document.getElementById('route-list');
   if (!list) return;
 
+  // Remove old listeners by replacing the node (clears all event listeners)
+  if (list._dragInitialized) {
+    const fresh = list.cloneNode(true);
+    list.parentNode.replaceChild(fresh, list);
+    return initRouteDragDrop(); // Re-init with fresh node
+  }
+
   const week = S.routeWeek;
   const days = DAYS.filter(d => d.week === week);
   const dayObj = days[S.routeDay] || days[0];
   if (!dayObj) return;
   const dayId = dayObj.id;
 
+  list._dragInitialized = true;
   let draggedId = null;
 
   list.addEventListener('dragstart', e => {
@@ -578,11 +586,19 @@ function confirmVisitWithPayment() {
 
   const now = new Date().toISOString();
   const cleared = Math.min(payAmount, debt);
-  S.debts[stopId] = Math.max(0, debt - cleared);
+  const overpaid = roundMoney(Math.max(0, payAmount - debt));
+  S.debts[stopId] = Math.max(0, roundMoney(debt - cleared));
   createDebtHistoryEntry(stopId, {
     date: now, amount: cleared, type: 'clear',
     note: `Visit payment (${visitPayMethod})`
   });
+  if (overpaid > 0) {
+    showToast(`${formatCurrency(overpaid)} overpayment — recorded as credit`, 'info', 5000);
+    createDebtHistoryEntry(stopId, {
+      date: now, amount: overpaid, type: 'clear',
+      note: `Overpayment credit (${visitPayMethod})`
+    });
+  }
   save.debts();
   save.debtHistory([stopId]);
   DB.setDebt(stopId, S.debts[stopId]);

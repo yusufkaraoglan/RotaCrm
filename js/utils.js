@@ -21,10 +21,10 @@ function repairDebtHistoryTypes(dhMap) {
       }
       if (!e.id) e.id = uid();
     });
-    // Deduplicate (round date to minute to catch near-identical entries)
+    // Deduplicate (round date to second to catch near-identical entries)
     const seen = new Set();
     dhMap[cid] = entries.filter(e => {
-      const dateKey = (e.date || '').slice(0, 16);
+      const dateKey = (e.date || '').slice(0, 19);
       const key = dateKey + '|' + e.amount + '|' + e.note;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -33,8 +33,8 @@ function repairDebtHistoryTypes(dhMap) {
   });
   return dhMap;
 }
-function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function formatCurrency(n) { return '\u00A3' + (n || 0).toFixed(2); }
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+function formatCurrency(n) { return '\u00A3' + (isNaN(n) ? 0 : (n || 0)).toFixed(2); }
 
 function formatDate(d) {
   if (!d) return '';
@@ -166,12 +166,14 @@ function getTodayDayIndex() {
 }
 
 function getStop(id) {
-  return STOPS.find(s => s.id === parseInt(id));
+  const numId = Number(id);
+  return STOPS.find(s => Number(s.id) === numId);
 }
 
 function getStopOrders(stopId, status) {
+  const numId = Number(stopId);
   return Object.values(S.orders).filter(o => {
-    if (o.customerId !== parseInt(stopId)) return false;
+    if (Number(o.customerId) !== numId) return false;
     if (status && o.status !== status) return false;
     return true;
   });
@@ -311,14 +313,13 @@ function reconcileOrderDebtEffect(prevOrder, nextOrder) {
   let changed = false;
   if (prevOrder) {
     const removed = removeLinkedOrderDebtEntries(prevOrder);
-    const prevImpact = getOrderDebtImpact(prevOrder);
-    // Use removed amount if entries were found, otherwise fall back to expected impact
-    const toSubtract = removed > 0 ? removed : prevImpact;
-    if (toSubtract > 0) {
-      S.debts[stopId] = Math.max(0, roundMoney((S.debts[stopId] || 0) - toSubtract));
+    // Only subtract what was actually found in history entries.
+    // If no entries were found (removed === 0), don't guess — the debt balance
+    // may have already been adjusted manually or via a payment.
+    if (removed > 0) {
+      S.debts[stopId] = Math.max(0, roundMoney((S.debts[stopId] || 0) - removed));
       changed = true;
     }
-    // No correction entry — just adjust the balance directly to avoid entry buildup
   }
   if (nextOrder && getOrderDebtImpact(nextOrder) > 0) { addOrderDebtEffect(nextOrder); changed = true; }
   else if (nextOrder) { nextOrder.debtEntryIds = []; }
@@ -335,8 +336,9 @@ function getWeekMondayStr(date) {
 
 function isDeliveredThisWeek(stopId) {
   const thisMonday = getWeekMondayStr(new Date());
+  const numId = Number(stopId);
   return Object.values(S.orders).some(o =>
-    o.customerId === parseInt(stopId) &&
+    Number(o.customerId) === numId &&
     o.status === 'delivered' &&
     o.deliveredAt && getWeekMondayStr(o.deliveredAt) === thisMonday
   );
