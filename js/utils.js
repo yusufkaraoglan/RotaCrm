@@ -120,10 +120,10 @@ async function geocodeStop(stop, opts = {}) {
   if (!queries.length) { delete S.geo[stop.id]; save.geo(); return false; }
   let match = null, lastError = null;
   for (const query of queries) {
-    try { match = await geocodeWithNominatim(query); if (match) break; } catch (err) { lastError = err; }
+    try { match = await geocodeWithNominatim(query); if (match) break; } catch (err) { lastError = err; console.warn('Geocode failed for query:', query, err.message); }
   }
   if (!match && (stop.p || stop.postcode)) {
-    try { match = await geocodeWithPostcode(stop.p || stop.postcode); } catch (err) { lastError = err; }
+    try { match = await geocodeWithPostcode(stop.p || stop.postcode); } catch (err) { lastError = err; console.warn('Postcode geocode failed:', stop.p || stop.postcode, err.message); }
   }
   if (match) {
     S.geo[stop.id] = { lat: match.lat, lng: match.lng, addressKey, matchedQuery: match.matchedQuery, source: match.source, updatedAt: new Date().toISOString() };
@@ -250,6 +250,12 @@ function getOrderDebtImpact(order) {
   if (order.payMethod === 'cash') {
     const paid = roundMoney(Math.max(0, Math.min(total, parseFloat(order.cashPaid) || 0)));
     return roundMoney(Math.max(0, total - paid));
+  }
+  if (order.payMethod === 'bank' || order.payMethod === 'visit') return 0;
+  // Unknown payMethod — treat as unpaid to avoid silent debt loss
+  if (order.payMethod && order.payMethod !== 'bank' && order.payMethod !== 'visit') {
+    console.warn('getOrderDebtImpact: unknown payMethod "' + order.payMethod + '" for order ' + order.id);
+    return total;
   }
   return 0;
 }

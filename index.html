@@ -50,29 +50,29 @@ tailwind.config = {
 <div class="page" id="page-neworder"></div>
 
 <!-- ═══ MODAL ═══ -->
-<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+<div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true" onclick="if(event.target===this)closeModal()">
   <div class="modal-sheet" id="modal-content"></div>
 </div>
 
 <!-- ═══ BOTTOM NAV ═══ -->
-<nav class="bottom-nav" id="main-nav">
-  <button class="nav-btn active" data-page="route">
+<nav class="bottom-nav" id="main-nav" aria-label="Main navigation">
+  <button class="nav-btn active" data-page="route" aria-label="Route">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
     <span>Route</span>
   </button>
-  <button class="nav-btn" data-page="orders">
+  <button class="nav-btn" data-page="orders" aria-label="Orders">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 7h8M8 12h8M8 17h4"/></svg>
     <span>Orders</span>
   </button>
-  <button class="nav-btn" data-page="customers">
+  <button class="nav-btn" data-page="customers" aria-label="Customers">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     <span>Customers</span>
   </button>
-  <button class="nav-btn" data-page="reports">
+  <button class="nav-btn" data-page="reports" aria-label="Reports">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="5" width="4" height="16" rx="1"/><rect x="17" y="8" width="4" height="13" rx="1"/></svg>
     <span>Reports</span>
   </button>
-  <button class="nav-btn" data-page="settings">
+  <button class="nav-btn" data-page="settings" aria-label="Settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
     <span>Settings</span>
   </button>

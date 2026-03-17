@@ -4,6 +4,7 @@
 // ══════════════════════════════════════════════════════════════
 let routeSearchTerm = '';
 let routeLockedStops = [];
+let visitPayMethod = null;
 
 function renderRoute() {
   const week = S.routeWeek;
@@ -544,8 +545,6 @@ function showDeliveryModal(stopId, singleOrderId) {
   }
 }
 
-let visitPayMethod = null;
-
 function selectVisitPayMethod(method, el) {
   visitPayMethod = method;
   document.querySelectorAll('.pay-opt').forEach(o => o.classList.remove('selected'));
@@ -585,7 +584,7 @@ function confirmVisitWithPayment() {
   }
 
   const now = new Date().toISOString();
-  const cleared = Math.min(payAmount, debt);
+  const cleared = roundMoney(Math.min(payAmount, debt));
   const overpaid = roundMoney(Math.max(0, payAmount - debt));
   S.debts[stopId] = Math.max(0, roundMoney(debt - cleared));
   createDebtHistoryEntry(stopId, {
@@ -658,7 +657,7 @@ function confirmDelivery() {
     if (pending.length === 0) { appAlert('No pending orders found.'); closeModal(); return; }
     const dtInput = document.getElementById('delivery-datetime');
     const now = dtInput && dtInput.value ? new Date(dtInput.value).toISOString() : new Date().toISOString();
-    const grandTotal = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
+    const grandTotal = roundMoney(pending.reduce((s, o) => s + calcOrderTotal(o), 0));
 
     const cashAllocations = new Map();
     if (deliveryPayMethod === 'cash') {

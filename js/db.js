@@ -77,7 +77,12 @@ async function checkDbTables() {
 }
 
 async function dbInsert(table, data, opts = {}) {
-  if (!_dbReady) return null;
+  if (!_dbReady) {
+    // Queue operation instead of silently discarding (#7)
+    offlineQueue.push({ action: 'insert', table, data, opts });
+    console.warn(`dbInsert ${table}: DB not ready, queued for later`);
+    return null;
+  }
   try {
     const headers = { ...DB_HEADERS };
     if (opts.upsert) headers['Prefer'] = 'resolution=merge-duplicates';
@@ -108,7 +113,11 @@ async function dbInsert(table, data, opts = {}) {
 }
 
 async function dbUpdate(table, match, data) {
-  if (!_dbReady) return null;
+  if (!_dbReady) {
+    offlineQueue.push({ action: 'update', table, match, data });
+    console.warn(`dbUpdate ${table}: DB not ready, queued for later`);
+    return null;
+  }
   try {
     const params = Object.entries(match).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
     const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, {
@@ -118,7 +127,9 @@ async function dbUpdate(table, match, data) {
     });
     if (!r.ok) {
       const body = await r.text().catch(() => '');
-      throw new Error(`HTTP ${r.status}: ${body}`);
+      let detail = `HTTP ${r.status}`;
+      try { const j = JSON.parse(body); detail = j.message || j.details || detail; } catch {}
+      throw new Error(detail);
     }
     return true;
   } catch (e) {
@@ -132,7 +143,11 @@ async function dbUpdate(table, match, data) {
 }
 
 async function dbDelete(table, match) {
-  if (!_dbReady) return null;
+  if (!_dbReady) {
+    offlineQueue.push({ action: 'delete', table, match });
+    console.warn(`dbDelete ${table}: DB not ready, queued for later`);
+    return null;
+  }
   try {
     const params = Object.entries(match).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
     const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, {
@@ -141,7 +156,9 @@ async function dbDelete(table, match) {
     });
     if (!r.ok) {
       const body = await r.text().catch(() => '');
-      throw new Error(`HTTP ${r.status}: ${body}`);
+      let detail = `HTTP ${r.status}`;
+      try { const j = JSON.parse(body); detail = j.message || j.details || detail; } catch {}
+      throw new Error(detail);
     }
     return true;
   } catch (e) {
@@ -163,25 +180,31 @@ async function dbUpsert(table, data) {
 async function flushOfflineQueue() {
   if (isSyncing || offlineQueue.length === 0 || !navigator.onLine) return;
   isSyncing = true;
-  let retries = 0;
-  while (offlineQueue.length > 0) {
-    const op = offlineQueue[0];
-    let ok = false;
-    try {
-      if (op.action === 'insert') ok = await dbInsert(op.table, op.data, op.opts);
-      else if (op.action === 'update') ok = await dbUpdate(op.table, op.match, op.data);
-      else if (op.action === 'delete') ok = await dbDelete(op.table, op.match);
-      if (ok) { offlineQueue.shift(); retries = 0; }
-      else {
+  try {
+    let retries = 0;
+    while (offlineQueue.length > 0) {
+      const op = offlineQueue[0];
+      let ok = false;
+      try {
+        if (op.action === 'insert') ok = await dbInsert(op.table, op.data, op.opts);
+        else if (op.action === 'update') ok = await dbUpdate(op.table, op.match, op.data);
+        else if (op.action === 'delete') ok = await dbDelete(op.table, op.match);
+        if (ok) { offlineQueue.shift(); retries = 0; }
+        else {
+          retries++;
+          if (retries >= 3) { offlineQueue.shift(); retries = 0; } // Skip permanently failed ops
+          else { await new Promise(r => setTimeout(r, 2000)); } // Wait before retry instead of breaking
+        }
+      } catch (e) {
+        console.warn('flushOfflineQueue error:', e.message);
         retries++;
-        if (retries >= 3) { offlineQueue.shift(); retries = 0; } // Skip permanently failed ops
-        else break;
+        if (retries >= 3) { offlineQueue.shift(); retries = 0; }
+        else { await new Promise(r => setTimeout(r, 2000)); }
       }
-    } catch {
-      break;
     }
+  } finally {
+    isSyncing = false; // Always reset even if loop breaks unexpectedly
   }
-  isSyncing = false;
 }
 
 window.addEventListener('online', flushOfflineQueue);
@@ -248,9 +271,14 @@ function parseDebtHistoryRow(r) {
 function dedupeDebtHistory(entries) {
   const seen = new Set();
   return entries.filter(e => {
-    // Use seconds precision (19 chars: YYYY-MM-DDTHH:MM:SS) to avoid losing
-    // legitimate entries made within the same minute
-    const dateKey = (e.date || '').slice(0, 19);
+    // Prefer dedup by unique ID if available
+    if (e.id) {
+      if (seen.has('id:' + e.id)) return false;
+      seen.add('id:' + e.id);
+      return true;
+    }
+    // Fallback: use millisecond-precision date + amount + note
+    const dateKey = (e.date || '').slice(0, 23);
     const key = dateKey + '|' + e.amount + '|' + e.note;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -280,10 +308,15 @@ const DB = {
   },
 
   async saveCustomer(c) {
+    if (c.id == null) { console.warn('saveCustomer: missing id'); return null; }
+    const name = c.name || c.n;
+    if (!name) { console.warn('saveCustomer: missing name for id', c.id); return null; }
     const data = {
-      id: c.id, name: c.name || c.n, address: c.address || c.a || '',
+      id: c.id, name, address: c.address || c.a || '',
       city: c.city || c.c || '', postcode: c.postcode || c.p || '',
-      lat: c.lat || null, lng: c.lng || null, note: c.note || '',
+      lat: (typeof c.lat === 'number' && isFinite(c.lat)) ? c.lat : null,
+      lng: (typeof c.lng === 'number' && isFinite(c.lng)) ? c.lng : null,
+      note: c.note || '',
       contact_name: c.contact_name || c.cn || '',
       phone: c.phone || c.ph || '', email: c.email || c.em || ''
     };
@@ -343,7 +376,9 @@ const DB = {
   },
 
   async removeAssignment(customerId) {
-    return await dbDelete('assignments', { customer_id: customerId });
+    const result = await dbDelete('assignments', { customer_id: customerId });
+    try { localStorage.removeItem('cr5_ts_assignments'); } catch {}
+    return result;
   },
 
   // -- Route Order --
@@ -371,6 +406,7 @@ const DB = {
       }));
       await dbInsert('route_order', rows);
     }
+    try { localStorage.removeItem('cr5_ts_route_order'); } catch {}
   },
 
   // -- Orders --
@@ -559,7 +595,7 @@ const DB = {
   // -- App Settings (key-value for UI state) --
   async getSetting(key, fallback) {
     const cached = cacheGet('setting_' + key, undefined);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined && cacheIsFresh('setting_' + key)) return cached;
     const rows = await dbSelect('app_settings', `key=eq.${encodeURIComponent(key)}`);
     if (rows && rows[0]) {
       cacheSet('setting_' + key, rows[0].value);
@@ -582,9 +618,8 @@ const DB = {
 
 async function syncAll() {
   try {
-    // Fetch all tables from Supabase in parallel
-    const [customers, products, assignments, routeOrder, orders,
-           debts, debtHistory, pricing, recurring] = await Promise.all([
+    // Fetch all tables from Supabase in parallel (allSettled so one failure doesn't block all)
+    const results = await Promise.allSettled([
       dbSelect('customers', 'order=name.asc'),
       dbSelect('products', 'order=sort_order.asc,name.asc'),
       dbSelect('assignments', 'select=customer_id,day_id'),
@@ -595,6 +630,8 @@ async function syncAll() {
       dbSelect('customer_pricing'),
       dbSelect('recurring_orders')
     ]);
+    const [customers, products, assignments, routeOrder, orders,
+           debts, debtHistory, pricing, recurring] = results.map(r => r.status === 'fulfilled' ? r.value : null);
 
     // Only update cache for tables that were successfully fetched
     if (customers) cacheSet('customers', customers);

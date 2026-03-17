@@ -354,7 +354,7 @@ async function removeCatalogItem(idx) {
 
 
 async function resetOrdersAndDebts() {
-  if (!(await appConfirm('This will delete all <b>orders, debts, and debt history</b>.<br>Customers, routes, and map will be kept.<br>Are you sure?'))) return;
+  if (!(await appConfirm('This will delete all <b>orders, debts, and debt history</b>.<br>Customers, routes, and map will be kept.<br>Are you sure?', true))) return;
   if (!(await appConfirm('This cannot be undone. Proceed?'))) return;
 
   // Clear local state
@@ -388,7 +388,7 @@ async function resetOrdersAndDebts() {
 }
 
 async function resetAllData() {
-  if (!(await appConfirm('This will delete ALL local data.<br>Are you sure?'))) return;
+  if (!(await appConfirm('This will delete ALL local data.<br>Are you sure?', true))) return;
   if (!(await appConfirm('This cannot be undone. Proceed?'))) return;
   const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','recurringOrders','stopCatalog','vis'];
   keys.forEach(k => localStorage.removeItem('cr4_' + k));

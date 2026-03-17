@@ -1,6 +1,8 @@
 'use strict';
 // PROFILE PAGE
 // ══════════════════════════════════════════════════════════════
+let clearDebtMethod = 'cash';
+
 function showProfile(stopId) {
   profilePreviousPage = curPage || 'customers';
   profileStopId = parseInt(stopId);
@@ -280,7 +282,7 @@ async function deleteOrder(orderId) {
   if (debtImpact > 0) {
     msg += `<br><br><span style="color:var(--danger)">This order has ${formatCurrency(debtImpact)} linked debt which will also be removed from the balance.</span>`;
   }
-  if (!(await appConfirm(msg))) return;
+  if (!(await appConfirm(msg, true))) return;
 
   // Only restore stock if deleting a DELIVERED order
   let stockChange = { changed: false, lowStockWarnings: [] };
@@ -488,7 +490,7 @@ async function deleteCustomer() {
     if (debt > 0) msg += `<span style="color:var(--danger)">${formatCurrency(debt)} debt will be lost.</span><br>`;
   }
   msg += '<br>This action cannot be undone.';
-  if (!(await appConfirm(msg))) return;
+  if (!(await appConfirm(msg, true))) return;
   STOPS = STOPS.filter(s => s.id !== profileStopId);
   delete S.assign[profileStopId];
   save.stops();
@@ -874,7 +876,7 @@ function showClearDebtModal() {
   openModal(html);
 }
 
-let clearDebtMethod = 'cash';
+clearDebtMethod = 'cash';
 function selectClearMethod(method, el) {
   clearDebtMethod = method;
   document.querySelectorAll('.pay-opt').forEach(o => o.classList.remove('selected'));
@@ -903,7 +905,7 @@ function clearDebt() {
 async function removeAllDebt() {
   const debt = S.debts[profileStopId] || 0;
   if (debt <= 0) return;
-  if (!(await appConfirm(formatCurrency(debt) + ' debt - are you sure you want to clear all debt?<br>This will not create a payment record.'))) return;
+  if (!(await appConfirm(formatCurrency(debt) + ' debt - are you sure you want to clear all debt?<br>This will not create a payment record.', true))) return;
   S.debts[profileStopId] = 0;
   save.debts();
   DB.setDebt(profileStopId, 0);

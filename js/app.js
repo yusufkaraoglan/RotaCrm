@@ -78,8 +78,7 @@ function loadStateLegacy() {
 // ── New DB load ────────────────────────────────────────────
 
 async function loadStateFromDB() {
-  const [customers, products, assignments, routeOrder, orders,
-         debts, debtHistory, pricing, recurring] = await Promise.all([
+  const results = await Promise.allSettled([
     DB.getCustomers(),
     DB.getProducts(),
     DB.getAssignments(),
@@ -90,34 +89,38 @@ async function loadStateFromDB() {
     DB.getCustomerPricing(),
     DB.getRecurringOrders()
   ]);
+  const [customers, products, assignments, routeOrder, orders,
+         debts, debtHistory, pricing, recurring] = results.map(r =>
+    r.status === 'fulfilled' ? r.value : null
+  );
 
   // Map customers to STOPS format for backward compat
-  STOPS = customers.map(c => ({
+  STOPS = (customers || []).map(c => ({
     id: c.id, n: c.name, a: c.address, c: c.city, p: c.postcode,
     cn: c.contact_name || '', ph: c.phone || '', em: c.email || ''
   }));
 
-  S.assign = assignments;
-  S.routeOrder = routeOrder;
+  S.assign = assignments || {};
+  S.routeOrder = routeOrder || {};
   S.geo = {};
-  customers.forEach(c => {
+  (customers || []).forEach(c => {
     if (c.lat && c.lng) {
       S.geo[c.id] = { lat: c.lat, lng: c.lng };
     }
   });
-  S.orders = orders;
-  S.debts = debts;
-  S.debtHistory = repairDebtHistoryTypes(debtHistory);
+  S.orders = orders || {};
+  S.debts = debts || {};
+  S.debtHistory = repairDebtHistoryTypes(debtHistory || {});
   cacheSet('debt_history', S.debtHistory);
   S.cnotes = {};
-  customers.forEach(c => { if (c.note) S.cnotes[c.id] = c.note; });
-  S.catalog = products.map(p => ({
+  (customers || []).forEach(c => { if (c.note) S.cnotes[c.id] = c.note; });
+  S.catalog = (products || []).map(p => ({
     name: p.name, unit: p.unit, price: parseFloat(p.price),
     stock: p.stock, trackStock: p.track_stock
   }));
-  S.customerPricing = pricing;
+  S.customerPricing = pricing || {};
   S.customerProducts = cacheGet('customer_products', {});
-  S.recurringOrders = recurring;
+  S.recurringOrders = recurring || {};
   S.brands = cacheGet('customer_brands', {});
   S.brandList = cacheGet('brand_list', []);
 
@@ -143,18 +146,28 @@ function initUIState() {
 // ── Save helpers (write to both state + DB) ────────────────
 
 // Helper: wrap save operations — write Supabase first, then cache
+const _persistLocks = {};
 async function _persist(cacheKey, data, supabaseWrite) {
-  _savePending++;
-  try {
-    await supabaseWrite();
-    cacheSet(cacheKey, data);
-  } catch (e) {
-    // Offline fallback: cache locally, offline queue handles Supabase retry
-    cacheSet(cacheKey, data);
-    console.warn(`save ${cacheKey}: Supabase failed, cached locally`, e.message);
-  } finally {
-    _savePending--;
+  // If a write for this key is already in flight, wait for it first
+  if (_persistLocks[cacheKey]) {
+    try { await _persistLocks[cacheKey]; } catch {}
   }
+  _savePending++;
+  const promise = (async () => {
+    try {
+      await supabaseWrite();
+      cacheSet(cacheKey, data);
+    } catch (e) {
+      // Offline fallback: cache locally, offline queue handles Supabase retry
+      cacheSet(cacheKey, data);
+      console.warn(`save ${cacheKey}: Supabase failed, cached locally`, e.message);
+    } finally {
+      _savePending--;
+      delete _persistLocks[cacheKey];
+    }
+  })();
+  _persistLocks[cacheKey] = promise;
+  return promise;
 }
 
 const save = {
@@ -167,7 +180,7 @@ const save = {
       phone: s.ph || '', email: s.em || ''
     }));
     return _persist('customers', mapped, () =>
-      Promise.all(STOPS.map(s => DB.saveCustomer({
+      Promise.allSettled(STOPS.map(s => DB.saveCustomer({
         id: s.id, name: s.n, address: s.a, city: s.c, postcode: s.p,
         lat: (S.geo[s.id] && S.geo[s.id].lat) || null,
         lng: (S.geo[s.id] && S.geo[s.id].lng) || null,
@@ -178,12 +191,12 @@ const save = {
   },
   assign: () => {
     return _persist('assignments', { ...S.assign }, () =>
-      Promise.all(Object.entries(S.assign).map(([cid, did]) => DB.setAssignment(cid, did)))
+      Promise.allSettled(Object.entries(S.assign).map(([cid, did]) => DB.setAssignment(cid, did)))
     );
   },
   routeOrder: () => {
     return _persist('route_order', { ...S.routeOrder }, () =>
-      Promise.all(Object.entries(S.routeOrder).map(([dayId, cids]) =>
+      Promise.allSettled(Object.entries(S.routeOrder).map(([dayId, cids]) =>
         DB.saveRouteOrder(dayId, Array.isArray(cids) ? cids : [])
       ))
     );
@@ -192,14 +205,14 @@ const save = {
   orders: (changedOrderIds) => {
     return _persist('orders', { ...S.orders }, () => {
       if (!changedOrderIds || !Array.isArray(changedOrderIds)) return Promise.resolve();
-      return Promise.all(changedOrderIds.map(id =>
+      return Promise.allSettled(changedOrderIds.map(id =>
         S.orders[id] ? DB.saveOrder(S.orders[id]) : DB.deleteOrder(id)
       ));
     });
   },
   debts: () => {
     return _persist('debts', { ...S.debts }, () =>
-      Promise.all(Object.entries(S.debts).map(([cid, amt]) => DB.setDebt(cid, amt)))
+      Promise.allSettled(Object.entries(S.debts).map(([cid, amt]) => DB.setDebt(cid, amt)))
     );
   },
   debtHistory: (changedCustomerIds) => {
@@ -209,7 +222,7 @@ const save = {
     const ids = Array.isArray(changedCustomerIds) && changedCustomerIds.length > 0
       ? changedCustomerIds : (profileStopId ? [profileStopId] : []);
     return _persist('debt_history', { ...S.debtHistory }, () =>
-      Promise.all(ids.map(cid => DB.replaceDebtHistory(cid, S.debtHistory[cid] || [])))
+      Promise.allSettled(ids.map(cid => DB.replaceDebtHistory(cid, S.debtHistory[cid] || [])))
     );
   },
   cnotes: () => { /* stored in customers table via save.stops */ },
@@ -220,7 +233,7 @@ const save = {
       sort_order: c.sort_order || 0
     }));
     return _persist('products', mapped, () =>
-      Promise.all(mapped.map(p =>
+      Promise.allSettled(mapped.map(p =>
         dbInsert('products', p, { upsert: true, onConflict: 'name' }).catch(e => {
           if (typeof dbLog === 'function') dbLog(`save product FAILED: ${p.name} - ${e.message}`);
         })
@@ -229,7 +242,7 @@ const save = {
   },
   pricing: () => {
     return _persist('customer_pricing', { ...S.customerPricing }, () =>
-      Promise.all(Object.entries(S.customerPricing).map(([cid, pm]) =>
+      Promise.allSettled(Object.entries(S.customerPricing).map(([cid, pm]) =>
         DB.setCustomerPricing(cid, pm || {})
       ))
     );
@@ -239,7 +252,7 @@ const save = {
   brandList: () => cacheSet('brand_list', S.brandList),
   recurringOrders: () => {
     return _persist('recurring_orders', { ...S.recurringOrders }, () =>
-      Promise.all(Object.entries(S.recurringOrders).map(([cid, data]) =>
+      Promise.allSettled(Object.entries(S.recurringOrders).map(([cid, data]) =>
         DB.setRecurringOrder(cid, data)
       ))
     );
@@ -322,13 +335,14 @@ function _resolveCurrentModal(val) {
   setTimeout(_processModalQueue, 100);
 }
 
-function appAlert(msg) {
+function appAlert(msg, allowHtml) {
   return new Promise(resolve => {
+    const safe = allowHtml ? msg : escHtml(msg);
     _modalQueue.push({
       html: `
         <div class="modal-handle"></div>
         <div style="padding:24px 20px;text-align:center">
-          <p style="font-size:15px;margin-bottom:20px">${msg}</p>
+          <p style="font-size:15px;margin-bottom:20px">${safe}</p>
           <button class="btn btn-primary btn-block" onclick="_appAlertOk()">OK</button>
         </div>`,
       resolve
@@ -341,13 +355,14 @@ function _appAlertOk() {
   _resolveCurrentModal(undefined);
 }
 
-function appConfirm(msg) {
+function appConfirm(msg, allowHtml) {
   return new Promise(resolve => {
+    const safe = allowHtml ? msg : escHtml(msg);
     _modalQueue.push({
       html: `
         <div class="modal-handle"></div>
         <div style="padding:24px 20px;text-align:center">
-          <p style="font-size:15px;margin-bottom:20px">${msg}</p>
+          <p style="font-size:15px;margin-bottom:20px">${safe}</p>
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-block" onclick="_appConfirmAnswer(false)">No</button>
             <button class="btn btn-primary btn-block" onclick="_appConfirmAnswer(true)">Yes</button>
@@ -476,9 +491,13 @@ async function init() {
   // 1) Try new DB tables first (if previously migrated or has cache)
   const migrated = cacheGet('db_migrated', false);
   if (migrated) {
-    await loadStateFromDB();
-    dataLoaded = STOPS.length > 0;
-    console.log('Init: loaded from new DB, STOPS:', STOPS.length);
+    try {
+      await loadStateFromDB();
+      dataLoaded = STOPS.length > 0;
+      console.log('Init: loaded from new DB, STOPS:', STOPS.length);
+    } catch (e) {
+      console.warn('Init: loadStateFromDB failed:', e.message);
+    }
   }
 
   // 2) If no data yet and DB is ready, try to fetch from new tables directly
@@ -641,5 +660,8 @@ if ('serviceWorker' in navigator) {
     });
   `;
   const blob = new Blob([swCode], { type: 'application/javascript' });
-  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+  const blobUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(blobUrl)
+    .catch(e => console.warn('SW registration failed:', e.message))
+    .finally(() => URL.revokeObjectURL(blobUrl));
 }

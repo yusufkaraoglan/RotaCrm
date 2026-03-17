@@ -196,7 +196,7 @@ async function importJSON(input) {
     const text = await file.text();
     const backup = JSON.parse(text);
     if (!backup.data) { appAlert('Invalid backup file.'); return; }
-    if (!(await appConfirm(`This backup is dated ${backup.exportedAt ? formatDate(backup.exportedAt) : 'unknown'}.<br>Existing data will be overwritten. Continue?`))) return;
+    if (!(await appConfirm(`This backup is dated ${backup.exportedAt ? escHtml(formatDate(backup.exportedAt)) : 'unknown'}.<br>Existing data will be overwritten. Continue?`, true))) return;
     const d = backup.data;
     if (d.stops) { STOPS = d.stops; save.stops(); }
     if (d.assign) { S.assign = d.assign; save.assign(); }

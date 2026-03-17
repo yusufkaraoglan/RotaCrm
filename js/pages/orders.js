@@ -600,7 +600,7 @@ function saveOrder() {
   _btnLock = true;
   setTimeout(() => _btnLock = false, 1500);
 
-  if (tempOrderCustomerId == null) { appAlert('Please select a customer.'); return; }
+  if (tempOrderCustomerId == null || isNaN(parseInt(tempOrderCustomerId))) { appAlert('Please select a customer.'); return; }
   const items = tempOrderItems.filter(i => i.name && i.qty > 0);
   if (items.length === 0) { appAlert('Please add at least one product.'); return; }
 
@@ -642,7 +642,7 @@ function saveOrder() {
     if (stockChange.changed) {
       save.catalog();
       if (stockChange.lowStockWarnings.length > 0) {
-        setTimeout(() => appAlert('Low stock:<br>' + stockChange.lowStockWarnings.join('<br>')), 300);
+        setTimeout(() => appAlert('Low stock:<br>' + stockChange.lowStockWarnings.map(w => escHtml(w)).join('<br>'), true), 300);
       }
     }
   }
