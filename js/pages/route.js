@@ -669,6 +669,14 @@ function confirmDelivery() {
       }
     });
 
+    // Deduct stock on delivery
+    let stockChanged = false;
+    pending.forEach(o => {
+      const sc = applyTrackedStockChange([], o.items || []);
+      if (sc.changed) stockChanged = true;
+    });
+    if (stockChanged) save.catalog();
+
     let debtChanged = false;
     pending.forEach(o => {
       if (addOrderDebtEffect(o) > 0) debtChanged = true;

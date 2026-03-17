@@ -447,11 +447,15 @@ function saveNewOrderPage() {
     };
   }
 
-  const stockChange = applyTrackedStockChange(previousItems, items);
-  if (stockChange.changed) {
-    save.catalog();
-    if (stockChange.lowStockWarnings.length > 0) {
-      setTimeout(() => appAlert('Low stock:<br>' + stockChange.lowStockWarnings.join('<br>')), 300);
+  // Only deduct stock if editing a DELIVERED order (pending orders don't affect stock)
+  const isDelivered = editingOrderId && existingOrder && existingOrder.status === 'delivered';
+  if (isDelivered) {
+    const stockChange = applyTrackedStockChange(previousItems, items);
+    if (stockChange.changed) {
+      save.catalog();
+      if (stockChange.lowStockWarnings.length > 0) {
+        setTimeout(() => appAlert('Low stock:<br>' + stockChange.lowStockWarnings.join('<br>')), 300);
+      }
     }
   }
 

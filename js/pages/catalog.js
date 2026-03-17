@@ -2,21 +2,31 @@
 let catalogSearchTerm = '';
 
 function renderCatalog() {
+  const body = document.querySelector('#page-catalog .page-body');
+  const scrollPos = body ? body.scrollTop : 0;
+
   let html = `
     <header class="topbar">
       <button class="btn-ghost" onclick="showPage('settings')" style="font-size:18px;padding:8px">&larr;</button>
       <h1 style="flex:1;text-align:center;font-size:16px">Product Catalog</h1>
-      <button class="btn btn-primary btn-sm" onclick="showAddProductModal()">+ Add</button>
+      <div class="topbar-actions">
+        <span class="badge badge-outline">${S.catalog.length}</span>
+        <button class="btn btn-primary btn-sm" onclick="showAddProductModal()">+ Add</button>
+      </div>
     </header>
-    <div class="search-bar" style="margin:0 12px 4px">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" placeholder="Search products..." value="${escHtml(catalogSearchTerm)}" oninput="catalogSearchTerm=this.value;renderCatalogGrid()">
-    </div>
-    <div class="page-body" id="catalog-grid-container">`;
+    <div class="page-body">
+      <div class="search-bar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="Search products..." value="${escHtml(catalogSearchTerm)}" oninput="catalogSearchTerm=this.value;renderCatalogGrid()">
+      </div>
+      <div id="catalog-grid-container">`;
 
   html += buildCatalogGridHtml();
-  html += `</div>`;
+  html += `</div></div>`;
   document.getElementById('page-catalog').innerHTML = html;
+
+  const newBody = document.querySelector('#page-catalog .page-body');
+  if (newBody) newBody.scrollTop = scrollPos;
 }
 
 function buildCatalogGridHtml() {
@@ -37,7 +47,26 @@ function buildCatalogGridHtml() {
     </div>`;
   }
 
-  let html = `<div class="catalog-grid">`;
+  // Summary row
+  const tracked = S.catalog.filter(c => c.trackStock !== false);
+  const totalStock = tracked.reduce((s, c) => s + (c.stock || 0), 0);
+  const lowStock = tracked.filter(c => c.stock != null && c.stock <= 5).length;
+
+  let html = '';
+  if (tracked.length > 0 && !q) {
+    html += `<div style="display:flex;gap:8px;margin-bottom:12px">
+      <div class="card" style="flex:1;padding:10px;text-align:center">
+        <div style="font-size:20px;font-weight:700">${totalStock}</div>
+        <div style="font-size:11px;color:var(--text-sec)">Total Stock</div>
+      </div>
+      ${lowStock > 0 ? `<div class="card" style="flex:1;padding:10px;text-align:center;border-left:3px solid var(--danger)">
+        <div style="font-size:20px;font-weight:700;color:var(--danger)">${lowStock}</div>
+        <div style="font-size:11px;color:var(--text-sec)">Low Stock</div>
+      </div>` : ''}
+    </div>`;
+  }
+
+  html += `<div class="catalog-grid">`;
   filtered.forEach((c, fi) => {
     const i = q ? S.catalog.indexOf(c) : fi;
     const stockColor = c.stock != null && c.stock <= 5 ? 'var(--danger)' : c.stock != null && c.stock <= 20 ? 'var(--warning)' : 'var(--success)';
@@ -137,6 +166,9 @@ function showEditProductModal(idx) {
       </div>
       <input type="hidden" id="cat-stock-mode-${idx}" value="add">
       <div id="cat-stock-preview-${idx}" style="font-size:12px;color:var(--text-sec);margin-top:4px;text-align:center"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="btn btn-outline btn-sm" style="flex:1" onclick="quickStock(${idx}, 'set')">Set Exact</button>
+      </div>
     </div>` : ''}
     <div class="form-group">
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
@@ -148,19 +180,46 @@ function showEditProductModal(idx) {
   `);
 }
 
+function quickStock(idx, mode) {
+  const c = S.catalog[idx];
+  if (!c) return;
+  const modeInput = document.getElementById('cat-stock-mode-' + idx);
+  const icon = document.getElementById('cat-stock-mode-icon-' + idx);
+  const btn = icon?.parentElement;
+  const stockInput = document.getElementById('cat-edit-stock-' + idx);
+  const preview = document.getElementById('cat-stock-preview-' + idx);
+  if (!modeInput || !stockInput) return;
+
+  if (mode === 'set') {
+    modeInput.value = 'set';
+    if (icon) icon.textContent = '=';
+    if (btn) { btn.style.borderColor = 'var(--primary)'; btn.style.color = 'var(--primary)'; }
+    stockInput.placeholder = 'Set exact stock...';
+    stockInput.value = c.stock != null ? c.stock : '';
+    if (preview) preview.innerHTML = '';
+  }
+}
+
 function toggleStockMode(idx) {
   const modeInput = document.getElementById('cat-stock-mode-' + idx);
   const icon = document.getElementById('cat-stock-mode-icon-' + idx);
   const btn = icon?.parentElement;
+  const stockInput = document.getElementById('cat-edit-stock-' + idx);
   if (!modeInput || !icon) return;
   if (modeInput.value === 'add') {
     modeInput.value = 'subtract';
     icon.textContent = '−';
     if (btn) { btn.style.borderColor = 'var(--danger)'; btn.style.color = 'var(--danger)'; }
+  } else if (modeInput.value === 'subtract') {
+    modeInput.value = 'set';
+    icon.textContent = '=';
+    if (btn) { btn.style.borderColor = 'var(--primary)'; btn.style.color = 'var(--primary)'; }
+    if (stockInput) stockInput.placeholder = 'Set exact stock...';
   } else {
     modeInput.value = 'add';
     icon.textContent = '+';
     if (btn) { btn.style.borderColor = 'var(--success)'; btn.style.color = 'var(--success)'; }
+    if (stockInput) stockInput.placeholder = 'Enter amount...';
   }
   updateStockPreview(idx);
 }
@@ -173,11 +232,17 @@ function updateStockPreview(idx) {
   const modeInput = document.getElementById('cat-stock-mode-' + idx);
   if (!preview || !input || !modeInput) return;
   const val = parseInt(input.value);
-  if (!val && val !== 0) { preview.textContent = ''; return; }
+  if (isNaN(val)) { preview.textContent = ''; return; }
   const cur = c.stock != null ? c.stock : 0;
   const mode = modeInput.value;
-  const newStock = mode === 'add' ? cur + val : Math.max(0, cur - val);
-  preview.innerHTML = `${cur} ${mode === 'add' ? '+' : '−'} ${val} = <b>${newStock}</b>`;
+  let newStock;
+  if (mode === 'set') {
+    newStock = Math.max(0, val);
+    preview.innerHTML = `Stock will be set to <b>${newStock}</b>`;
+  } else {
+    newStock = mode === 'add' ? cur + val : Math.max(0, cur - val);
+    preview.innerHTML = `${cur} ${mode === 'add' ? '+' : '−'} ${val} = <b>${newStock}</b>`;
+  }
 }
 
 function catalogModalAdjustStock(idx, delta) {
@@ -195,7 +260,7 @@ function adjustStock(idx, delta) {
   } else {
     S.catalog[idx].stock = Math.max(0, cur + delta);
   }
-  save.catalog();
+  saveCatalogToDb();
   renderCatalog();
 }
 
@@ -207,7 +272,7 @@ function addToStock(idx) {
   if (!val || val <= 0) return;
   const cur = S.catalog[idx].stock;
   S.catalog[idx].stock = (cur != null ? cur : 0) + val;
-  save.catalog();
+  saveCatalogToDb();
   input.value = '';
   renderCatalog();
 }
@@ -217,7 +282,25 @@ function setStock(idx, val) {
   const trimmed = (val + '').trim();
   if (trimmed === '') { S.catalog[idx].stock = null; }
   else { S.catalog[idx].stock = Math.max(0, parseInt(trimmed) || 0); }
-  save.catalog();
+  saveCatalogToDb();
+}
+
+// Debounced save to prevent rapid fire-and-forget writes
+let _catalogSaveTimer = null;
+function saveCatalogToDb() {
+  // Always update cache immediately
+  const mapped = S.catalog.map(c => ({
+    name: c.name, unit: c.unit || '1', price: c.price || 0,
+    stock: c.stock ?? null, track_stock: c.trackStock !== false,
+    sort_order: c.sort_order || 0
+  }));
+  cacheSet('products', mapped);
+  // Debounce Supabase writes to prevent race conditions
+  if (_catalogSaveTimer) clearTimeout(_catalogSaveTimer);
+  _catalogSaveTimer = setTimeout(() => {
+    save.catalog();
+    _catalogSaveTimer = null;
+  }, 500);
 }
 
 function toggleCatalogEdit(idx) {
@@ -240,13 +323,17 @@ function saveCatalogEdit(idx) {
     const modeInput = document.getElementById('cat-stock-mode-' + idx);
     if (stockInput) {
       const sv = stockInput.value.trim();
-      if (sv === '') {
-        // No change entered, keep current stock
-      } else {
+      if (sv !== '') {
         const val = Math.max(0, parseInt(sv) || 0);
         const cur = stock != null ? stock : 0;
         const mode = modeInput ? modeInput.value : 'add';
-        stock = mode === 'add' ? cur + val : Math.max(0, cur - val);
+        if (mode === 'set') {
+          stock = val;
+        } else if (mode === 'add') {
+          stock = cur + val;
+        } else {
+          stock = Math.max(0, cur - val);
+        }
       }
     }
   }
@@ -274,8 +361,10 @@ function addCatalogItem() {
 
 async function removeCatalogItem(idx) {
   if (!(await appConfirm('Remove ' + S.catalog[idx].name + '?'))) return;
+  const name = S.catalog[idx].name;
   S.catalog.splice(idx, 1);
   save.catalog();
+  DB.deleteProduct(name).catch(() => {});
   closeModal();
   if (curPage === 'catalog') renderCatalog();
   else if (curPage === 'settings') renderSettings();

@@ -282,7 +282,11 @@ async function deleteOrder(orderId) {
   }
   if (!(await appConfirm(msg))) return;
 
-  const stockChange = applyTrackedStockChange(order.items || [], []);
+  // Only restore stock if deleting a DELIVERED order
+  let stockChange = { changed: false, lowStockWarnings: [] };
+  if (order.status === 'delivered') {
+    stockChange = applyTrackedStockChange(order.items || [], []);
+  }
   const debtChanged = reconcileOrderDebtEffect(order, null);
   delete S.orders[orderId];
 
