@@ -32,6 +32,7 @@ function renderProfile() {
         <div style="font-size:12px;color:var(--text-sec);margin-top:4px">${escHtml(stop.a)}</div>
         <div style="font-size:12px;color:var(--text-sec)">${escHtml(stop.c)} &middot; ${escHtml(stop.p)}</div>
         ${dayObj ? `<div style="margin-top:8px"><span class="badge" style="background:${dayObj.color}20;color:${dayObj.color}">Week ${dayObj.week} - ${dayObj.label}</span></div>` : '<div style="margin-top:8px"><span class="badge badge-outline">Unassigned</span></div>'}
+        ${S.brands[stop.id] ? `<div style="margin-top:6px"><span class="badge" style="background:var(--primary);color:#fff;font-size:11px">${escHtml(S.brands[stop.id])}</span></div>` : ''}
         ${note ? `<div style="margin-top:8px;font-size:12px;color:var(--text-sec);font-style:italic">"${escHtml(note)}"</div>` : ''}
         ${(stop.cn || stop.ph || stop.em) ? `
           <div style="margin-top:10px;display:flex;flex-direction:column;gap:4px;align-items:center;font-size:13px">
@@ -54,6 +55,10 @@ function renderProfile() {
         <button class="action-btn" onclick="showCustomerProductsModal()">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
           Products
+        </button>
+        <button class="action-btn" onclick="showBrandModal()">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/><polyline points="14 2 14 8 20 8"/><line x1="1" y1="14" x2="11" y2="14"/><polyline points="8 11 11 14 8 17"/></svg>
+          Brand
         </button>
         <button class="action-btn" onclick="showPricingModal()">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -657,6 +662,51 @@ function saveNote() {
   if (stop) DB.saveCustomer({id: profileStopId, name: stop.n, address: stop.a, city: stop.c, postcode: stop.p, note: note || ''});
   closeModal();
   renderProfile();
+}
+
+// ══════════════════════════════════════════════════════════════
+// BRAND MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+function showBrandModal() {
+  const current = S.brands[profileStopId] || '';
+  const brands = S.brandList || [];
+  let html = `<div class="modal-handle"></div>
+    <div class="modal-title">Set Brand</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      <button class="btn btn-block ${!current ? 'btn-primary' : 'btn-outline'}" onclick="setBrand('')" style="text-align:left">No Brand</button>
+      ${brands.map(b => `
+        <button class="btn btn-block ${current === b ? 'btn-primary' : 'btn-outline'}" onclick="setBrand('${escHtml(b)}')" style="text-align:left">${escHtml(b)}</button>
+      `).join('')}
+    </div>
+    <div class="form-group">
+      <label class="form-label">Add New Brand</label>
+      <div style="display:flex;gap:8px">
+        <input class="input" type="text" id="new-brand-name" placeholder="Brand name...">
+        <button class="btn btn-primary" onclick="addAndSetBrand()">Add</button>
+      </div>
+    </div>`;
+  openModal(html);
+}
+
+function setBrand(name) {
+  if (name) {
+    S.brands[profileStopId] = name;
+  } else {
+    delete S.brands[profileStopId];
+  }
+  save.brands();
+  closeModal();
+  renderProfile();
+}
+
+function addAndSetBrand() {
+  const name = document.getElementById('new-brand-name').value.trim();
+  if (!name) return;
+  if (!S.brandList.includes(name)) {
+    S.brandList.push(name);
+    save.brandList();
+  }
+  setBrand(name);
 }
 
 // ══════════════════════════════════════════════════════════════

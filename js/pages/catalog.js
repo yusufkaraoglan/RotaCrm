@@ -282,12 +282,46 @@ async function removeCatalogItem(idx) {
 }
 
 
+async function resetOrdersAndDebts() {
+  if (!(await appConfirm('This will delete all <b>orders, debts, and debt history</b>.<br>Customers, routes, and map will be kept.<br>Are you sure?'))) return;
+  if (!(await appConfirm('This cannot be undone. Proceed?'))) return;
+
+  // Clear local state
+  S.orders = {};
+  S.debts = {};
+  S.debtHistory = {};
+
+  // Clear localStorage keys
+  ['ordersV2','orders','debts','debtHistory'].forEach(k => localStorage.removeItem('cr4_' + k));
+  ['orders','debts','debt_history'].forEach(k => localStorage.removeItem('cr5_' + k));
+
+  // Clear cache
+  cacheSet('orders', {});
+  cacheSet('debts', {});
+  cacheSet('debt_history', {});
+
+  // Clear from Supabase (delete all rows)
+  try {
+    if (typeof SB_URL !== 'undefined' && SB_URL) {
+      const tables = ['order_items', 'orders', 'debts', 'debt_history'];
+      for (const t of tables) {
+        await fetch(`${SB_URL}/rest/v1/${t}?id=gt.0`, {
+          method: 'DELETE', headers: DB_HEADERS
+        }).catch(() => {});
+      }
+    }
+  } catch (e) { console.error('resetOrdersAndDebts Supabase cleanup error:', e); }
+
+  appAlert('Orders and debts cleared successfully.');
+  renderSettings();
+}
+
 async function resetAllData() {
   if (!(await appConfirm('This will delete ALL local data.<br>Are you sure?'))) return;
   if (!(await appConfirm('This cannot be undone. Proceed?'))) return;
   const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','recurringOrders','stopCatalog','vis'];
   keys.forEach(k => localStorage.removeItem('cr4_' + k));
-  const cr5Keys = ['customers','products','assignments','route_order','orders','debts','debt_history','customer_pricing','recurring_orders','customer_products','db_migrated'];
+  const cr5Keys = ['customers','products','assignments','route_order','orders','debts','debt_history','customer_pricing','recurring_orders','customer_products','customer_brands','brand_list','db_migrated'];
   cr5Keys.forEach(k => localStorage.removeItem('cr5_' + k));
   location.reload();
 }
