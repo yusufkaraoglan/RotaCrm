@@ -1,10 +1,11 @@
 # FEATURES.md — Feature and Function Reference
 
-## Pages (8 pages)
+## Pages (9 pages)
 
 > Bottom navigation has 5 buttons: Route, Orders, Customers, Reports, Settings.
 > Catalog and Map pages are accessed from Settings.
 > Profile page opens by clicking a customer name.
+> New Order page opens from Orders FAB (+) or Profile quick order.
 
 ---
 
@@ -140,6 +141,21 @@ Interactive map with Leaflet.js.
 - OpenStreetMap geocoding
 - Day assignment from map
 - Tooltip visibility based on zoom level
+
+---
+
+### New Order (`page-neworder`) — From Orders / Profile
+Full-page order creation and editing form.
+
+**Features:**
+- Customer selection with search picker
+- Product picker with stock status badges
+- Editable quantity and price per item
+- Auto-calculated total
+- Delivery date (date input) and note field
+- Stock decremented for tracked products on save
+- Double-click protection via `btnLock()`
+- Returns to previous page (sessionStorage-backed)
 
 ---
 

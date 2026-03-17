@@ -66,6 +66,24 @@
 - [x] Data migration from cr4_store to new tables
 - [x] PWA service worker caching
 
+### Bug Fix Round (March 2026 — 30 items)
+- [x] XSS prevention: `data-*` attributes + `escHtml()` for inline handlers
+- [x] Cache invalidation for `setCustomerPricing` and `setRecurringOrder`
+- [x] `doSync` race condition fix (try/finally on `_syncInProgress`)
+- [x] `saveOrder` transaction safety (warning log on partial item insert)
+- [x] `clearLocalCache` prefix-based scan (cr4_/cr5_) instead of hardcoded keys
+- [x] `clearOrderDebt` uses `clearDebtMethod` instead of hardcoded 'cash'
+- [x] `deleteOrder` cleans up `S.ordersLockedOrders` array
+- [x] Drag-drop validates source and target orders exist
+- [x] `getPrice` null-safe for `S.customerPricing`
+- [x] Map marker cleanup with try/catch for `removeLayer`
+- [x] New order form uses `date` input instead of `datetime-local`
+- [x] WCAG AA contrast: `--text-muted` #6B7280, `--text-sec` #4B5563
+- [x] Touch targets: `.btn-sm` min-height 40px
+- [x] Viewport allows pinch-to-zoom (`maximum-scale=5.0, user-scalable=yes`)
+- [x] Service worker cache bumped to costadoro-v8
+- [x] Debt history `|||` parsing uses `lastIndexOf` for robustness
+
 ---
 
 ## Pending Features
@@ -114,7 +132,7 @@ Kent / London region toggle + region filter
 
 ### High
 - [ ] Orders data growth — archive old orders
-- [ ] Error handling — user notification on sync errors
+- [x] Error handling — sync errors now logged; doSync has try/finally guard
 - [ ] Conflict resolution — timestamp-based merge
 
 ### Medium
@@ -124,3 +142,5 @@ Kent / London region toggle + region filter
 ### Low
 - [ ] CSS cleanup — inline styles could be moved to Tailwind classes
 - [ ] Further Tailwind CSS adoption across all page templates
+- [x] XSS in inline handlers — migrated to `data-*` attribute pattern
+- [x] WCAG contrast issues — text colors updated to AA compliance

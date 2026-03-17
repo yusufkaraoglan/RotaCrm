@@ -21,7 +21,6 @@ index.html
 ├── js/db.js                 Supabase REST + localStorage cache + offline queue
 ├── js/utils.js              Utility functions (format, geocode, calculations)
 ├── js/app.js                State, navigation, modal, init, service worker
-├── js/migrate.js            Data migration (cr4_store -> relational tables)
 └── js/pages/
     ├── route.js             Daily route / visit tracking
     ├── orders.js            Order list (pending/delivered) + order form
@@ -30,7 +29,8 @@ index.html
     ├── reports.js           Reports / dashboard
     ├── settings.js          Settings (backup, data management)
     ├── catalog.js           Product catalog + recurring orders
-    └── map.js               Leaflet map + import/export
+    ├── map.js               Leaflet map + import/export
+    └── neworder.js          New/edit order form (full-page overlay)
 ```
 
 ---
@@ -56,6 +56,11 @@ index.html
 | Page | Access |
 |------|--------|
 | `page-profile` | Click customer name from Customers list or Order card |
+
+### New Order Page
+| Page | Access |
+|------|--------|
+| `page-neworder` | FAB (+) from Orders or Quick Order from Profile |
 
 ---
 
@@ -164,8 +169,8 @@ Sync:   syncAll()
 --card: #FFFFFF      /* Card background */
 --border: #E5E7EB    /* Light border */
 --text: #111827      /* Primary text */
---text-sec: #6B7280  /* Secondary text */
---text-muted: #9CA3AF /* Muted text */
+--text-sec: #4B5563  /* Secondary text (WCAG AA) */
+--text-muted: #6B7280 /* Muted text (WCAG AA) */
 --primary: #E85D3A   /* Costadoro orange */
 --success: #12B76A   /* Green */
 --danger: #F04438    /* Red */

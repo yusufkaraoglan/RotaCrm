@@ -23,29 +23,28 @@
 index.html              <- HTML shell (page divs + nav + script loads + Tailwind CDN)
 index_old.html          <- Old single-file backup (4700+ lines)
 css/
-  app.css               <- All CSS styles (~410 lines)
+  app.css               <- All CSS styles (~510 lines)
 js/
   config.js             <- Supabase credentials (EXCLUDED from git via .gitignore)
   config.example.js     <- Template for config.js (safe to commit)
   db.js                 <- Supabase REST + localStorage cache + offline queue
   utils.js              <- Utility functions (format, geocode, calculations)
   app.js                <- State, navigation, modal, init, service worker
-  migrate.js            <- Old cr4_store -> new tables data migration
   pages/
     route.js            <- Route page (daily delivery, drag-and-drop)
     orders.js           <- Orders page (order form, product picker)
     customers.js        <- Customers list page
     profile.js          <- Customer profile (debt, pricing, notes)
     reports.js          <- Reports (overview, products, customers, debts, export)
-    settings.js         <- Settings page (JSON backup)
+    settings.js         <- Settings page (JSON backup, cache clear)
     catalog.js          <- Product catalog + recurring orders + reset
     map.js              <- Map page (Leaflet) + import/export + route share
-migration/
-  001_create_tables.sql <- SQL to create new tables in Supabase
+    neworder.js         <- New/edit order form (full-page overlay)
 CLAUDE.md               <- This file
 PROJECT.md              <- Project details, architecture, data models
 FEATURES.md             <- All features and function reference
 ROADMAP.md              <- Planned features and development ideas
+PLAN.md                 <- Historical development plan (v2 rewrite)
 README.md               <- Short project description
 ```
 
@@ -57,7 +56,7 @@ README.md               <- Short project description
 - **CSS:** `css/app.css` — all styles here
 - **JS:** `js/` folder — each module has its own file, pages in `js/pages/`
 - **HTML:** `index.html` — only page divs and script loads
-- Script load order: `config.js -> db.js -> utils.js -> app.js -> migrate.js -> pages/*.js`
+- Script load order: `config.js -> db.js -> utils.js -> app.js -> pages/*.js`
 
 ### 2. Brace Balance Check
 Check JS brace/parenthesis balance after every change:
@@ -96,7 +95,7 @@ save.debts();  // <- MUST call this
 3. Create `js/pages/NAME.js` with `renderNAME()` function
 4. If needed, update `app.js` -> `showPage()` nav mapping
 
-**Existing pages:** route, orders, customers, profile, reports, settings, catalog, map
+**Existing pages:** route, orders, customers, profile, reports, settings, catalog, map, neworder
 
 **Bottom navigation (5 buttons):** Route, Orders, Customers, Reports, Settings
 
@@ -118,6 +117,18 @@ New order/edit forms use a full-page overlay (`order-form-overlay`) instead of `
 
 ### 9. Double-Click Protection
 Use `btnLock(fn)` from app.js for actions like saving orders to prevent duplicate submissions.
+
+### 10. XSS Prevention
+Never interpolate user data into inline `onclick` handlers. Use `data-*` attributes + `escHtml()`:
+```js
+// BAD: onclick="doThing('${name}')"
+// GOOD:
+`<span data-name="${escHtml(name)}" onclick="doThing(this.dataset.name)">`
+```
+
+### 11. Debt History `|||` Delimiter
+Debt history entries encode the type (add/clear/adjust/visit) into the note field using `|||` as a delimiter.
+Parsing uses `lastIndexOf('|||')` to handle notes that may contain the literal string `|||`.
 
 ---
 
