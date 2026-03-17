@@ -568,6 +568,8 @@ async function init() {
 
   if (!dataLoaded) {
     console.log('Init: no data found in any source');
+    // Still need to initialize UI state even with no data
+    initUIState();
   }
 
   // 4) Auto-upload: tables exist + we have local data + DB is empty
