@@ -371,12 +371,24 @@ async function resetOrdersAndDebts() {
   cacheSet('debts', {});
   cacheSet('debt_history', {});
 
-  // Clear from Supabase (delete all rows)
+  // Clear from Supabase (delete all rows — use broad filter per table PK)
   try {
     if (typeof SB_URL !== 'undefined' && SB_URL) {
-      const tables = ['order_items', 'orders', 'debts', 'debt_history'];
-      for (const t of tables) {
-        await fetch(`${SB_URL}/rest/v1/${t}?id=gt.0`, {
+      // order_items & debt_history have serial id PK; orders has text id PK; debts has customer_id PK
+      const deletes = [
+        ['order_items', 'id=gt.0'],
+        ['debt_history', 'id=gt.0'],
+        ['orders', 'id=neq.___none___'],
+        ['debts', 'customer_id=gt.0']
+      ];
+      for (const [table, filter] of deletes) {
+        await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+          method: 'DELETE', headers: DB_HEADERS
+        }).catch(() => {});
+      }
+      // Also clear legacy cr4_store keys for debts/orders
+      for (const key of ['debts', 'debtHistory', 'ordersV2', 'orders']) {
+        await fetch(`${SB_URL}/rest/v1/cr4_store?key=eq.${key}`, {
           method: 'DELETE', headers: DB_HEADERS
         }).catch(() => {});
       }
@@ -390,6 +402,36 @@ async function resetOrdersAndDebts() {
 async function resetAllData() {
   if (!(await appConfirm('This will delete ALL local data.<br>Are you sure?', true))) return;
   if (!(await appConfirm('This cannot be undone. Proceed?'))) return;
+
+  // Clear Supabase tables (order matters due to foreign keys)
+  try {
+    if (typeof SB_URL !== 'undefined' && SB_URL) {
+      const deletes = [
+        ['order_items', 'id=gt.0'],
+        ['debt_history', 'id=gt.0'],
+        ['orders', 'id=neq.___none___'],
+        ['debts', 'customer_id=gt.0'],
+        ['customer_pricing', 'customer_id=gt.0'],
+        ['recurring_orders', 'customer_id=gt.0'],
+        ['route_order', 'customer_id=gt.0'],
+        ['assignments', 'customer_id=gt.0'],
+        ['customers', 'id=gt.0'],
+        ['products', 'id=gt.0'],
+        ['app_settings', 'key=neq.___none___']
+      ];
+      for (const [table, filter] of deletes) {
+        await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+          method: 'DELETE', headers: DB_HEADERS
+        }).catch(() => {});
+      }
+      // Clear all cr4_store legacy data
+      await fetch(`${SB_URL}/rest/v1/cr4_store?key=neq.___none___`, {
+        method: 'DELETE', headers: DB_HEADERS
+      }).catch(() => {});
+    }
+  } catch (e) { console.error('resetAllData Supabase cleanup error:', e); }
+
+  // Clear localStorage
   const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','recurringOrders','stopCatalog','vis'];
   keys.forEach(k => localStorage.removeItem('cr4_' + k));
   const cr5Keys = ['customers','products','assignments','route_order','orders','debts','debt_history','customer_pricing','recurring_orders','customer_products','customer_brands','brand_list','db_migrated'];
