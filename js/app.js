@@ -32,6 +32,8 @@ let tempOrderDeliveryDate = '';
 let deliveryStopId = null;
 let deliveryPayMethod = null;
 let deliveryOrderIds = null;
+let _catalogSaving = false;
+let _savePending = 0; // count of in-flight Supabase writes
 let profilePreviousPage = 'customers';
 let leafletMap = null;
 let mapMarkers = [];
@@ -206,17 +208,24 @@ const save = {
     });
   },
   cnotes: () => { /* stored in customers table via save.stops */ },
-  catalog: () => {
+  catalog: async () => {
     const mapped = S.catalog.map(c => ({
       name: c.name, unit: c.unit || '1', price: c.price || 0,
       stock: c.stock ?? null, track_stock: c.trackStock !== false,
       sort_order: c.sort_order || 0
     }));
     cacheSet('products', mapped);
-    // Persist to Supabase without cache updates (cache already set above)
-    mapped.forEach(p => {
-      dbInsert('products', p, { upsert: true }).catch(e => { if (typeof dbLog === 'function') dbLog(`save product FAILED: ${p.name} - ${e.message}`); });
-    });
+    // Persist to Supabase — awaited to prevent sync race condition
+    _catalogSaving = true;
+    try {
+      await Promise.all(mapped.map(p =>
+        dbInsert('products', p, { upsert: true, onConflict: 'name' }).catch(e => {
+          if (typeof dbLog === 'function') dbLog(`save product FAILED: ${p.name} - ${e.message}`);
+        })
+      ));
+    } finally {
+      _catalogSaving = false;
+    }
   },
   pricing: () => {
     cacheSet('customer_pricing', S.customerPricing);
@@ -540,10 +549,10 @@ async function init() {
   if (useNewDB) {
     let _syncInProgress = false;
     const doSync = async () => {
-      if (!_dbReady || _syncInProgress) return;
+      if (!_dbReady || _syncInProgress || _catalogSaving) return;
       _syncInProgress = true;
       const ok = await syncAll();
-      if (ok) { await loadStateFromDB(); renderCurrentPage(); }
+      if (ok && !_catalogSaving) { await loadStateFromDB(); renderCurrentPage(); }
       _syncInProgress = false;
     };
     setInterval(() => { if (navigator.onLine) doSync(); }, 5 * 60 * 1000);

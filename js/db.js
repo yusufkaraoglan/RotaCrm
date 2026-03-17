@@ -80,7 +80,9 @@ async function dbInsert(table, data, opts = {}) {
     const headers = { ...DB_HEADERS };
     if (opts.upsert) headers['Prefer'] = 'resolution=merge-duplicates';
     if (opts.returnData) headers['Prefer'] = (headers['Prefer'] ? headers['Prefer'] + ',' : '') + 'return=representation';
-    const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+    let url = `${SB_URL}/rest/v1/${table}`;
+    if (opts.upsert && opts.onConflict) url += `?on_conflict=${opts.onConflict}`;
+    const r = await fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(Array.isArray(data) ? data : [data])
@@ -289,7 +291,7 @@ const DB = {
       sort_order: p.sort_order || 0
     };
     if (p.id) data.id = p.id;
-    const result = await dbInsert('products', data, { upsert: true, returnData: true });
+    const result = await dbInsert('products', data, { upsert: true, onConflict: 'name', returnData: true });
     // Update cache
     const all = cacheGet('products', []);
     if (result && result[0]) {
@@ -609,7 +611,7 @@ async function syncAll() {
 
     // Only update cache for tables that were successfully fetched
     if (customers) cacheSet('customers', customers);
-    if (products) cacheSet('products', products);
+    if (products && typeof _catalogSaving !== 'undefined' && !_catalogSaving) cacheSet('products', products);
     if (assignments) {
       const map = {};
       assignments.forEach(r => map[r.customer_id] = r.day_id);
