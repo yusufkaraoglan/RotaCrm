@@ -69,6 +69,8 @@ function loadStateLegacy() {
   if (!S.customerPricing) S.customerPricing = legacyGet('stopCatalog', {});
   S.customerProducts = legacyGet('customerProducts', {});
   S.recurringOrders = legacyGet('recurringOrders', {});
+  S.brands = cacheGet('customer_brands', {});
+  S.brandList = cacheGet('brand_list', []);
   initUIState();
 }
 
@@ -115,6 +117,8 @@ async function loadStateFromDB() {
   S.customerPricing = pricing;
   S.customerProducts = cacheGet('customer_products', {});
   S.recurringOrders = recurring;
+  S.brands = cacheGet('customer_brands', {});
+  S.brandList = cacheGet('brand_list', []);
 
   initUIState();
 }
@@ -126,6 +130,7 @@ function initUIState() {
   S.ordersSearch = '';
   S.ordersLockedOrders = cacheGet('setting_ordersLockedOrders', legacyGet('ordersLockedOrders', []));
   S.customersFilter = 'all';
+  S.customersBrandFilter = '';
   S.customersSearch = '';
   S.reportRange = 'month';
   S.reportStart = '';
@@ -221,6 +226,8 @@ const save = {
     });
   },
   customerProducts: () => cacheSet('customer_products', S.customerProducts),
+  brands: () => cacheSet('customer_brands', S.brands),
+  brandList: () => cacheSet('brand_list', S.brandList),
   recurringOrders: () => {
     cacheSet('recurring_orders', S.recurringOrders);
     // Persist each recurring order to Supabase

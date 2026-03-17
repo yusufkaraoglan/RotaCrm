@@ -24,6 +24,14 @@ function renderCustomers(fullRender) {
           <button class="chip ${S.customersFilter==='B'?'active':''}" onclick="S.customersFilter='B';renderCustomers(true)">Week B</button>
           <button class="chip ${S.customersFilter==='none'?'active':''}" onclick="S.customersFilter='none';renderCustomers(true)">Unassigned</button>
         </div>
+        ${S.brandList && S.brandList.length > 0 ? `
+        <div class="chip-group" style="margin-top:6px">
+          <button class="chip ${!S.customersBrandFilter?'active':''}" onclick="S.customersBrandFilter='';renderCustomers(true)">All Brands</button>
+          ${S.brandList.map(b => `
+            <button class="chip ${S.customersBrandFilter===b?'active':''}" onclick="S.customersBrandFilter='${escHtml(b)}';renderCustomers(true)">${escHtml(b)}</button>
+          `).join('')}
+          <button class="chip ${S.customersBrandFilter==='none'?'active':''}" onclick="S.customersBrandFilter='none';renderCustomers(true)">No Brand</button>
+        </div>` : ''}
         <div id="customers-results"></div>
       </div>`;
     document.getElementById('page-customers').innerHTML = html;
@@ -40,6 +48,9 @@ function renderCustomerResults() {
   if (S.customersFilter === 'A') stops = stops.filter(s => { const d = S.assign[s.id]; return d && d.startsWith('wA'); });
   else if (S.customersFilter === 'B') stops = stops.filter(s => { const d = S.assign[s.id]; return d && d.startsWith('wB'); });
   else if (S.customersFilter === 'none') stops = stops.filter(s => !S.assign[s.id]);
+
+  if (S.customersBrandFilter === 'none') stops = stops.filter(s => !S.brands[s.id]);
+  else if (S.customersBrandFilter) stops = stops.filter(s => S.brands[s.id] === S.customersBrandFilter);
 
   if (S.customersSearch) {
     const q = S.customersSearch.toLowerCase();
@@ -65,6 +76,7 @@ function renderCustomerResults() {
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
             ${dayObj ? `<span class="badge" style="background:${dayObj.color}20;color:${dayObj.color};font-size:10px">${dayObj.week}/${dayObj.label.slice(0,3)}</span>` : '<span class="badge badge-outline" style="font-size:10px">None</span>'}
+            ${S.brands[s.id] ? `<span class="badge" style="background:var(--primary);color:#fff;font-size:10px">${escHtml(S.brands[s.id])}</span>` : ''}
             ${pending > 0 ? `<span class="badge badge-warning" style="font-size:10px">${pending} pending</span>` : ''}
             ${debt > 0 ? `<span class="badge badge-danger" style="font-size:10px">${formatCurrency(debt)}</span>` : ''}
           </div>

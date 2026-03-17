@@ -32,6 +32,7 @@ function renderProfile() {
         <div style="font-size:12px;color:var(--text-sec);margin-top:4px">${escHtml(stop.a)}</div>
         <div style="font-size:12px;color:var(--text-sec)">${escHtml(stop.c)} &middot; ${escHtml(stop.p)}</div>
         ${dayObj ? `<div style="margin-top:8px"><span class="badge" style="background:${dayObj.color}20;color:${dayObj.color}">Week ${dayObj.week} - ${dayObj.label}</span></div>` : '<div style="margin-top:8px"><span class="badge badge-outline">Unassigned</span></div>'}
+        ${S.brands[stop.id] ? `<div style="margin-top:6px"><span class="badge" style="background:var(--primary);color:#fff;font-size:11px">${escHtml(S.brands[stop.id])}</span></div>` : ''}
         ${note ? `<div style="margin-top:8px;font-size:12px;color:var(--text-sec);font-style:italic">"${escHtml(note)}"</div>` : ''}
         ${(stop.cn || stop.ph || stop.em) ? `
           <div style="margin-top:10px;display:flex;flex-direction:column;gap:4px;align-items:center;font-size:13px">
@@ -54,6 +55,10 @@ function renderProfile() {
         <button class="action-btn" onclick="showCustomerProductsModal()">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
           Products
+        </button>
+        <button class="action-btn" onclick="showBrandModal()">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/><polyline points="14 2 14 8 20 8"/><line x1="1" y1="14" x2="11" y2="14"/><polyline points="8 11 11 14 8 17"/></svg>
+          Brand
         </button>
         <button class="action-btn" onclick="showPricingModal()">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -113,7 +118,11 @@ function renderProfile() {
           <div class="order-card-items">${o.items.map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>
           <div class="order-card-footer">
             <span class="order-card-total">${formatCurrency(calcOrderTotal(o))}</span>
-            <button class="btn btn-danger btn-sm" onclick="deleteOrder('${o.id}')">Delete</button>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-success btn-sm" onclick="showDeliveryFromOrder('${o.id}')">Deliver</button>
+              <button class="btn btn-outline btn-sm" onclick="openEditOrderPage('${o.id}')">Edit</button>
+              <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="deleteOrder('${o.id}')">Delete</button>
+            </div>
           </div>
         </div>`;
     });
@@ -234,12 +243,18 @@ function renderProfile() {
         </div>`;
     } else if (a.type === 'debt') {
       const e = a.entry;
+      const customerDebt = S.debts[stop.id] || 0;
       html += `
         <div class="card" style="padding:10px;margin-bottom:6px;border-left:3px solid var(--danger)">
           <div class="flex-between">
             <span style="font-size:13px">${escHtml(e.note || 'Debt added')}</span>
             <span style="font-size:13px;font-weight:600;color:var(--danger)">+${formatCurrency(e.amount)}</span>
           </div>
+          ${customerDebt > 0 ? `
+          <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:12px;color:var(--danger)">Owes ${formatCurrency(customerDebt)}</span>
+            <button class="btn btn-success btn-sm" style="font-size:11px;padding:3px 10px" onclick="showClearDebtModal()">Collect Payment</button>
+          </div>` : ''}
           <div class="flex-between" style="margin-top:4px">
             <div class="text-muted" style="font-size:11px">${formatDateTime(e.date)}</div>
             <div style="display:flex;gap:6px">
@@ -650,10 +665,55 @@ function saveNote() {
 }
 
 // ══════════════════════════════════════════════════════════════
+// BRAND MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+function showBrandModal() {
+  const current = S.brands[profileStopId] || '';
+  const brands = S.brandList || [];
+  let html = `<div class="modal-handle"></div>
+    <div class="modal-title">Set Brand</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      <button class="btn btn-block ${!current ? 'btn-primary' : 'btn-outline'}" onclick="setBrand('')" style="text-align:left">No Brand</button>
+      ${brands.map(b => `
+        <button class="btn btn-block ${current === b ? 'btn-primary' : 'btn-outline'}" onclick="setBrand('${escHtml(b)}')" style="text-align:left">${escHtml(b)}</button>
+      `).join('')}
+    </div>
+    <div class="form-group">
+      <label class="form-label">Add New Brand</label>
+      <div style="display:flex;gap:8px">
+        <input class="input" type="text" id="new-brand-name" placeholder="Brand name...">
+        <button class="btn btn-primary" onclick="addAndSetBrand()">Add</button>
+      </div>
+    </div>`;
+  openModal(html);
+}
+
+function setBrand(name) {
+  if (name) {
+    S.brands[profileStopId] = name;
+  } else {
+    delete S.brands[profileStopId];
+  }
+  save.brands();
+  closeModal();
+  renderProfile();
+}
+
+function addAndSetBrand() {
+  const name = document.getElementById('new-brand-name').value.trim();
+  if (!name) return;
+  if (!S.brandList.includes(name)) {
+    S.brandList.push(name);
+    save.brandList();
+  }
+  setBrand(name);
+}
+
+// ══════════════════════════════════════════════════════════════
 // DEBT MANAGEMENT
 // ══════════════════════════════════════════════════════════════
 function showAddDebtModal() {
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date().toISOString().slice(0, 16);
   openModal(`<div class="modal-handle"></div>
     <div class="modal-title">Add Debt</div>
     <div class="form-group">
@@ -661,8 +721,8 @@ function showAddDebtModal() {
       <input class="input" type="number" step="0.01" id="debt-amount" placeholder="0.00">
     </div>
     <div class="form-group">
-      <label class="form-label">Date</label>
-      <input class="input" type="date" id="debt-date" value="${today}">
+      <label class="form-label">Date & Time</label>
+      <input class="input" type="datetime-local" id="debt-date" value="${now}">
     </div>
     <div class="form-group">
       <label class="form-label">Note (optional)</label>
@@ -677,7 +737,7 @@ function addDebt() {
   if (amount <= 0) { appAlert('Please enter a valid amount.'); return; }
   const note = document.getElementById('debt-note').value.trim() || 'Manual entry';
   const dateInput = document.getElementById('debt-date');
-  const debtDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date().toISOString();
+  const debtDate = dateInput && dateInput.value ? new Date(dateInput.value).toISOString() : new Date().toISOString();
 
   S.debts[profileStopId] = (S.debts[profileStopId] || 0) + amount;
   const debtEntry = { date: debtDate, amount, type: 'add', note };
@@ -696,7 +756,7 @@ function showCollectOrderPayment(orderId) {
   const debtAmount = getOrderDebtImpact(o);
   if (debtAmount <= 0) { appAlert('No outstanding debt for this order.'); return; }
   const items = o.items.map(i => i.qty + 'x ' + i.name).join(', ');
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date().toISOString().slice(0, 16);
   openModal(`<div class="modal-handle"></div>
     <div class="modal-title">Collect Payment</div>
     <div class="card" style="padding:10px;margin-bottom:12px;background:var(--danger-light)">
@@ -709,8 +769,8 @@ function showCollectOrderPayment(orderId) {
       <input class="input" type="number" step="0.01" id="clear-amount" value="${debtAmount.toFixed(2)}">
     </div>
     <div class="form-group">
-      <label class="form-label">Payment Date</label>
-      <input class="input" type="date" id="clear-date" value="${today}">
+      <label class="form-label">Payment Date & Time</label>
+      <input class="input" type="datetime-local" id="clear-date" value="${now}">
     </div>
     <div class="form-group">
       <label class="form-label">Payment Method</label>
@@ -731,7 +791,7 @@ function clearOrderDebt(orderId) {
   const amount = roundMoney(Math.min(debtAmount, Math.max(0, requested)));
   if (amount <= 0) return;
   const dateInput = document.getElementById('clear-date');
-  const payDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date().toISOString();
+  const payDate = dateInput && dateInput.value ? new Date(dateInput.value).toISOString() : new Date().toISOString();
 
   // If fully paying, update the order's payment method
   if (amount >= debtAmount) {
@@ -759,7 +819,7 @@ function clearOrderDebt(orderId) {
 
 function showClearDebtModal() {
   const debt = S.debts[profileStopId] || 0;
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date().toISOString().slice(0, 16);
 
   // Find unpaid orders for this customer
   const unpaidOrders = getStopOrders(profileStopId, 'delivered')
@@ -794,8 +854,8 @@ function showClearDebtModal() {
       <input class="input" type="number" step="0.01" id="clear-amount" value="${debt.toFixed(2)}">
     </div>
     <div class="form-group">
-      <label class="form-label">Payment Date</label>
-      <input class="input" type="date" id="clear-date" value="${today}">
+      <label class="form-label">Payment Date & Time</label>
+      <input class="input" type="datetime-local" id="clear-date" value="${now}">
     </div>
     <div class="form-group">
       <label class="form-label">Payment Method</label>
@@ -823,7 +883,7 @@ function clearDebt() {
   const amount = roundMoney(Math.min(debt, Math.max(0, requested)));
   if (amount <= 0) return;
   const dateInput = document.getElementById('clear-date');
-  const payDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date().toISOString();
+  const payDate = dateInput && dateInput.value ? new Date(dateInput.value).toISOString() : new Date().toISOString();
   S.debts[profileStopId] = Math.max(0, roundMoney(debt - amount));
   createDebtHistoryEntry(profileStopId, {
     date: payDate, amount: amount, type: 'clear',
@@ -850,7 +910,7 @@ function showEditDebtHistoryModal(stopId, idx) {
   const dh = S.debtHistory[stopId];
   if (!dh || !dh[idx]) return;
   const h = dh[idx];
-  const editDate = h.date ? new Date(h.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const editDate = h.date ? new Date(h.date).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16);
   openModal(`
     <div class="modal-handle"></div>
     <div class="modal-title">Edit Debt Record</div>
@@ -859,8 +919,8 @@ function showEditDebtHistoryModal(stopId, idx) {
       <input class="input" type="number" step="0.01" id="edit-dh-amount" value="${h.amount}">
     </div>
     <div class="form-group">
-      <label class="form-label">Date</label>
-      <input class="input" type="date" id="edit-dh-date" value="${editDate}">
+      <label class="form-label">Date & Time</label>
+      <input class="input" type="datetime-local" id="edit-dh-date" value="${editDate}">
     </div>
     <div class="form-group">
       <label class="form-label">Note</label>
@@ -878,7 +938,7 @@ function saveEditDebtHistory(stopId, idx) {
   const newAmount = parseFloat(document.getElementById('edit-dh-amount').value) || 0;
   const dateInput = document.getElementById('edit-dh-date');
   dh[idx].amount = newAmount;
-  if (dateInput && dateInput.value) dh[idx].date = new Date(dateInput.value + 'T12:00:00').toISOString();
+  if (dateInput && dateInput.value) dh[idx].date = new Date(dateInput.value).toISOString();
   dh[idx].note = document.getElementById('edit-dh-note').value.trim();
   // Adjust debt balance
   if (oldType === 'add') {

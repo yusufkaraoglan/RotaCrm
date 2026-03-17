@@ -98,19 +98,10 @@ function renderNewOrderPage() {
           Details
         </div>
         <div class="form-group" style="margin-bottom:10px">
-          <label class="form-label">Delivery Date</label>
-          <div style="position:relative">
-            <input class="input" type="text" id="neworder-delivery-date-display"
-                   value="${tempOrderDeliveryDate ? formatDateForDisplay(tempOrderDeliveryDate) : ''}"
-                   placeholder="Today (default)"
-                   readonly
-                   onclick="document.getElementById('neworder-delivery-date-hidden').showPicker ? document.getElementById('neworder-delivery-date-hidden').showPicker() : document.getElementById('neworder-delivery-date-hidden').focus()"
-                   style="cursor:pointer">
-            <input type="date" id="neworder-delivery-date-hidden"
-                   value="${tempOrderDeliveryDate}"
-                   onchange="newOrderSetDeliveryDate(this.value)"
-                   style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer">
-          </div>
+          <label class="form-label">Delivery Date & Time</label>
+          <input class="input" type="datetime-local" id="neworder-delivery-date-hidden"
+                 value="${tempOrderDeliveryDate}"
+                 onchange="newOrderSetDeliveryDate(this.value)">
         </div>
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Note (optional)</label>

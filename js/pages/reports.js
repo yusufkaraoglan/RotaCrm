@@ -70,6 +70,18 @@ function renderReports() {
   const newBody = document.querySelector('#page-reports .page-body');
   if (newBody) newBody.scrollTop = scrollPos;
 
+  // Focus search input if dropdown is open
+  if (productFilterOpen) {
+    const searchInput = document.querySelector('.pf-search');
+    if (searchInput) { searchInput.focus(); searchInput.selectionStart = searchInput.selectionEnd = searchInput.value.length; }
+  }
+
+  // Click-outside listener
+  document.removeEventListener('click', closeProductFilterOnOutsideClick);
+  if (productFilterOpen) {
+    setTimeout(() => document.addEventListener('click', closeProductFilterOnOutsideClick), 0);
+  }
+
   if (reportTab === 'overview') {
     renderOverviewCharts(data);
   }
@@ -82,17 +94,7 @@ function renderOverviewTab(data) {
     : data.totalRevenue;
 
   return `
-    ${S.catalog.length > 0 ? `
-    <div style="margin-bottom:12px">
-      <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">Filter by Product</div>
-      <div class="chip-group" style="flex-wrap:wrap">
-        <button class="chip ${S.reportProducts.length===0?'active':''}" onclick="S.reportProducts=[];renderReports()">All</button>
-        ${S.catalog.map(c => `
-          <button class="chip ${S.reportProducts.includes(c.name)?'active':''}"
-            onclick="toggleReportProduct('${escHtml(c.name)}')">${escHtml(c.name)}</button>
-        `).join('')}
-      </div>
-    </div>` : ''}
+    ${renderProductFilterDropdown('Filter by Product')}
 
     <div class="report-hero-card">
       <div class="report-hero-label">${hasProductFilter ? 'Filtered Revenue' : 'Total Revenue'}</div>
@@ -172,18 +174,7 @@ function renderOverviewTab(data) {
 
 function renderProductsTab(data) {
   let html = '';
-  if (S.catalog.length > 0) {
-    html += `
-      <div style="margin-bottom:12px">
-        <div class="chip-group" style="flex-wrap:wrap">
-          <button class="chip ${S.reportProducts.length===0?'active':''}" onclick="S.reportProducts=[];renderReports()">All</button>
-          ${S.catalog.map(c => `
-            <button class="chip ${S.reportProducts.includes(c.name)?'active':''}"
-              onclick="toggleReportProduct('${escHtml(c.name)}')">${escHtml(c.name)}</button>
-          `).join('')}
-        </div>
-      </div>`;
-  }
+  html += renderProductFilterDropdown('');
 
   const products = Object.entries(data.products).sort((a, b) => b[1].revenue - a[1].revenue);
   if (products.length === 0) {
@@ -261,18 +252,7 @@ function renderDebtsTab() {
 
 function renderExportTab() {
   let html = '';
-  if (S.catalog.length > 0) {
-    html += `
-      <div style="margin-bottom:12px">
-        <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">Select Products</div>
-        <div class="chip-group" style="flex-wrap:wrap">
-          ${S.catalog.map(c => `
-            <button class="chip ${S.reportProducts.includes(c.name)?'active':''}"
-              onclick="toggleReportProduct('${escHtml(c.name)}')">${escHtml(c.name)}</button>
-          `).join('')}
-        </div>
-      </div>`;
-  }
+  html += renderProductFilterDropdown('Select Products');
 
   if (S.reportProducts.length === 0) {
     html += '<div class="card" style="text-align:center;padding:30px"><p class="text-muted">Select products above to generate report</p></div>';
@@ -360,6 +340,58 @@ function toggleReportProduct(name) {
   if (idx >= 0) S.reportProducts.splice(idx, 1);
   else S.reportProducts.push(name);
   renderReports();
+}
+
+let productFilterOpen = false;
+let productFilterSearch = '';
+
+function renderProductFilterDropdown(label) {
+  if (S.catalog.length === 0) return '';
+  const selected = S.reportProducts;
+  const selectedChips = selected.length > 0
+    ? selected.map(n => `<span class="pf-chip">${escHtml(n)}<span class="pf-chip-x" onclick="event.stopPropagation();toggleReportProduct('${escHtml(n)}')">&times;</span></span>`).join('')
+    : '';
+
+  return `
+    <div class="pf-container" style="margin-bottom:12px">
+      ${label ? `<div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">${label}</div>` : ''}
+      <div class="pf-trigger" onclick="toggleProductFilter()">
+        <span class="pf-trigger-text">${selected.length === 0 ? 'All Products' : selected.length + ' product' + (selected.length > 1 ? 's' : '') + ' selected'}</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;transition:transform .2s;${productFilterOpen ? 'transform:rotate(180deg)' : ''}"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      ${selectedChips ? `<div class="pf-chips">${selectedChips}</div>` : ''}
+      ${productFilterOpen ? `
+      <div class="pf-dropdown">
+        <input class="pf-search" type="text" placeholder="Search products..." value="${escHtml(productFilterSearch)}" oninput="productFilterSearch=this.value;renderReports()" autofocus>
+        <div class="pf-actions">
+          <button class="pf-action-btn" onclick="S.reportProducts=S.catalog.map(c=>c.name);renderReports()">Select All</button>
+          <button class="pf-action-btn" onclick="S.reportProducts=[];renderReports()">Clear All</button>
+        </div>
+        <div class="pf-list">
+          ${S.catalog.filter(c => !productFilterSearch || c.name.toLowerCase().includes(productFilterSearch.toLowerCase())).map(c => {
+            const checked = selected.includes(c.name);
+            return `<label class="pf-item${checked ? ' checked' : ''}" onclick="event.preventDefault();toggleReportProduct('${escHtml(c.name)}')">
+              <span class="pf-checkbox${checked ? ' checked' : ''}">${checked ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+              <span class="pf-item-name">${escHtml(c.name)}</span>
+            </label>`;
+          }).join('')}
+        </div>
+      </div>` : ''}
+    </div>`;
+}
+
+function toggleProductFilter() {
+  productFilterOpen = !productFilterOpen;
+  if (!productFilterOpen) productFilterSearch = '';
+  renderReports();
+}
+
+function closeProductFilterOnOutsideClick(e) {
+  if (productFilterOpen && !e.target.closest('.pf-container')) {
+    productFilterOpen = false;
+    productFilterSearch = '';
+    renderReports();
+  }
 }
 
 function calcReportData() {

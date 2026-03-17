@@ -130,6 +130,13 @@ function renderSettings() {
         <div class="settings-card">
           <div class="settings-item">
             <div>
+              <div class="settings-item-label">Reset Orders & Debts</div>
+              <div class="settings-item-desc">Clear orders, debts, and debt history. Keeps customers, routes, and map.</div>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="resetOrdersAndDebts()">Reset</button>
+          </div>
+          <div class="settings-item">
+            <div>
               <div class="settings-item-label">Reset All Data</div>
               <div class="settings-item-desc">Delete all local data and start fresh</div>
             </div>
@@ -166,7 +173,9 @@ function exportJSON() {
       catalog: S.catalog,
       customerPricing: S.customerPricing,
       customerProducts: S.customerProducts,
-      recurringOrders: S.recurringOrders
+      recurringOrders: S.recurringOrders,
+      brands: S.brands,
+      brandList: S.brandList
     }
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -201,6 +210,8 @@ async function importJSON(input) {
     if (d.customerPricing) { S.customerPricing = d.customerPricing; save.pricing(); }
     if (d.customerProducts) { S.customerProducts = d.customerProducts; save.customerProducts(); }
     if (d.recurringOrders) { S.recurringOrders = d.recurringOrders; save.recurringOrders(); }
+    if (d.brands) { S.brands = d.brands; save.brands(); }
+    if (d.brandList) { S.brandList = d.brandList; save.brandList(); }
     appAlert('Data restored successfully.');
     renderSettings();
   } catch (e) {

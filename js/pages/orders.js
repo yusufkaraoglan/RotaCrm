@@ -379,8 +379,8 @@ function renderOrderFormModal(title, existingNote) {
         <span style="font-weight:700;font-size:18px;color:var(--primary)" id="order-total">${formatCurrency(total)}</span>
       </div>
       <div class="form-group">
-        <label class="form-label">Delivery Date</label>
-        <input class="input" type="date" id="order-delivery-date" value="${tempOrderDeliveryDate}" onchange="tempOrderDeliveryDate=this.value">
+        <label class="form-label">Delivery Date & Time</label>
+        <input class="input" type="datetime-local" id="order-delivery-date" value="${tempOrderDeliveryDate}" onchange="tempOrderDeliveryDate=this.value">
         <div class="text-muted" style="font-size:11px;margin-top:4px">${tempOrderDeliveryDate ? '' : 'If left empty, defaults to today'}</div>
       </div>
       <div class="form-group">
