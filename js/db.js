@@ -3,11 +3,10 @@
 // DATABASE LAYER - Supabase REST + localStorage cache
 // ═══════════════════════════════════════════════════════════
 
-// SB_URL and SB_KEY are loaded from js/config.js (excluded from git).
-// If config.js is missing, check js/config.example.js for the template.
-if (typeof SB_URL === 'undefined' || typeof SB_KEY === 'undefined') {
-  console.error('Missing Supabase credentials. Copy js/config.example.js to js/config.js and fill in your values.');
-}
+// SB_URL and SB_KEY can be overridden via js/config.js (excluded from git).
+// Defaults below are the public Supabase anon key (safe for frontend, protected by RLS).
+if (typeof SB_URL === 'undefined') var SB_URL = 'https://mvvvqloqwjimlbqeotsd.supabase.co';
+if (typeof SB_KEY === 'undefined') var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12dnZxbG9xd2ppbWxicWVvdHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNTYxMDAsImV4cCI6MjA4NzkzMjEwMH0.tKSiEJouyr9dhs_vIAPUbX9NqtAsFAslZroNKtG2mBk';
 
 const DB_HEADERS = {
   apikey: SB_KEY,
