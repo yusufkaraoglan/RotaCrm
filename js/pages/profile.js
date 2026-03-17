@@ -291,6 +291,9 @@ async function deleteOrder(orderId) {
   }
   const debtChanged = reconcileOrderDebtEffect(order, null);
   delete S.orders[orderId];
+  // Clean up locked orders list
+  const lockIdx = (S.ordersLockedOrders || []).indexOf(orderId);
+  if (lockIdx >= 0) { S.ordersLockedOrders.splice(lockIdx, 1); cacheSet('setting_ordersLockedOrders', S.ordersLockedOrders); }
 
   if (stockChange.changed) save.catalog();
   if (debtChanged) {
@@ -802,8 +805,8 @@ function clearOrderDebt(orderId) {
   // If fully paying, update the order's payment method
   if (amount >= debtAmount) {
     const prevOrder = JSON.parse(JSON.stringify(o));
-    o.payMethod = 'cash';
-    o.cashPaid = roundMoney(calcOrderTotal(o));
+    o.payMethod = clearDebtMethod || 'cash';
+    if (o.payMethod === 'cash') o.cashPaid = roundMoney(calcOrderTotal(o));
     reconcileOrderDebtEffect(prevOrder, o);
     save.orders([o.id]);
   } else {

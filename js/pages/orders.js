@@ -189,6 +189,7 @@ function initOrderDragDrop() {
     const target = e.target.closest('.draggable-order');
     if (!target || !draggedId || target.dataset.orderId === draggedId) return;
     const targetId = target.dataset.orderId;
+    if (!S.orders[draggedId] || !S.orders[targetId]) return;
 
     // Build new locked order: insert dragged before target
     const locked = S.ordersLockedOrders || [];
@@ -598,7 +599,7 @@ function removeOrderItem(idx) {
 function saveOrder() {
   if (_btnLock) return;
   _btnLock = true;
-  setTimeout(() => _btnLock = false, 1500);
+  setTimeout(() => _btnLock = false, 2000);
 
   if (tempOrderCustomerId == null || isNaN(parseInt(tempOrderCustomerId))) { appAlert('Please select a customer.'); return; }
   const items = tempOrderItems.filter(i => i.name && i.qty > 0);

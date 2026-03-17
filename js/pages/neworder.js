@@ -12,6 +12,7 @@ function openNewOrderPage(preCustomerId, fromPage) {
   tempOrderCustomerId = preCustomerId != null ? preCustomerId : null;
   tempOrderDeliveryDate = '';
   newOrderPreviousPage = fromPage || curPage || 'orders';
+  try { sessionStorage.setItem('newOrderPreviousPage', newOrderPreviousPage); } catch {}
   newOrderProductSearch = '';
   showPage('neworder');
 }
@@ -25,12 +26,14 @@ function openEditOrderPage(orderId, fromPage) {
   if (tempOrderItems.length === 0) tempOrderItems = [{ name: '', qty: 1, price: 0 }];
   tempOrderDeliveryDate = order.deliveryDate || '';
   newOrderPreviousPage = fromPage || curPage || 'orders';
+  try { sessionStorage.setItem('newOrderPreviousPage', newOrderPreviousPage); } catch {}
   newOrderProductSearch = '';
   showPage('neworder');
 }
 
 function closeNewOrderPage() {
-  showPage(newOrderPreviousPage);
+  const page = newOrderPreviousPage || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('newOrderPreviousPage')) || 'orders';
+  showPage(page);
 }
 
 function renderNewOrderPage() {
@@ -99,8 +102,8 @@ function renderNewOrderPage() {
         </div>
         <div class="form-group" style="margin-bottom:10px">
           <label class="form-label">Delivery Date & Time</label>
-          <input class="input" type="datetime-local" id="neworder-delivery-date-hidden"
-                 value="${tempOrderDeliveryDate}"
+          <input class="input" type="date" id="neworder-delivery-date-hidden"
+                 value="${(tempOrderDeliveryDate || '').slice(0, 10)}"
                  onchange="newOrderSetDeliveryDate(this.value)">
         </div>
         <div class="form-group" style="margin-bottom:0">

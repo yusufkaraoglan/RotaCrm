@@ -359,7 +359,7 @@ function getCustomerInitials(name) {
 }
 
 function getPrice(stopId, productName) {
-  const cp = S.customerPricing[stopId];
+  const cp = S.customerPricing && S.customerPricing[stopId];
   if (cp && cp[productName] !== undefined) return cp[productName];
   const cat = S.catalog.find(c => c.name === productName);
   return cat ? cat.price : 0;

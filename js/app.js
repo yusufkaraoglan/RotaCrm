@@ -201,7 +201,7 @@ const save = {
       ))
     );
   },
-  geo: () => { save.stops(); },
+  geo: () => { return save.stops(); },
   orders: (changedOrderIds) => {
     return _persist('orders', { ...S.orders }, () => {
       if (!changedOrderIds || !Array.isArray(changedOrderIds)) return Promise.resolve();
@@ -632,9 +632,14 @@ async function init() {
     const doSync = async () => {
       if (!_dbReady || _syncInProgress || _savePending > 0) return;
       _syncInProgress = true;
-      const ok = await syncAll();
-      if (ok && _savePending === 0) { await loadStateFromDB(); renderCurrentPage(); }
-      _syncInProgress = false;
+      try {
+        const ok = await syncAll();
+        if (ok && _savePending === 0) { await loadStateFromDB(); renderCurrentPage(); }
+      } catch (e) {
+        console.warn('doSync error:', e.message);
+      } finally {
+        _syncInProgress = false;
+      }
     };
     setInterval(() => { if (navigator.onLine) doSync(); }, 5 * 60 * 1000);
     window.addEventListener('online', () => { doSync(); flushOfflineQueue(); });
@@ -676,10 +681,10 @@ document.addEventListener('DOMContentLoaded', init);
 // Register service worker
 if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE = 'costadoro-v7';
-    const URLS = ['./', 'css/app.css', 'js/db.js?v=2', 'js/utils.js?v=2', 'js/app.js?v=2',
-      'js/pages/route.js?v=2', 'js/pages/orders.js?v=2', 'js/pages/customers.js?v=2', 'js/pages/profile.js?v=2',
-      'js/pages/reports.js?v=2', 'js/pages/settings.js?v=2', 'js/pages/catalog.js?v=2', 'js/pages/map.js?v=2',
+    const CACHE = 'costadoro-v8';
+    const URLS = ['./', 'css/app.css', 'js/db.js?v=3', 'js/utils.js?v=3', 'js/app.js?v=3',
+      'js/pages/route.js?v=3', 'js/pages/orders.js?v=3', 'js/pages/customers.js?v=3', 'js/pages/profile.js?v=3',
+      'js/pages/reports.js?v=3', 'js/pages/settings.js?v=3', 'js/pages/catalog.js?v=3', 'js/pages/map.js?v=3',
       'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
       'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
       'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];
