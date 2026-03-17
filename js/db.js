@@ -447,12 +447,16 @@ const DB = {
       if (typeof dbLog === 'function') dbLog(`saveOrder ${order.id} FAILED at upsert (status=${order.status})`);
       return;
     }
-    // Replace order items
-    await dbDelete('order_items', { order_id: order.id });
-    if (order.items && order.items.length > 0) {
-      await dbInsert('order_items', order.items.map(i => ({
-        order_id: order.id, product_name: i.name, qty: i.qty, price: i.price
-      })));
+    // Replace order items — insert new first, then delete old to avoid data loss
+    const newItems = (order.items || []).map(i => ({
+      order_id: order.id, product_name: i.name, qty: i.qty, price: i.price
+    }));
+    const deleteOk = await dbDelete('order_items', { order_id: order.id });
+    if (newItems.length > 0) {
+      const insertOk = await dbInsert('order_items', newItems);
+      if (!insertOk && deleteOk) {
+        if (typeof dbLog === 'function') dbLog(`saveOrder ${order.id} WARNING: items deleted but re-insert failed`);
+      }
     }
     try { localStorage.removeItem('cr5_ts_orders'); } catch {}
     if (typeof dbLog === 'function') dbLog(`saveOrder OK: ${order.id} status=${order.status}`);
@@ -563,6 +567,7 @@ const DB = {
         customer_id: customerId, product_name: name, price
       })));
     }
+    try { localStorage.removeItem('cr5_ts_customer_pricing'); } catch {}
   },
 
   // -- Recurring Orders --
@@ -582,14 +587,17 @@ const DB = {
   },
 
   async setRecurringOrder(customerId, data) {
+    let result;
     if (data) {
-      return await dbUpsert('recurring_orders', {
+      result = await dbUpsert('recurring_orders', {
         customer_id: customerId, items: data.items || [],
         note: data.note || ''
       });
     } else {
-      return await dbDelete('recurring_orders', { customer_id: customerId });
+      result = await dbDelete('recurring_orders', { customer_id: customerId });
     }
+    try { localStorage.removeItem('cr5_ts_recurring_orders'); } catch {}
+    return result;
   },
 
   // -- App Settings (key-value for UI state) --

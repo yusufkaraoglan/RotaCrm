@@ -25,7 +25,7 @@ function renderMapPage() {
   setTimeout(() => {
     const container = document.getElementById('map-container');
     if (!container) return;
-    if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+    try { if (leafletMap) { leafletMap.remove(); leafletMap = null; } } catch {}
     leafletMap = L.map(container).setView([51.45, 0.05], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap'
@@ -37,9 +37,9 @@ function renderMapPage() {
 
 function refreshMapMarkers() {
   if (!leafletMap) return;
-  mapMarkers.forEach(m => leafletMap.removeLayer(m));
+  mapMarkers.forEach(m => { try { leafletMap.removeLayer(m); } catch {} });
   mapMarkers = [];
-  mapRouteLines.forEach(l => leafletMap.removeLayer(l));
+  mapRouteLines.forEach(l => { try { leafletMap.removeLayer(l); } catch {} });
   mapRouteLines = [];
 
   // Update filter chip visuals
@@ -167,15 +167,19 @@ function showMapAssignModal(stopId) {
 }
 
 function mapAssignDay(dayId) {
+  if (mapAssignStopId == null) return;
   S.assign[mapAssignStopId] = dayId;
   save.assign();
+  mapAssignStopId = null;
   closeModal();
   refreshMapMarkers();
 }
 
 function mapUnassignDay() {
+  if (mapAssignStopId == null) return;
   delete S.assign[mapAssignStopId];
   save.assign();
+  mapAssignStopId = null;
   closeModal();
   refreshMapMarkers();
 }

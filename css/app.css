@@ -20,8 +20,8 @@
   --card: #FFFFFF;
   --border: #E5E7EB;
   --text: #111827;
-  --text-sec: #6B7280;
-  --text-muted: #9CA3AF;
+  --text-sec: #4B5563;
+  --text-muted: #6B7280;
   --radius: 12px;
   --radius-sm: 8px;
   --radius-lg: 16px;
@@ -69,7 +69,7 @@ a{text-decoration:none;color:inherit}
 .btn-outline:active{background:var(--bg)}
 .btn-ghost{color:var(--text-sec);padding:8px}
 .btn-ghost:hover{color:var(--text)}
-.btn-sm{padding:6px 12px;font-size:13px;min-height:36px}
+.btn-sm{padding:6px 12px;font-size:13px;min-height:40px}
 .btn:disabled,.btn[disabled]{opacity:0.4;pointer-events:none}
 .btn-block{width:100%}
 .btn-icon{width:44px;height:44px;padding:0;border-radius:50%}
@@ -160,7 +160,7 @@ body.modal-open .page{touch-action:none}
 .order-card-v2-footer{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .order-card-v2-price{font-weight:700;font-size:16px;white-space:nowrap}
 .order-card-v2-actions{display:flex;gap:6px}
-.order-card-v2-actions .btn-sm{padding:6px 14px;font-size:13px;min-height:34px}
+.order-card-v2-actions .btn-sm{padding:6px 14px;font-size:13px;min-height:40px}
 .order-lock-btn{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);transition:all .15s;flex-shrink:0}
 .order-lock-btn.locked{background:var(--primary-light);border-color:var(--primary);color:var(--primary)}
 .order-card-v2.drag-over{border-top:2px solid var(--primary);margin-top:-2px}
@@ -384,7 +384,7 @@ body.modal-open .page{touch-action:none}
 .catalog-edit-form .input{flex:1;min-width:0}
 
 /* === ORDER FORM FULL PAGE === */
-.order-form-overlay{position:fixed;inset:0;background:var(--bg);z-index:250;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.order-form-overlay{position:fixed;inset:0;background:var(--bg);z-index:240;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);overflow-y:auto;-webkit-overflow-scrolling:touch}
 .order-form-overlay .order-form-header{padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
 .order-form-overlay .order-form-header h2{flex:1;font-size:17px;font-weight:700;margin:0}
 .order-form-overlay .order-form-body{flex:1;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(80px + var(--safe-b))}

@@ -360,10 +360,13 @@ async function uploadAllData() {
 
 async function clearLocalCache() {
   if (!(await appConfirm('This will clear all local cached data.<br><br>Cloud data will NOT be deleted. App will reload and re-sync from cloud.', true))) return;
-  const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','recurringOrders','stopCatalog','vis'];
-  keys.forEach(k => localStorage.removeItem('cr4_' + k));
-  const cr5Keys = ['customers','products','assignments','route_order','orders','debts','debt_history','customer_pricing','recurring_orders','customer_products','customer_brands','brand_list','db_migrated'];
-  cr5Keys.forEach(k => localStorage.removeItem('cr5_' + k));
+  // Remove all cr4_ and cr5_ prefixed keys (covers current + future state)
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && (key.startsWith('cr4_') || key.startsWith('cr5_'))) toRemove.push(key);
+  }
+  toRemove.forEach(k => localStorage.removeItem(k));
   location.reload();
 }
 

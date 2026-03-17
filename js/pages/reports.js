@@ -349,7 +349,7 @@ function renderProductFilterDropdown(label) {
   if (S.catalog.length === 0) return '';
   const selected = S.reportProducts;
   const selectedChips = selected.length > 0
-    ? selected.map(n => `<span class="pf-chip">${escHtml(n)}<span class="pf-chip-x" onclick="event.stopPropagation();toggleReportProduct('${escHtml(n)}')">&times;</span></span>`).join('')
+    ? selected.map(n => `<span class="pf-chip">${escHtml(n)}<span class="pf-chip-x" data-product="${escHtml(n)}" onclick="event.stopPropagation();toggleReportProduct(this.dataset.product)">&times;</span></span>`).join('')
     : '';
 
   return `
@@ -370,7 +370,7 @@ function renderProductFilterDropdown(label) {
         <div class="pf-list">
           ${S.catalog.filter(c => !productFilterSearch || c.name.toLowerCase().includes(productFilterSearch.toLowerCase())).map(c => {
             const checked = selected.includes(c.name);
-            return `<label class="pf-item${checked ? ' checked' : ''}" onclick="event.preventDefault();toggleReportProduct('${escHtml(c.name)}')">
+            return `<label class="pf-item${checked ? ' checked' : ''}" data-product="${escHtml(c.name)}" onclick="event.preventDefault();toggleReportProduct(this.dataset.product)">
               <span class="pf-checkbox${checked ? ' checked' : ''}">${checked ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
               <span class="pf-item-name">${escHtml(c.name)}</span>
             </label>`;

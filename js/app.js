@@ -201,7 +201,7 @@ const save = {
       ))
     );
   },
-  geo: () => { save.stops(); },
+  geo: () => { return save.stops(); },
   orders: (changedOrderIds) => {
     return _persist('orders', { ...S.orders }, () => {
       if (!changedOrderIds || !Array.isArray(changedOrderIds)) return Promise.resolve();
@@ -596,6 +596,9 @@ async function init() {
     }, 1500);
   }
 
+  // Always ensure UI state is initialized (safe to call even if already called)
+  initUIState();
+
   // Set initial report range
   setReportRange('month');
 
@@ -629,9 +632,14 @@ async function init() {
     const doSync = async () => {
       if (!_dbReady || _syncInProgress || _savePending > 0) return;
       _syncInProgress = true;
-      const ok = await syncAll();
-      if (ok && _savePending === 0) { await loadStateFromDB(); renderCurrentPage(); }
-      _syncInProgress = false;
+      try {
+        const ok = await syncAll();
+        if (ok && _savePending === 0) { await loadStateFromDB(); renderCurrentPage(); }
+      } catch (e) {
+        console.warn('doSync error:', e.message);
+      } finally {
+        _syncInProgress = false;
+      }
     };
     setInterval(() => { if (navigator.onLine) doSync(); }, 5 * 60 * 1000);
     window.addEventListener('online', () => { doSync(); flushOfflineQueue(); });
@@ -673,10 +681,10 @@ document.addEventListener('DOMContentLoaded', init);
 // Register service worker
 if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE = 'costadoro-v6';
-    const URLS = ['./', 'css/app.css', 'js/db.js', 'js/utils.js', 'js/app.js',
-      'js/pages/route.js', 'js/pages/orders.js', 'js/pages/customers.js', 'js/pages/profile.js',
-      'js/pages/reports.js', 'js/pages/settings.js', 'js/pages/catalog.js', 'js/pages/map.js',
+    const CACHE = 'costadoro-v8';
+    const URLS = ['./', 'css/app.css', 'js/db.js?v=3', 'js/utils.js?v=3', 'js/app.js?v=3',
+      'js/pages/route.js?v=3', 'js/pages/orders.js?v=3', 'js/pages/customers.js?v=3', 'js/pages/profile.js?v=3',
+      'js/pages/reports.js?v=3', 'js/pages/settings.js?v=3', 'js/pages/catalog.js?v=3', 'js/pages/map.js?v=3',
       'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
       'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
       'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];
@@ -690,8 +698,18 @@ if ('serviceWorker' in navigator) {
         }).catch(() => caches.match(e.request).then(r => r || caches.match('./'))));
         return;
       }
+      // Network-first for same-origin (JS/CSS) — always get fresh code when online
+      const url = new URL(e.request.url);
+      if (url.origin === self.location.origin) {
+        e.respondWith(fetch(e.request).then(res => {
+          if (res.ok) { const clone = res.clone(); caches.open(CACHE).then(c => c.put(e.request, clone)); }
+          return res;
+        }).catch(() => caches.match(e.request).then(r => r || caches.match('./'))));
+        return;
+      }
+      // Cache-first for CDN resources (rarely change)
       e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).then(res => {
-        if (res.ok && e.request.url.startsWith('http')) { const clone = res.clone(); caches.open(CACHE).then(c => c.put(e.request, clone)); }
+        if (res.ok) { const clone = res.clone(); caches.open(CACHE).then(c => c.put(e.request, clone)); }
         return res;
       }).catch(() => caches.match('./'))));
     });
