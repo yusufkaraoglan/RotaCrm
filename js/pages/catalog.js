@@ -519,38 +519,52 @@ async function resetAllData() {
     return;
   }
 
-  // Step 5: Clear Supabase tables (order matters due to foreign keys)
+  // Step 5: Clear Supabase tables
+  // Strategy: delete customers first (CASCADE deletes all child data),
+  // then clean up standalone tables and legacy store
   showToast('Deleting cloud data...', 'info', 5000);
+  let failures = 0;
   try {
     if (typeof SB_URL !== 'undefined' && SB_URL) {
-      const deletes = [
-        ['order_items', 'id=gt.0'],
-        ['debt_history', 'id=gt.0'],
-        ['orders', 'id=neq.___none___'],
-        ['debts', 'customer_id=gt.0'],
-        ['customer_pricing', 'customer_id=gt.0'],
-        ['recurring_orders', 'customer_id=gt.0'],
-        ['route_order', 'customer_id=gt.0'],
-        ['assignments', 'customer_id=gt.0'],
-        ['customers', 'id=gt.0'],
-        ['products', 'id=gt.0'],
-        ['app_settings', 'key=neq.___none___']
-      ];
-      let failures = 0;
-      for (const [table, filter] of deletes) {
+      // Helper: delete all rows from a table using a broad filter
+      const delAll = async (table, filter) => {
         try {
           const resp = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
             method: 'DELETE', headers: DB_HEADERS
           });
-          if (!resp.ok) failures++;
-        } catch (e) { failures++; }
-      }
-      // Clear all cr4_store legacy data
-      try {
-        await fetch(`${SB_URL}/rest/v1/cr4_store?key=neq.___none___`, {
-          method: 'DELETE', headers: DB_HEADERS
-        });
-      } catch (e) { failures++; }
+          if (!resp.ok) {
+            console.warn(`resetAllData: DELETE ${table} returned ${resp.status}`);
+            failures++;
+          }
+        } catch (e) {
+          console.warn(`resetAllData: DELETE ${table} error:`, e.message);
+          failures++;
+        }
+      };
+
+      // 1) Delete customers — CASCADE removes: assignments, route_order,
+      //    orders (→ order_items), debts, debt_history, customer_pricing, recurring_orders
+      await delAll('customers', 'id=not.is.null');
+
+      // 2) Clean up standalone tables (no FK to customers)
+      await delAll('products', 'id=not.is.null');
+      await delAll('app_settings', 'key=not.is.null');
+
+      // 3) Safety: delete any orphans in child tables (in case CASCADE missed something)
+      const childDeletes = [
+        ['order_items', 'id=not.is.null'],
+        ['debt_history', 'id=not.is.null'],
+        ['orders', 'id=not.is.null'],
+        ['debts', 'customer_id=not.is.null'],
+        ['customer_pricing', 'customer_id=not.is.null'],
+        ['recurring_orders', 'customer_id=not.is.null'],
+        ['route_order', 'customer_id=not.is.null'],
+        ['assignments', 'customer_id=not.is.null']
+      ];
+      await Promise.all(childDeletes.map(([t, f]) => delAll(t, f).catch(() => {})));
+
+      // 4) Clear legacy cr4_store
+      await delAll('cr4_store', 'key=not.is.null');
 
       if (failures > 0) {
         console.warn('resetAllData: ' + failures + ' Supabase delete(s) failed');
