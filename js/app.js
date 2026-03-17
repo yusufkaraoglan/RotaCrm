@@ -318,9 +318,10 @@ let _modalActive = false;
 function _processModalQueue() {
   if (_modalActive || _modalQueue.length === 0) return;
   _modalActive = true;
-  const { html, resolve } = _modalQueue.shift();
+  const { html, resolve, onShow } = _modalQueue.shift();
   openModal(html);
   window._currentModalResolve = resolve;
+  if (onShow) setTimeout(onShow, 100);
 }
 
 function _resolveCurrentModal(val) {
@@ -375,6 +376,31 @@ function appConfirm(msg, allowHtml) {
 }
 
 function _appConfirmAnswer(val) {
+  _resolveCurrentModal(val);
+}
+
+function appPromptInput(msg, allowHtml) {
+  return new Promise(resolve => {
+    const safe = allowHtml ? msg : escHtml(msg);
+    _modalQueue.push({
+      html: `
+        <div class="modal-handle"></div>
+        <div style="padding:24px 20px;text-align:center">
+          <p style="font-size:15px;margin-bottom:16px">${safe}</p>
+          <input type="text" id="_appPromptField" autocomplete="off" style="width:100%;padding:10px 12px;font-size:16px;border:2px solid var(--border);border-radius:8px;text-align:center;letter-spacing:2px;margin-bottom:16px" />
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-block" onclick="_appPromptAnswer(null)">Cancel</button>
+            <button class="btn btn-danger btn-block" onclick="_appPromptAnswer(document.getElementById('_appPromptField').value)">Confirm</button>
+          </div>
+        </div>`,
+      resolve,
+      onShow: () => { const f = document.getElementById('_appPromptField'); if (f) f.focus(); }
+    });
+    _processModalQueue();
+  });
+}
+
+function _appPromptAnswer(val) {
   _resolveCurrentModal(val);
 }
 

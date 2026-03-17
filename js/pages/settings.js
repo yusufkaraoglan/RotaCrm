@@ -138,9 +138,16 @@ function renderSettings() {
           <div class="settings-item">
             <div>
               <div class="settings-item-label">Reset All Data</div>
-              <div class="settings-item-desc">Delete all local data and start fresh</div>
+              <div class="settings-item-desc">Delete everything (local + cloud) and start fresh</div>
             </div>
             <button class="btn btn-danger btn-sm" onclick="resetAllData()">Reset</button>
+          </div>
+          <div class="settings-item">
+            <div>
+              <div class="settings-item-label">Clear Local Cache</div>
+              <div class="settings-item-desc">Clear local storage only. Cloud data stays. Use if app feels stuck.</div>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="clearLocalCache()">Clear</button>
           </div>
         </div>
       </div>
@@ -157,7 +164,8 @@ function renderSettings() {
 
 // JSON BACKUP
 // ══════════════════════════════════════════════════════════════
-function exportJSON() {
+function exportJSON(opts) {
+  const silent = opts && opts.silent;
   const backup = {
     version: '2.0',
     exportedAt: new Date().toISOString(),
@@ -178,14 +186,16 @@ function exportJSON() {
       brandList: S.brandList
     }
   };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = `costadoro-backup-${new Date().toISOString().slice(0,10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  appAlert('Backup file downloaded.');
+  if (!silent) appAlert('Backup file downloaded.');
+  return json.length;
 }
 
 async function importJSON(input) {
@@ -346,6 +356,15 @@ async function uploadAllData() {
   } catch (e) {
     showToast('Upload error: ' + e.message, 'error', 5000);
   }
+}
+
+async function clearLocalCache() {
+  if (!(await appConfirm('This will clear all local cached data.<br><br>Cloud data will NOT be deleted. App will reload and re-sync from cloud.', true))) return;
+  const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','recurringOrders','stopCatalog','vis'];
+  keys.forEach(k => localStorage.removeItem('cr4_' + k));
+  const cr5Keys = ['customers','products','assignments','route_order','orders','debts','debt_history','customer_pricing','recurring_orders','customer_products','customer_brands','brand_list','db_migrated'];
+  cr5Keys.forEach(k => localStorage.removeItem('cr5_' + k));
+  location.reload();
 }
 
 async function forceSyncNow() {

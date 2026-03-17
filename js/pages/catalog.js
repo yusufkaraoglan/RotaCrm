@@ -489,13 +489,38 @@ async function resetOrdersAndDebts() {
 }
 
 async function resetAllData() {
-  if (!(await appConfirm('This will delete <b>ALL data</b> (local + cloud).<br><br>A backup will be downloaded first.', true))) return;
-  if (!(await appConfirm('This cannot be undone. Proceed?'))) return;
+  // Step 1: First warning
+  if (!(await appConfirm('This will delete <b>ALL data</b> (local + cloud).<br><br>A backup file will be downloaded first. You must confirm you saved it before data is deleted.', true))) return;
 
-  // Auto-backup before reset
-  try { exportJSON(); } catch (e) { console.warn('Auto-backup failed:', e); }
+  // Step 2: Download backup
+  let backupOk = false;
+  try {
+    const size = exportJSON({ silent: true });
+    backupOk = size > 0;
+  } catch (e) {
+    console.warn('Auto-backup failed:', e);
+  }
 
-  // Clear Supabase tables (order matters due to foreign keys)
+  if (!backupOk) {
+    await appAlert('Backup download failed. Reset cancelled for safety.');
+    return;
+  }
+
+  // Step 3: Confirm backup was saved
+  if (!(await appConfirm('A backup file was just downloaded.<br><br><b>Did you save it?</b> Check your Downloads folder for the file before continuing.', true))) {
+    await appAlert('Reset cancelled. Please download the backup manually from Settings first.');
+    return;
+  }
+
+  // Step 4: Final confirmation — type DELETE
+  const typed = await appPromptInput('Type <b>DELETE</b> to confirm you want to erase all data permanently:', true);
+  if (!typed || typed.trim().toUpperCase() !== 'DELETE') {
+    await appAlert('Reset cancelled.');
+    return;
+  }
+
+  // Step 5: Clear Supabase tables (order matters due to foreign keys)
+  showToast('Deleting cloud data...', 'info', 5000);
   try {
     if (typeof SB_URL !== 'undefined' && SB_URL) {
       const deletes = [
@@ -511,19 +536,30 @@ async function resetAllData() {
         ['products', 'id=gt.0'],
         ['app_settings', 'key=neq.___none___']
       ];
+      let failures = 0;
       for (const [table, filter] of deletes) {
-        await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-          method: 'DELETE', headers: DB_HEADERS
-        }).catch(() => {});
+        try {
+          const resp = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+            method: 'DELETE', headers: DB_HEADERS
+          });
+          if (!resp.ok) failures++;
+        } catch (e) { failures++; }
       }
       // Clear all cr4_store legacy data
-      await fetch(`${SB_URL}/rest/v1/cr4_store?key=neq.___none___`, {
-        method: 'DELETE', headers: DB_HEADERS
-      }).catch(() => {});
+      try {
+        await fetch(`${SB_URL}/rest/v1/cr4_store?key=neq.___none___`, {
+          method: 'DELETE', headers: DB_HEADERS
+        });
+      } catch (e) { failures++; }
+
+      if (failures > 0) {
+        console.warn('resetAllData: ' + failures + ' Supabase delete(s) failed');
+        showToast(failures + ' cloud table(s) could not be cleared — check connection', 'error', 5000);
+      }
     }
   } catch (e) { console.error('resetAllData Supabase cleanup error:', e); }
 
-  // Clear localStorage
+  // Step 6: Clear localStorage
   const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','recurringOrders','stopCatalog','vis'];
   keys.forEach(k => localStorage.removeItem('cr4_' + k));
   const cr5Keys = ['customers','products','assignments','route_order','orders','debts','debt_history','customer_pricing','recurring_orders','customer_products','customer_brands','brand_list','db_migrated'];
