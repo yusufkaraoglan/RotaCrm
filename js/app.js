@@ -511,7 +511,14 @@ async function _initialUpload() {
 async function init() {
   let dataLoaded = false;
 
-  // 0) Check if DB tables exist
+  // 0) Check if a reset just happened — skip all data restoration
+  const justReset = localStorage.getItem('cr5_just_reset');
+  if (justReset) {
+    localStorage.removeItem('cr5_just_reset');
+    console.log('Init: reset detected — starting fresh');
+  }
+
+  // 0b) Check if DB tables exist
   await checkDbTables();
 
   // 1) Try new DB tables first (if previously migrated or has cache)
@@ -542,7 +549,8 @@ async function init() {
   }
 
   // 3) If still no data, try legacy localStorage / cr4_store
-  if (!dataLoaded) {
+  //    Skip if we just did a reset — legacy data should NOT be restored
+  if (!dataLoaded && !justReset) {
     console.log('Init: trying legacy data');
     loadStateLegacy();
     dataLoaded = STOPS.length > 0;
@@ -563,7 +571,8 @@ async function init() {
   }
 
   // 4) Auto-upload: tables exist + we have local data + DB is empty
-  if (dataLoaded && _dbReady) {
+  //    Skip if we just did a reset — don't re-upload cleared data
+  if (dataLoaded && _dbReady && !justReset) {
     try {
       const dbCustomers = await dbSelect('customers', 'select=id&limit=1');
       if (!dbCustomers || dbCustomers.length === 0) {

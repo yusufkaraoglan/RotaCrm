@@ -559,11 +559,10 @@ async function resetAllData() {
     }
   } catch (e) { console.error('resetAllData Supabase cleanup error:', e); }
 
-  // Step 6: Clear localStorage
-  const keys = ['stops','assign','routeOrder','order','geo','ordersV2','orders','debts','debtHistory','cnotes','catalog','customerPricing','customerProducts','recurringOrders','stopCatalog','vis'];
-  keys.forEach(k => localStorage.removeItem('cr4_' + k));
-  const cr5Keys = ['customers','products','assignments','route_order','orders','debts','debt_history','customer_pricing','recurring_orders','customer_products','customer_brands','brand_list','db_migrated'];
-  cr5Keys.forEach(k => localStorage.removeItem('cr5_' + k));
+  // Step 6: Clear ALL localStorage (nuclear reset)
+  localStorage.clear();
+  // Mark that a reset just happened so init() doesn't restore legacy data
+  localStorage.setItem('cr5_just_reset', '1');
   location.reload();
 }
 
