@@ -145,22 +145,21 @@ function initUIState() {
 
 // ── Save helpers (write to both state + DB) ────────────────
 
-// Helper: wrap save operations — write Supabase first, then cache
+// Helper: wrap save operations — cache FIRST (for instant persistence), then write Supabase
 const _persistLocks = {};
 async function _persist(cacheKey, data, supabaseWrite) {
   // If a write for this key is already in flight, wait for it first
   if (_persistLocks[cacheKey]) {
     try { await _persistLocks[cacheKey]; } catch {}
   }
+  // Cache IMMEDIATELY so data survives page refresh even if Supabase write is slow/fails
+  cacheSet(cacheKey, data);
   _savePending++;
   const promise = (async () => {
     try {
       await supabaseWrite();
-      cacheSet(cacheKey, data);
     } catch (e) {
-      // Offline fallback: cache locally, offline queue handles Supabase retry
-      cacheSet(cacheKey, data);
-      console.warn(`save ${cacheKey}: Supabase failed, cached locally`, e.message);
+      console.warn(`save ${cacheKey}: Supabase failed, data is cached locally`, e.message);
     } finally {
       _savePending--;
       delete _persistLocks[cacheKey];
