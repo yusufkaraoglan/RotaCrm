@@ -5,6 +5,7 @@
 let routeSearchTerm = '';
 let routeLockedStops = [];
 let visitPayMethod = null;
+const _routeLockedCache = {}; // in-memory cache for locked stops per day
 const _debouncedRouteSearch = debounce(() => renderRouteSearchResults(), 300);
 
 function renderRoute() {
@@ -14,8 +15,8 @@ function renderRoute() {
   if (!dayObj) return;
   const dayId = dayObj.id;
 
-  // Load locked stops from localStorage
-  routeLockedStops = JSON.parse(localStorage.getItem('cr5_routeLockedStops_' + dayId) || '[]');
+  // Load locked stops from memory (loaded from DB on init)
+  routeLockedStops = _routeLockedCache[dayId] || [];
 
   // Get assigned stops for this day
   const assigned = [];
@@ -265,7 +266,8 @@ function toggleRouteLock(stopId) {
   } else {
     routeLockedStops.push(stopId);
   }
-  localStorage.setItem('cr5_routeLockedStops_' + dayId, JSON.stringify(routeLockedStops));
+  _routeLockedCache[dayId] = [...routeLockedStops];
+  DB.setSetting('routeLockedStops_' + dayId, routeLockedStops);
   rerenderRouteKeepScroll();
 }
 
@@ -387,7 +389,8 @@ function applyRouteDrop(srcId, targetId, dayId) {
   // Lock the dragged item
   if (!routeLockedStops.includes(srcId)) {
     routeLockedStops.push(srcId);
-    localStorage.setItem('cr5_routeLockedStops_' + dayId, JSON.stringify(routeLockedStops));
+    _routeLockedCache[dayId] = [...routeLockedStops];
+    DB.setSetting('routeLockedStops_' + dayId, routeLockedStops);
   }
 
   rerenderRouteKeepScroll();

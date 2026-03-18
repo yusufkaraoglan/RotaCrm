@@ -450,11 +450,7 @@ async function resetOrdersAndDebts() {
   S.debts = {};
   S.debtHistory = {};
 
-  // Clear localStorage keys
-  ['ordersV2','orders','debts','debtHistory'].forEach(k => localStorage.removeItem('cr4_' + k));
-  ['orders','debts','debt_history'].forEach(k => localStorage.removeItem('cr5_' + k));
-
-  // Clear cache
+  // Update memory cache
   cacheSet('orders', {});
   cacheSet('debts', {});
   cacheSet('debt_history', {});
@@ -473,11 +469,6 @@ async function resetOrdersAndDebts() {
       ];
       for (const [table, filter] of deletes) {
         fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-          method: 'DELETE', headers: DB_HEADERS
-        }).catch(() => {});
-      }
-      for (const key of ['debts', 'debtHistory', 'ordersV2', 'orders']) {
-        fetch(`${SB_URL}/rest/v1/cr4_store?key=eq.${key}`, {
           method: 'DELETE', headers: DB_HEADERS
         }).catch(() => {});
       }
@@ -560,9 +551,6 @@ async function resetAllData() {
       ];
       await Promise.all(childDeletes.map(([t, f]) => delAll(t, f).catch(() => {})));
 
-      // 4) Clear legacy cr4_store
-      await delAll('cr4_store', 'key=not.is.null');
-
       if (failures > 0) {
         console.warn('resetAllData: ' + failures + ' Supabase delete(s) failed');
         showToast(failures + ' cloud table(s) could not be cleared — check connection', 'error', 5000);
@@ -570,10 +558,7 @@ async function resetAllData() {
     }
   } catch (e) { console.error('resetAllData Supabase cleanup error:', e); }
 
-  // Step 6: Clear ALL localStorage (nuclear reset)
-  localStorage.clear();
-  // Mark that a reset just happened so init() doesn't restore legacy data
-  localStorage.setItem('cr5_just_reset', '1');
+  // Reload — init() will fetch fresh (empty) data from Supabase
   location.reload();
 }
 
@@ -630,7 +615,7 @@ function removeRecurring(stopId) {
   if (curPage === 'profile') renderProfile();
 }
 
-function autoCreateRecurringOrders() {
+async function autoCreateRecurringOrders() {
   const week = getCurrentWeek();
   const dayIdx = getTodayDayIndex();
   const days = DAYS.filter(d => d.week === week);
@@ -638,8 +623,8 @@ function autoCreateRecurringOrders() {
   if (!dayObj) return;
   const dayId = dayObj.id;
   const today = todayStr();
-  const lastAutoKey = 'cr5_lastAutoRecurring';
-  if (localStorage.getItem(lastAutoKey) === today + '_' + dayId) return;
+  const lastAuto = await DB.getSetting('lastAutoRecurring', '');
+  if (lastAuto === today + '_' + dayId) return;
 
   const assigned = [];
   Object.entries(S.assign).forEach(([sid, did]) => {
@@ -667,7 +652,7 @@ function autoCreateRecurringOrders() {
   if (created > 0) {
     save.orders(createdIds);
   }
-  localStorage.setItem(lastAutoKey, today + '_' + dayId);
+  DB.setSetting('lastAutoRecurring', today + '_' + dayId);
 }
 
 // ══════════════════════════════════════════════════════════════
