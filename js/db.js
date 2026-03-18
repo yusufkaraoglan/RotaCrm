@@ -299,20 +299,32 @@ function legacyGet(key, fallback) {
   } catch { return fallback; }
 }
 
+// ── Cache-aware fetch helper ─────────────────────────────
+// Fetches from Supabase when cache is stale. Never overwrites local data with
+// an empty Supabase response if we already have cached data (protects against
+// temporary server issues returning empty results).
+function _fetchOrCache(cacheKey, fallback, fetchFn, transformFn) {
+  return async function () {
+    const cached = cacheGet(cacheKey, null);
+    if (cached && cacheIsFresh(cacheKey)) return cached;
+    const rows = await fetchFn();
+    if (!rows) return cached || fallback; // fetch failed entirely
+    const data = transformFn ? transformFn(rows) : rows;
+    const isEmpty = Array.isArray(data) ? data.length === 0 : Object.keys(data).length === 0;
+    const hasCached = cached && (Array.isArray(cached) ? cached.length > 0 : Object.keys(cached).length > 0);
+    if (isEmpty && hasCached) return cached; // don't overwrite local data with empty
+    cacheSet(cacheKey, data);
+    return data;
+  };
+}
+
 // ── CRUD Helpers per Entity ────────────────────────────────
 
 const DB = {
   // -- Customers --
-  async getCustomers() {
-    const cached = cacheGet('customers', null);
-    if (cached && cacheIsFresh('customers')) return cached;
-    const rows = await dbSelect('customers', 'order=name.asc');
-    if (rows && rows.length > 0) { cacheSet('customers', rows); return rows; }
-    // If Supabase returned empty but we have local cache, prefer local cache
-    if (rows && rows.length === 0 && cached && cached.length > 0) return cached;
-    if (rows) { cacheSet('customers', rows); return rows; }
-    return cached || [];
-  },
+  getCustomers: _fetchOrCache('customers', [],
+    () => dbSelect('customers', 'order=name.asc')
+  ),
 
   async saveCustomer(c) {
     if (c.id == null) { console.warn('saveCustomer: missing id'); return null; }
@@ -338,15 +350,9 @@ const DB = {
   },
 
   // -- Products --
-  async getProducts() {
-    const cached = cacheGet('products', null);
-    if (cached && cacheIsFresh('products')) return cached;
-    const rows = await dbSelect('products', 'order=sort_order.asc,name.asc');
-    if (rows && rows.length > 0) { cacheSet('products', rows); return rows; }
-    if (rows && rows.length === 0 && cached && cached.length > 0) return cached;
-    if (rows) { cacheSet('products', rows); return rows; }
-    return cached || [];
-  },
+  getProducts: _fetchOrCache('products', [],
+    () => dbSelect('products', 'order=sort_order.asc,name.asc')
+  ),
 
   async saveProduct(p) {
     const data = {
@@ -365,19 +371,10 @@ const DB = {
   },
 
   // -- Assignments --
-  async getAssignments() {
-    const cached = cacheGet('assignments', null);
-    if (cached && cacheIsFresh('assignments')) return cached;
-    const rows = await dbSelect('assignments', 'select=customer_id,day_id');
-    if (rows) {
-      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
-      const map = {};
-      rows.forEach(r => map[r.customer_id] = r.day_id);
-      cacheSet('assignments', map);
-      return map;
-    }
-    return cached || {};
-  },
+  getAssignments: _fetchOrCache('assignments', {},
+    () => dbSelect('assignments', 'select=customer_id,day_id'),
+    rows => { const m = {}; rows.forEach(r => m[r.customer_id] = r.day_id); return m; }
+  ),
 
   async setAssignment(customerId, dayId) {
     const result = await dbUpsert('assignments', { customer_id: customerId, day_id: dayId });
@@ -392,22 +389,14 @@ const DB = {
   },
 
   // -- Route Order --
-  async getRouteOrder() {
-    const cached = cacheGet('route_order', null);
-    if (cached && cacheIsFresh('route_order')) return cached;
-    const rows = await dbSelect('route_order', 'order=position.asc');
-    if (rows) {
-      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
-      const map = {};
-      rows.forEach(r => {
-        if (!map[r.day_id]) map[r.day_id] = [];
-        map[r.day_id].push(r.customer_id);
-      });
-      cacheSet('route_order', map);
-      return map;
+  getRouteOrder: _fetchOrCache('route_order', {},
+    () => dbSelect('route_order', 'order=position.asc'),
+    rows => {
+      const m = {};
+      rows.forEach(r => { if (!m[r.day_id]) m[r.day_id] = []; m[r.day_id].push(r.customer_id); });
+      return m;
     }
-    return cached || {};
-  },
+  ),
 
   async saveRouteOrder(dayId, customerIds) {
     await dbDelete('route_order', { day_id: dayId });
@@ -421,15 +410,12 @@ const DB = {
   },
 
   // -- Orders --
-  async getOrders() {
-    const cached = cacheGet('orders', null);
-    if (cached && cacheIsFresh('orders')) return cached;
-    const rows = await dbSelect('orders', 'select=*,order_items(*)&order=created_at.desc');
-    if (rows) {
-      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
-      const map = {};
+  getOrders: _fetchOrCache('orders', {},
+    () => dbSelect('orders', 'select=*,order_items(*)&order=created_at.desc'),
+    rows => {
+      const m = {};
       rows.forEach(o => {
-        map[o.id] = {
+        m[o.id] = {
           id: o.id, customerId: o.customer_id, status: o.status,
           payMethod: o.pay_method, cashPaid: o.cash_paid ? parseFloat(o.cash_paid) : undefined,
           deliveryDate: o.delivery_date, note: o.note || '',
@@ -439,11 +425,9 @@ const DB = {
           }))
         };
       });
-      cacheSet('orders', map);
-      return map;
+      return m;
     }
-    return cached || {};
-  },
+  ),
 
   async saveOrder(order) {
     // Upsert order row
@@ -479,19 +463,10 @@ const DB = {
   },
 
   // -- Debts --
-  async getDebts() {
-    const cached = cacheGet('debts', null);
-    if (cached && cacheIsFresh('debts')) return cached;
-    const rows = await dbSelect('debts', 'select=customer_id,amount');
-    if (rows) {
-      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
-      const map = {};
-      rows.forEach(r => map[r.customer_id] = parseFloat(r.amount));
-      cacheSet('debts', map);
-      return map;
-    }
-    return cached || {};
-  },
+  getDebts: _fetchOrCache('debts', {},
+    () => dbSelect('debts', 'select=customer_id,amount'),
+    rows => { const m = {}; rows.forEach(r => m[r.customer_id] = parseFloat(r.amount)); return m; }
+  ),
 
   async setDebt(customerId, amount) {
     const numAmount = parseFloat(amount) || 0;
@@ -501,25 +476,19 @@ const DB = {
   },
 
   // -- Debt History --
-  async getDebtHistory() {
-    const cached = cacheGet('debt_history', null);
-    if (cached && cacheIsFresh('debt_history')) return cached;
-    const rows = await dbSelect('debt_history', 'order=created_at.desc');
-    if (rows) {
-      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
-      const map = {};
+  getDebtHistory: _fetchOrCache('debt_history', {},
+    () => dbSelect('debt_history', 'order=created_at.desc'),
+    rows => {
+      const m = {};
       rows.forEach(r => {
         const cid = r.customer_id;
-        if (!map[cid]) map[cid] = [];
-        map[cid].push(parseDebtHistoryRow(r));
+        if (!m[cid]) m[cid] = [];
+        m[cid].push(parseDebtHistoryRow(r));
       });
-      // Deduplicate per customer
-      Object.keys(map).forEach(cid => { map[cid] = dedupeDebtHistory(map[cid]); });
-      cacheSet('debt_history', map);
-      return map;
+      Object.keys(m).forEach(cid => { m[cid] = dedupeDebtHistory(m[cid]); });
+      return m;
     }
-    return cached || {};
-  },
+  ),
 
   async addDebtHistoryEntry(customerId, entry) {
     const encodedNote = (entry.note || '') + (entry.type ? '|||' + entry.type : '');
@@ -557,22 +526,17 @@ const DB = {
   },
 
   // -- Customer Pricing --
-  async getCustomerPricing() {
-    const cached = cacheGet('customer_pricing', null);
-    if (cached && cacheIsFresh('customer_pricing')) return cached;
-    const rows = await dbSelect('customer_pricing');
-    if (rows) {
-      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
-      const map = {};
+  getCustomerPricing: _fetchOrCache('customer_pricing', {},
+    () => dbSelect('customer_pricing'),
+    rows => {
+      const m = {};
       rows.forEach(r => {
-        if (!map[r.customer_id]) map[r.customer_id] = {};
-        map[r.customer_id][r.product_name] = parseFloat(r.price);
+        if (!m[r.customer_id]) m[r.customer_id] = {};
+        m[r.customer_id][r.product_name] = parseFloat(r.price);
       });
-      cacheSet('customer_pricing', map);
-      return map;
+      return m;
     }
-    return cached || {};
-  },
+  ),
 
   async setCustomerPricing(customerId, pricingMap) {
     await dbDelete('customer_pricing', { customer_id: customerId });
@@ -586,21 +550,10 @@ const DB = {
   },
 
   // -- Recurring Orders --
-  async getRecurringOrders() {
-    const cached = cacheGet('recurring_orders', null);
-    if (cached && cacheIsFresh('recurring_orders')) return cached;
-    const rows = await dbSelect('recurring_orders');
-    if (rows) {
-      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
-      const map = {};
-      rows.forEach(r => {
-        map[r.customer_id] = { items: r.items, note: r.note || '' };
-      });
-      cacheSet('recurring_orders', map);
-      return map;
-    }
-    return cached || {};
-  },
+  getRecurringOrders: _fetchOrCache('recurring_orders', {},
+    () => dbSelect('recurring_orders'),
+    rows => { const m = {}; rows.forEach(r => { m[r.customer_id] = { items: r.items, note: r.note || '' }; }); return m; }
+  ),
 
   async setRecurringOrder(customerId, data) {
     let result;
@@ -637,89 +590,22 @@ const DB = {
 };
 
 // ── Full Sync (pull all from Supabase → cache) ────────────
-// IMPORTANT: Fetch FIRST, then update cache. Never clear cache before fetching,
-// because if the fetch fails, we'd lose local data that hasn't been synced yet.
+// Invalidates cache timestamps so DB.get* methods re-fetch from Supabase.
+// Each getter already handles the empty-vs-cached protection via _fetchOrCache.
 
 async function syncAll() {
   try {
-    // Fetch all tables from Supabase in parallel (allSettled so one failure doesn't block all)
-    const results = await Promise.allSettled([
-      dbSelect('customers', 'order=name.asc'),
-      dbSelect('products', 'order=sort_order.asc,name.asc'),
-      dbSelect('assignments', 'select=customer_id,day_id'),
-      dbSelect('route_order', 'order=position.asc'),
-      dbSelect('orders', 'select=*,order_items(*)&order=created_at.desc'),
-      dbSelect('debts', 'select=customer_id,amount'),
-      dbSelect('debt_history', 'order=created_at.desc'),
-      dbSelect('customer_pricing'),
-      dbSelect('recurring_orders')
+    // Invalidate all cache timestamps so getters fetch fresh data
+    const keys = ['customers', 'products', 'assignments', 'route_order',
+                  'orders', 'debts', 'debt_history', 'customer_pricing', 'recurring_orders'];
+    keys.forEach(k => { try { localStorage.removeItem('cr5_ts_' + k); } catch {} });
+
+    // Fetch all via DB.get* in parallel — each handles its own cache logic
+    await Promise.allSettled([
+      DB.getCustomers(), DB.getProducts(), DB.getAssignments(),
+      DB.getRouteOrder(), DB.getOrders(), DB.getDebts(),
+      DB.getDebtHistory(), DB.getCustomerPricing(), DB.getRecurringOrders()
     ]);
-    const [customers, products, assignments, routeOrder, orders,
-           debts, debtHistory, pricing, recurring] = results.map(r => r.status === 'fulfilled' ? r.value : null);
-
-    // Only update cache for tables that were successfully fetched
-    // IMPORTANT: Don't overwrite local cache with empty Supabase data if we have local data
-    if (customers && customers.length > 0) cacheSet('customers', customers);
-    if (products && products.length > 0) cacheSet('products', products);
-    if (assignments && assignments.length > 0) {
-      const map = {};
-      assignments.forEach(r => map[r.customer_id] = r.day_id);
-      cacheSet('assignments', map);
-    }
-    if (routeOrder && routeOrder.length > 0) {
-      const map = {};
-      routeOrder.forEach(r => {
-        if (!map[r.day_id]) map[r.day_id] = [];
-        map[r.day_id].push(r.customer_id);
-      });
-      cacheSet('route_order', map);
-    }
-    if (orders && orders.length > 0) {
-      const map = {};
-      orders.forEach(o => {
-        map[o.id] = {
-          id: o.id, customerId: o.customer_id, status: o.status,
-          payMethod: o.pay_method, cashPaid: o.cash_paid ? parseFloat(o.cash_paid) : undefined,
-          deliveryDate: o.delivery_date, note: o.note || '',
-          createdAt: o.created_at, deliveredAt: o.delivered_at,
-          items: (o.order_items || []).map(i => ({
-            name: i.product_name, qty: i.qty, price: parseFloat(i.price)
-          }))
-        };
-      });
-      cacheSet('orders', map);
-    }
-    if (debts && debts.length > 0) {
-      const map = {};
-      debts.forEach(r => map[r.customer_id] = parseFloat(r.amount));
-      cacheSet('debts', map);
-    }
-    if (debtHistory && debtHistory.length > 0) {
-      const map = {};
-      debtHistory.forEach(r => {
-        const cid = r.customer_id;
-        if (!map[cid]) map[cid] = [];
-        map[cid].push(parseDebtHistoryRow(r));
-      });
-      Object.keys(map).forEach(cid => { map[cid] = dedupeDebtHistory(map[cid]); });
-      cacheSet('debt_history', map);
-    }
-    if (pricing && pricing.length > 0) {
-      const map = {};
-      pricing.forEach(r => {
-        if (!map[r.customer_id]) map[r.customer_id] = {};
-        map[r.customer_id][r.product_name] = parseFloat(r.price);
-      });
-      cacheSet('customer_pricing', map);
-    }
-    if (recurring && recurring.length > 0) {
-      const map = {};
-      recurring.forEach(r => {
-        map[r.customer_id] = { items: r.items, note: r.note || '' };
-      });
-      cacheSet('recurring_orders', map);
-    }
-
     return true;
   } catch (e) {
     console.error('syncAll error:', e.message);

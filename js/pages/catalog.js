@@ -638,7 +638,7 @@ function autoCreateRecurringOrders() {
   if (!dayObj) return;
   const dayId = dayObj.id;
   const today = todayStr();
-  const lastAutoKey = 'cr4_lastAutoRecurring';
+  const lastAutoKey = 'cr5_lastAutoRecurring';
   if (localStorage.getItem(lastAutoKey) === today + '_' + dayId) return;
 
   const assigned = [];

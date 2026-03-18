@@ -132,7 +132,7 @@ function initUIState() {
   S.routeDay = getTodayDayIndex();
   S.ordersFilter = 'pending';
   S.ordersSearch = '';
-  S.ordersLockedOrders = cacheGet('setting_ordersLockedOrders', legacyGet('ordersLockedOrders', []));
+  S.ordersLockedOrders = cacheGet('setting_ordersLockedOrders', []);
   S.customersFilter = 'all';
   S.customersBrandFilter = '';
   S.customersSearch = '';
@@ -145,21 +145,26 @@ function initUIState() {
 
 // ── Save helpers (write to both state + DB) ────────────────
 
-// Helper: wrap save operations — cache FIRST (for instant persistence), then write Supabase
+// Helper: Supabase-first writes. Cache is updated only after successful DB write.
+// If DB is unreachable or offline, cache locally as fallback so data isn't lost.
 const _persistLocks = {};
 async function _persist(cacheKey, data, supabaseWrite) {
   // If a write for this key is already in flight, wait for it first
   if (_persistLocks[cacheKey]) {
     try { await _persistLocks[cacheKey]; } catch {}
   }
-  // Cache IMMEDIATELY so data survives page refresh even if Supabase write is slow/fails
-  cacheSet(cacheKey, data);
   _savePending++;
   const promise = (async () => {
     try {
-      await supabaseWrite();
+      if (_dbReady && navigator.onLine) {
+        await supabaseWrite();
+      }
+      // Cache after successful write (or when offline — data will sync later)
+      cacheSet(cacheKey, data);
     } catch (e) {
-      console.warn(`save ${cacheKey}: Supabase failed, data is cached locally`, e.message);
+      // Supabase failed — cache locally so data survives until next sync
+      cacheSet(cacheKey, data);
+      console.warn(`save ${cacheKey}: Supabase failed, cached locally for retry`, e.message);
     } finally {
       _savePending--;
       delete _persistLocks[cacheKey];
@@ -627,51 +632,40 @@ async function init() {
     showPage(savedPage);
   }
 
-  // Periodic sync
-  const useNewDB = cacheGet('db_migrated', false);
-  if (useNewDB) {
-    let _syncInProgress = false;
-    let _lastSyncHash = '';
-    const doSync = async () => {
-      if (!_dbReady || _syncInProgress || _savePending > 0) return;
-      _syncInProgress = true;
-      try {
-        const ok = await syncAll();
-        if (ok && _savePending === 0) {
-          // Only re-render if data actually changed
-          const newHash = JSON.stringify([
-            cacheGet('customers', null)?.length,
-            cacheGet('orders', null) && Object.keys(cacheGet('orders', {})).length,
-            cacheGet('debts', null) && Object.keys(cacheGet('debts', {})).length
-          ]);
-          if (newHash !== _lastSyncHash) {
-            _lastSyncHash = newHash;
-            await loadStateFromDB();
-            renderCurrentPage();
-          }
+  // Periodic sync — always use new DB (legacy is one-time migration only)
+  let _syncInProgress = false;
+  let _lastSyncHash = '';
+  const doSync = async () => {
+    if (!_dbReady || _syncInProgress || _savePending > 0) return;
+    _syncInProgress = true;
+    try {
+      const ok = await syncAll();
+      if (ok && _savePending === 0) {
+        const newHash = JSON.stringify([
+          cacheGet('customers', null)?.length,
+          cacheGet('orders', null) && Object.keys(cacheGet('orders', {})).length,
+          cacheGet('debts', null) && Object.keys(cacheGet('debts', {})).length
+        ]);
+        if (newHash !== _lastSyncHash) {
+          _lastSyncHash = newHash;
+          await loadStateFromDB();
+          renderCurrentPage();
         }
-      } catch (e) {
-        console.warn('doSync error:', e.message);
-      } finally {
-        _syncInProgress = false;
       }
-    };
-    const _syncInterval = setInterval(() => { if (navigator.onLine) doSync(); }, 5 * 60 * 1000);
-    window.addEventListener('online', () => { doSync(); flushOfflineQueue(); });
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && navigator.onLine) doSync();
-    });
-  } else {
-    // Legacy periodic sync
-    const _legacySyncInterval = setInterval(() => { if (navigator.onLine) syncFromSupabase(); }, 5 * 60 * 1000);
-    window.addEventListener('online', () => syncFromSupabase());
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && navigator.onLine) syncFromSupabase();
-    });
-  }
+    } catch (e) {
+      console.warn('doSync error:', e.message);
+    } finally {
+      _syncInProgress = false;
+    }
+  };
+  const _syncInterval = setInterval(() => { if (navigator.onLine) doSync(); }, 5 * 60 * 1000);
+  window.addEventListener('online', () => { doSync(); flushOfflineQueue(); });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && navigator.onLine) doSync();
+  });
 }
 
-// Legacy sync function
+// Legacy sync function (kept for one-time migration only)
 async function syncFromSupabase() {
   try {
     const r = await fetch(`${SB_URL}/rest/v1/cr4_store?select=key,value`, {
@@ -684,10 +678,8 @@ async function syncFromSupabase() {
       try { localStorage.setItem('cr4_' + row.key, JSON.stringify(row.value)); } catch {}
     });
     loadStateLegacy();
-    renderCurrentPage();
   } catch (e) {
-    console.warn('Sync error:', e.message);
-    showToast('Sync failed: ' + e.message, 'error', 4000);
+    console.warn('Legacy sync error:', e.message);
   }
 }
 
