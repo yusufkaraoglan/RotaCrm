@@ -12,7 +12,6 @@ function openNewOrderPage(preCustomerId, fromPage) {
   tempOrderCustomerId = preCustomerId != null ? preCustomerId : null;
   tempOrderDeliveryDate = '';
   newOrderPreviousPage = fromPage || curPage || 'orders';
-  try { sessionStorage.setItem('newOrderPreviousPage', newOrderPreviousPage); } catch {}
   newOrderProductSearch = '';
   showPage('neworder');
 }
@@ -26,13 +25,12 @@ function openEditOrderPage(orderId, fromPage) {
   if (tempOrderItems.length === 0) tempOrderItems = [{ name: '', qty: 1, price: 0 }];
   tempOrderDeliveryDate = order.deliveryDate || '';
   newOrderPreviousPage = fromPage || curPage || 'orders';
-  try { sessionStorage.setItem('newOrderPreviousPage', newOrderPreviousPage); } catch {}
   newOrderProductSearch = '';
   showPage('neworder');
 }
 
 function closeNewOrderPage() {
-  const page = newOrderPreviousPage || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('newOrderPreviousPage')) || 'orders';
+  const page = newOrderPreviousPage || 'orders';
   showPage(page);
 }
 

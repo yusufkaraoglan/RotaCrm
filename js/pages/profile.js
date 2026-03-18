@@ -293,7 +293,7 @@ async function deleteOrder(orderId) {
   delete S.orders[orderId];
   // Clean up locked orders list
   const lockIdx = (S.ordersLockedOrders || []).indexOf(orderId);
-  if (lockIdx >= 0) { S.ordersLockedOrders.splice(lockIdx, 1); cacheSet('setting_ordersLockedOrders', S.ordersLockedOrders); }
+  if (lockIdx >= 0) { S.ordersLockedOrders.splice(lockIdx, 1); DB.setSetting('ordersLockedOrders', S.ordersLockedOrders); }
 
   if (stockChange.changed) save.catalog();
   if (debtChanged) {

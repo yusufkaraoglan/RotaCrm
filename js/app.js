@@ -94,10 +94,23 @@ async function loadStateFromDB() {
     stock: p.stock, trackStock: p.track_stock
   }));
   S.customerPricing = pricing || {};
-  S.customerProducts = {};
   S.recurringOrders = recurring || {};
-  S.brands = {};
-  S.brandList = [];
+
+  // Load settings stored in app_settings table
+  const [customerProducts, brands, brandList, ordersLockedOrders, savedLastPage, savedLastProfileId] = await Promise.all([
+    DB.getSetting('customer_products', {}),
+    DB.getSetting('customer_brands', {}),
+    DB.getSetting('brand_list', []),
+    DB.getSetting('ordersLockedOrders', []),
+    DB.getSetting('lastPage', 'route'),
+    DB.getSetting('lastProfileId', null)
+  ]);
+  S.customerProducts = customerProducts || {};
+  S.brands = brands || {};
+  S.brandList = brandList || [];
+  S.ordersLockedOrders = ordersLockedOrders || [];
+  cacheSet('_lastPage', savedLastPage || 'route');
+  cacheSet('_lastProfileId', savedLastProfileId);
 
   // Load route locked stops for all days
   if (typeof _routeLockedCache !== 'undefined') {
@@ -117,7 +130,6 @@ function initUIState() {
   S.routeDay = getTodayDayIndex();
   S.ordersFilter = 'pending';
   S.ordersSearch = '';
-  S.ordersLockedOrders = cacheGet('setting_ordersLockedOrders', []);
   S.customersFilter = 'all';
   S.customersBrandFilter = '';
   S.customersSearch = '';
@@ -210,7 +222,7 @@ const save = {
       Promise.allSettled(ids.map(cid => DB.replaceDebtHistory(cid, S.debtHistory[cid] || [])))
     );
   },
-  cnotes: () => { /* stored in customers table via save.stops */ },
+  cnotes: () => { return save.stops(); },
   catalog: () => {
     const mapped = S.catalog.map(c => ({
       name: c.name, unit: c.unit || '1', price: c.price || 0,
@@ -232,9 +244,18 @@ const save = {
       ))
     );
   },
-  customerProducts: () => cacheSet('customer_products', S.customerProducts),
-  brands: () => cacheSet('customer_brands', S.brands),
-  brandList: () => cacheSet('brand_list', S.brandList),
+  customerProducts: () => {
+    cacheSet('customer_products', S.customerProducts);
+    DB.setSetting('customer_products', S.customerProducts);
+  },
+  brands: () => {
+    cacheSet('customer_brands', S.brands);
+    DB.setSetting('customer_brands', S.brands);
+  },
+  brandList: () => {
+    cacheSet('brand_list', S.brandList);
+    DB.setSetting('brand_list', S.brandList);
+  },
   recurringOrders: () => {
     return _persist('recurring_orders', { ...S.recurringOrders }, () =>
       Promise.allSettled(Object.entries(S.recurringOrders).map(([cid, data]) =>
@@ -251,8 +272,8 @@ function showPage(name) {
   const pageEl = document.getElementById('page-' + name);
   if (pageEl) pageEl.classList.add('active');
   curPage = name;
-  localStorage.setItem('lastPage', name);
-  if (name === 'profile') localStorage.setItem('lastProfileId', profileStopId);
+  DB.setSetting('lastPage', name);
+  if (name === 'profile') DB.setSetting('lastProfileId', profileStopId);
   document.querySelectorAll('.nav-btn').forEach(b => {
     const pg = b.dataset.page;
     b.classList.toggle('active',
@@ -480,10 +501,10 @@ async function init() {
   // Auto-create recurring orders for today
   autoCreateRecurringOrders();
 
-  // Restore last page
-  const savedPage = localStorage.getItem('lastPage') || 'route';
+  // Restore last page (loaded from Supabase in loadStateFromDB)
+  const savedPage = cacheGet('_lastPage', 'route');
   if (savedPage === 'profile') {
-    const savedId = localStorage.getItem('lastProfileId');
+    const savedId = cacheGet('_lastProfileId', null);
     const parsedId = parseInt(savedId);
     if (savedId && !isNaN(parsedId) && getStop(parsedId)) {
       profileStopId = parsedId;

@@ -146,7 +146,7 @@ function toggleOrderLock(orderId) {
     locked.push(orderId);
   }
   S.ordersLockedOrders = locked;
-  cacheSet('setting_ordersLockedOrders', locked);
+  DB.setSetting('ordersLockedOrders', locked);
   renderOrderResults();
 }
 
@@ -203,7 +203,7 @@ function initOrderDragDrop() {
       filteredLocked.push(draggedId);
     }
     S.ordersLockedOrders = filteredLocked;
-    cacheSet('setting_ordersLockedOrders', filteredLocked);
+    DB.setSetting('ordersLockedOrders', filteredLocked);
     renderOrderResults();
   }, { signal });
 
@@ -263,7 +263,7 @@ function initOrderDragDrop() {
           filteredLocked.push(touchDragId);
         }
         S.ordersLockedOrders = filteredLocked;
-        cacheSet('setting_ordersLockedOrders', filteredLocked);
+        DB.setSetting('ordersLockedOrders', filteredLocked);
         renderOrderResults();
       }
     }

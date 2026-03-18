@@ -455,25 +455,23 @@ async function resetOrdersAndDebts() {
   cacheSet('debts', {});
   cacheSet('debt_history', {});
 
-  appAlert('Orders and debts cleared successfully.');
-  renderSettings();
-
-  // Supabase cleanup in background
+  // Delete from Supabase (await to prevent data returning on next sync)
   try {
-    if (typeof SB_URL !== 'undefined' && SB_URL) {
-      const deletes = [
-        ['order_items', 'id=gt.0'],
-        ['debt_history', 'id=gt.0'],
-        ['orders', 'id=neq.___none___'],
-        ['debts', 'customer_id=gt.0']
-      ];
-      for (const [table, filter] of deletes) {
-        fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-          method: 'DELETE', headers: DB_HEADERS
-        }).catch(() => {});
-      }
+    const deletes = [
+      ['order_items', 'id=not.is.null'],
+      ['debt_history', 'id=not.is.null'],
+      ['orders', 'id=not.is.null'],
+      ['debts', 'customer_id=not.is.null']
+    ];
+    for (const [table, filter] of deletes) {
+      await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+        method: 'DELETE', headers: DB_HEADERS
+      }).catch(() => {});
     }
   } catch (e) { console.error('resetOrdersAndDebts Supabase cleanup error:', e); }
+
+  appAlert('Orders and debts cleared successfully.');
+  renderSettings();
 }
 
 async function resetAllData() {
