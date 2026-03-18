@@ -140,14 +140,59 @@ async function geocodeStop(stop, opts = {}) {
 async function geocodeAllStops() {
   const missing = STOPS.filter(s => !S.geo[s.id] || !S.geo[s.id].lat);
   if (missing.length === 0) { appAlert('All customers are already geocoded.'); return; }
-  appAlert(`Geocoding ${missing.length} customers...`);
+  showToast(`Geocoding ${missing.length} customers...`, 'info', 5000);
   let done = 0;
-  for (const stop of missing) {
+
+  // Step 1: Batch geocode via postcodes.io (up to 100 per request, very fast)
+  const batchSize = 100;
+  const postcodeStops = missing.filter(s => (s.p || s.postcode || '').trim());
+  for (let i = 0; i < postcodeStops.length; i += batchSize) {
+    const batch = postcodeStops.slice(i, i + batchSize);
+    const postcodes = batch.map(s => normalizePostcode(s.p || s.postcode).replace(/\s+/g, ''));
+    try {
+      const res = await fetch('https://api.postcodes.io/postcodes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postcodes })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.result) {
+          data.result.forEach((item, idx) => {
+            if (item.result && item.result.latitude != null) {
+              const stop = batch[idx];
+              const addressKey = getStopAddressKey(stop);
+              S.geo[stop.id] = {
+                lat: Number(item.result.latitude),
+                lng: Number(item.result.longitude),
+                addressKey,
+                matchedQuery: item.query,
+                source: 'postcodes.io',
+                updatedAt: new Date().toISOString()
+              };
+              done++;
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Batch postcode geocode failed:', err.message);
+    }
+  }
+
+  // Step 2: Remaining failures — try Nominatim one by one (with rate limit)
+  const stillMissing = missing.filter(s => !S.geo[s.id] || !S.geo[s.id].lat);
+  for (const stop of stillMissing) {
     await geocodeStop(stop, { force: true, silent: true });
     done++;
-    if (done < missing.length) await new Promise(r => setTimeout(r, 1100));
+    if (stillMissing.indexOf(stop) < stillMissing.length - 1) {
+      await new Promise(r => setTimeout(r, 1100));
+    }
   }
-  appAlert(`${done} customers geocoded.`);
+
+  save.geo();
+  const failed = missing.filter(s => !S.geo[s.id] || !S.geo[s.id].lat).length;
+  showToast(`${done} customers geocoded${failed ? `, ${failed} failed` : ''}.`, failed ? 'warning' : 'success');
   if (curPage === 'map') refreshMapMarkers();
 }
 
