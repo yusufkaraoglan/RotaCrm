@@ -15,7 +15,7 @@ function renderRoute() {
   const dayId = dayObj.id;
 
   // Load locked stops from localStorage
-  routeLockedStops = JSON.parse(localStorage.getItem('cr4_routeLockedStops_' + dayId) || '[]');
+  routeLockedStops = JSON.parse(localStorage.getItem('cr5_routeLockedStops_' + dayId) || '[]');
 
   // Get assigned stops for this day
   const assigned = [];
@@ -265,7 +265,7 @@ function toggleRouteLock(stopId) {
   } else {
     routeLockedStops.push(stopId);
   }
-  localStorage.setItem('cr4_routeLockedStops_' + dayId, JSON.stringify(routeLockedStops));
+  localStorage.setItem('cr5_routeLockedStops_' + dayId, JSON.stringify(routeLockedStops));
   rerenderRouteKeepScroll();
 }
 
@@ -387,7 +387,7 @@ function applyRouteDrop(srcId, targetId, dayId) {
   // Lock the dragged item
   if (!routeLockedStops.includes(srcId)) {
     routeLockedStops.push(srcId);
-    localStorage.setItem('cr4_routeLockedStops_' + dayId, JSON.stringify(routeLockedStops));
+    localStorage.setItem('cr5_routeLockedStops_' + dayId, JSON.stringify(routeLockedStops));
   }
 
   rerenderRouteKeepScroll();
