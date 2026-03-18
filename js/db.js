@@ -210,43 +210,26 @@ const _offlineQueueInterval = setInterval(() => {
   if (navigator.onLine && offlineQueue.length > 0) flushOfflineQueue();
 }, 30000);
 
-// ── localStorage Cache ─────────────────────────────────────
+// ── In-Memory Cache ─────────────────────────────────────
+// Data lives in Supabase (source of truth). Memory cache avoids redundant
+// fetches within the same session. No localStorage — page refresh always
+// re-fetches from Supabase.
 
-const CACHE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes staleness threshold
-const _memCache = {}; // In-memory cache to avoid repeated JSON.parse
+const _memCache = {};
+const _memCacheTs = {};
+const CACHE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 
 function cacheGet(key, fallback) {
-  if (_memCache.hasOwnProperty(key)) return _memCache[key];
-  try {
-    const v = localStorage.getItem('cr5_' + key);
-    if (v !== null) {
-      const parsed = JSON.parse(v);
-      _memCache[key] = parsed;
-      return parsed;
-    }
-    return fallback;
-  } catch { return fallback; }
+  return _memCache.hasOwnProperty(key) ? _memCache[key] : fallback;
 }
 
 function cacheSet(key, value) {
   _memCache[key] = value;
-  try {
-    localStorage.setItem('cr5_' + key, JSON.stringify(value));
-    localStorage.setItem('cr5_ts_' + key, Date.now().toString());
-  } catch (e) {
-    if (e.name === 'QuotaExceededError') {
-      console.warn('localStorage quota exceeded for key:', key);
-      if (typeof showToast === 'function') showToast('Storage full — some data may not be saved locally', 'error', 5000);
-    }
-  }
+  _memCacheTs[key] = Date.now();
 }
 
 function cacheIsFresh(key) {
-  try {
-    const ts = localStorage.getItem('cr5_ts_' + key);
-    if (!ts) return false;
-    return (Date.now() - parseInt(ts)) < CACHE_MAX_AGE_MS;
-  } catch { return false; }
+  return _memCacheTs[key] && (Date.now() - _memCacheTs[key]) < CACHE_MAX_AGE_MS;
 }
 
 // ── Debt history helpers ──────────────────────────────────
@@ -288,15 +271,6 @@ function dedupeDebtHistory(entries) {
     seen.add(key);
     return true;
   });
-}
-
-// ── Legacy cr4 read (for migration) ───────────────────────
-
-function legacyGet(key, fallback) {
-  try {
-    const v = localStorage.getItem('cr4_' + key);
-    return v !== null ? JSON.parse(v) : fallback;
-  } catch { return fallback; }
 }
 
 // ── Cache-aware fetch helper ─────────────────────────────
@@ -341,7 +315,7 @@ const DB = {
     };
     const result = await dbUpsert('customers', data);
     // Invalidate cache so next getCustomers() fetches fresh data
-    try { localStorage.removeItem('cr5_ts_customers'); } catch {}
+    delete _memCacheTs['customers'];
     return result;
   },
 
@@ -362,7 +336,7 @@ const DB = {
     };
     if (p.id) data.id = p.id;
     const result = await dbInsert('products', data, { upsert: true, onConflict: 'name' });
-    try { localStorage.removeItem('cr5_ts_products'); } catch {}
+    delete _memCacheTs['products'];
     return result;
   },
 
@@ -378,13 +352,13 @@ const DB = {
 
   async setAssignment(customerId, dayId) {
     const result = await dbUpsert('assignments', { customer_id: customerId, day_id: dayId });
-    try { localStorage.removeItem('cr5_ts_assignments'); } catch {}
+    delete _memCacheTs['assignments'];
     return result;
   },
 
   async removeAssignment(customerId) {
     const result = await dbDelete('assignments', { customer_id: customerId });
-    try { localStorage.removeItem('cr5_ts_assignments'); } catch {}
+    delete _memCacheTs['assignments'];
     return result;
   },
 
@@ -406,7 +380,7 @@ const DB = {
       }));
       await dbInsert('route_order', rows);
     }
-    try { localStorage.removeItem('cr5_ts_route_order'); } catch {}
+    delete _memCacheTs['route_order'];
   },
 
   // -- Orders --
@@ -454,7 +428,7 @@ const DB = {
         if (typeof dbLog === 'function') dbLog(`saveOrder ${order.id} WARNING: items deleted but re-insert failed`);
       }
     }
-    try { localStorage.removeItem('cr5_ts_orders'); } catch {}
+    delete _memCacheTs['orders'];
     if (typeof dbLog === 'function') dbLog(`saveOrder OK: ${order.id} status=${order.status}`);
   },
 
@@ -471,7 +445,7 @@ const DB = {
   async setDebt(customerId, amount) {
     const numAmount = parseFloat(amount) || 0;
     const result = await dbUpsert('debts', { customer_id: customerId, amount: numAmount });
-    try { localStorage.removeItem('cr5_ts_debts'); } catch {}
+    delete _memCacheTs['debts'];
     return result;
   },
 
@@ -546,7 +520,7 @@ const DB = {
         customer_id: customerId, product_name: name, price
       })));
     }
-    try { localStorage.removeItem('cr5_ts_customer_pricing'); } catch {}
+    delete _memCacheTs['customer_pricing'];
   },
 
   // -- Recurring Orders --
@@ -565,7 +539,7 @@ const DB = {
     } else {
       result = await dbDelete('recurring_orders', { customer_id: customerId });
     }
-    try { localStorage.removeItem('cr5_ts_recurring_orders'); } catch {}
+    delete _memCacheTs['recurring_orders'];
     return result;
   },
 
@@ -598,7 +572,7 @@ async function syncAll() {
     // Invalidate all cache timestamps so getters fetch fresh data
     const keys = ['customers', 'products', 'assignments', 'route_order',
                   'orders', 'debts', 'debt_history', 'customer_pricing', 'recurring_orders'];
-    keys.forEach(k => { try { localStorage.removeItem('cr5_ts_' + k); } catch {} });
+    keys.forEach(k => { delete _memCacheTs[k]; });
 
     // Fetch all via DB.get* in parallel — each handles its own cache logic
     await Promise.allSettled([

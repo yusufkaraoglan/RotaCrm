@@ -336,8 +336,7 @@ async function verifyDbSetup() {
   closeModal();
 
   try {
-    await _initialUpload();
-    cacheSet('db_migrated', true);
+    await _uploadAllToSupabase();
     showToast('All data uploaded!', 'success');
     renderSettings();
   } catch (e) {
@@ -349,8 +348,7 @@ async function uploadAllData() {
   if (!_dbReady) { appAlert('Database tables not found. Run Setup first.'); return; }
   showToast('Uploading all data...', 'info', 10000);
   try {
-    await _initialUpload();
-    cacheSet('db_migrated', true);
+    await _uploadAllToSupabase();
     showToast('All data uploaded to cloud!', 'success');
     renderSettings();
   } catch (e) {
@@ -358,15 +356,42 @@ async function uploadAllData() {
   }
 }
 
+// Upload all in-memory state to Supabase (respects FK order)
+async function _uploadAllToSupabase() {
+  // Step 1: customers + products (no FK deps)
+  const step1 = [];
+  STOPS.forEach(s => step1.push(DB.saveCustomer({
+    id: s.id, name: s.n, address: s.a, city: s.c, postcode: s.p,
+    lat: (S.geo[s.id] && S.geo[s.id].lat) || null,
+    lng: (S.geo[s.id] && S.geo[s.id].lng) || null,
+    note: S.cnotes[s.id] || '', contact_name: s.cn || '',
+    phone: s.ph || '', email: s.em || ''
+  })));
+  S.catalog.forEach(c => step1.push(DB.saveProduct({
+    name: c.name, unit: c.unit || '1', price: c.price || 0,
+    stock: c.stock ?? null, track_stock: c.trackStock !== false,
+    sort_order: c.sort_order || 0
+  })));
+  await Promise.all(step1);
+
+  // Step 2: everything that references customers
+  const step2 = [];
+  Object.entries(S.assign).forEach(([cid, dayId]) => step2.push(DB.setAssignment(cid, dayId)));
+  Object.entries(S.routeOrder).forEach(([dayId, cids]) =>
+    step2.push(DB.saveRouteOrder(dayId, Array.isArray(cids) ? cids : []))
+  );
+  Object.values(S.orders).forEach(order => step2.push(DB.saveOrder(order)));
+  Object.entries(S.debts).forEach(([cid, amount]) => step2.push(DB.setDebt(cid, amount)));
+  Object.entries(S.debtHistory || {}).forEach(([cid, entries]) => {
+    if (Array.isArray(entries)) entries.forEach(entry => step2.push(DB.addDebtHistoryEntry(cid, entry)));
+  });
+  Object.entries(S.customerPricing || {}).forEach(([cid, pm]) => step2.push(DB.setCustomerPricing(cid, pm || {})));
+  Object.entries(S.recurringOrders || {}).forEach(([cid, data]) => step2.push(DB.setRecurringOrder(cid, data)));
+  await Promise.all(step2);
+}
+
 async function clearLocalCache() {
-  if (!(await appConfirm('This will clear all local cached data.<br><br>Cloud data will NOT be deleted. App will reload and re-sync from cloud.', true))) return;
-  // Remove all cr4_ and cr5_ prefixed keys (covers current + future state)
-  const toRemove = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && (key.startsWith('cr4_') || key.startsWith('cr5_'))) toRemove.push(key);
-  }
-  toRemove.forEach(k => localStorage.removeItem(k));
+  if (!(await appConfirm('This will reload the app and re-fetch all data from the cloud database.', true))) return;
   location.reload();
 }
 

@@ -50,32 +50,7 @@ function btnLock(fn) {
   try { fn(); } finally { setTimeout(() => _btnLock = false, 1500); }
 }
 
-// ── Legacy load (from localStorage, for backward compat) ──
-
-function loadStateLegacy() {
-  STOPS = legacyGet('stops', STOPS_DEFAULT);
-  S.assign = legacyGet('assign', {});
-  S.routeOrder = legacyGet('routeOrder', null);
-  if (!S.routeOrder) {
-    S.routeOrder = legacyGet('order', {});
-  }
-  S.geo = legacyGet('geo', {});
-  S.orders = legacyGet('ordersV2', {});
-  S.debts = legacyGet('debts', {});
-  S.debtHistory = repairDebtHistoryTypes(legacyGet('debtHistory', {}));
-  cacheSet('debt_history', S.debtHistory);
-  S.cnotes = legacyGet('cnotes', {});
-  S.catalog = legacyGet('catalog', []);
-  S.customerPricing = legacyGet('customerPricing', null);
-  if (!S.customerPricing) S.customerPricing = legacyGet('stopCatalog', {});
-  S.customerProducts = legacyGet('customerProducts', {});
-  S.recurringOrders = legacyGet('recurringOrders', {});
-  S.brands = cacheGet('customer_brands', {});
-  S.brandList = cacheGet('brand_list', []);
-  initUIState();
-}
-
-// ── New DB load ────────────────────────────────────────────
+// ── Load state from Supabase ──────────────────────────────
 
 async function loadStateFromDB() {
   const results = await Promise.allSettled([
@@ -119,10 +94,20 @@ async function loadStateFromDB() {
     stock: p.stock, trackStock: p.track_stock
   }));
   S.customerPricing = pricing || {};
-  S.customerProducts = cacheGet('customer_products', {});
+  S.customerProducts = {};
   S.recurringOrders = recurring || {};
-  S.brands = cacheGet('customer_brands', {});
-  S.brandList = cacheGet('brand_list', []);
+  S.brands = {};
+  S.brandList = [];
+
+  // Load route locked stops for all days
+  if (typeof _routeLockedCache !== 'undefined') {
+    const lockPromises = DAYS.map(d =>
+      DB.getSetting('routeLockedStops_' + d.id, []).then(v => {
+        _routeLockedCache[d.id] = v || [];
+      }).catch(() => {})
+    );
+    await Promise.allSettled(lockPromises);
+  }
 
   initUIState();
 }
@@ -143,28 +128,24 @@ function initUIState() {
   S.mapFilter = 'all';
 }
 
-// ── Save helpers (write to both state + DB) ────────────────
+// ── Save helpers (write to Supabase + update memory) ────────
 
-// Helper: Supabase-first writes. Cache is updated only after successful DB write.
-// If DB is unreachable or offline, cache locally as fallback so data isn't lost.
+// Write to Supabase first (source of truth), then update in-memory cache.
+// Memory cache is only for avoiding redundant fetches within the same session.
 const _persistLocks = {};
 async function _persist(cacheKey, data, supabaseWrite) {
-  // If a write for this key is already in flight, wait for it first
   if (_persistLocks[cacheKey]) {
     try { await _persistLocks[cacheKey]; } catch {}
   }
+  // Update memory immediately so UI reflects changes
+  cacheSet(cacheKey, data);
   _savePending++;
   const promise = (async () => {
     try {
-      if (_dbReady && navigator.onLine) {
-        await supabaseWrite();
-      }
-      // Cache after successful write (or when offline — data will sync later)
-      cacheSet(cacheKey, data);
+      await supabaseWrite();
     } catch (e) {
-      // Supabase failed — cache locally so data survives until next sync
-      cacheSet(cacheKey, data);
-      console.warn(`save ${cacheKey}: Supabase failed, cached locally for retry`, e.message);
+      console.warn(`save ${cacheKey}: Supabase write failed`, e.message);
+      if (typeof showToast === 'function') showToast(`Save failed: ${cacheKey}`, 'error', 3000);
     } finally {
       _savePending--;
       delete _persistLocks[cacheKey];
@@ -463,144 +444,26 @@ function _renderDebugPanel() {
   panel.scrollTop = panel.scrollHeight;
 }
 
-// ── Initial Upload (local → Supabase, respects FK order) ───
-
-async function _initialUpload() {
-  // Step 1: customers + products (no FK deps)
-  const step1 = [];
-  STOPS.forEach(s => step1.push(DB.saveCustomer({
-    id: s.id, name: s.n, address: s.a, city: s.c, postcode: s.p,
-    lat: (S.geo[s.id] && S.geo[s.id].lat) || null,
-    lng: (S.geo[s.id] && S.geo[s.id].lng) || null,
-    note: S.cnotes[s.id] || '', contact_name: s.cn || '',
-    phone: s.ph || '', email: s.em || ''
-  })));
-  S.catalog.forEach(c => step1.push(DB.saveProduct({
-    name: c.name, unit: c.unit || '1', price: c.price || 0,
-    stock: c.stock ?? null, track_stock: c.trackStock !== false,
-    sort_order: c.sort_order || 0
-  })));
-  await Promise.all(step1);
-
-  // Step 2: everything that references customers
-  const step2 = [];
-  Object.entries(S.assign).forEach(([cid, dayId]) => {
-    step2.push(DB.setAssignment(cid, dayId));
-  });
-  Object.entries(S.routeOrder).forEach(([dayId, cids]) => {
-    step2.push(DB.saveRouteOrder(dayId, Array.isArray(cids) ? cids : []));
-  });
-  Object.values(S.orders).forEach(order => {
-    step2.push(DB.saveOrder(order));
-  });
-  Object.entries(S.debts).forEach(([cid, amount]) => {
-    step2.push(DB.setDebt(cid, amount));
-  });
-  Object.entries(S.debtHistory || {}).forEach(([cid, entries]) => {
-    if (Array.isArray(entries)) {
-      entries.forEach(entry => step2.push(DB.addDebtHistoryEntry(cid, entry)));
-    }
-  });
-  Object.entries(S.customerPricing || {}).forEach(([cid, pm]) => {
-    step2.push(DB.setCustomerPricing(cid, pm || {}));
-  });
-  Object.entries(S.recurringOrders || {}).forEach(([cid, data]) => {
-    step2.push(DB.setRecurringOrder(cid, data));
-  });
-  await Promise.all(step2);
-}
-
 // ── Init ───────────────────────────────────────────────────
 
 async function init() {
-  let dataLoaded = false;
-
-  // 0) Check if a reset just happened — skip all data restoration
-  const justReset = localStorage.getItem('cr5_just_reset');
-  if (justReset) {
-    localStorage.removeItem('cr5_just_reset');
-    console.log('Init: reset detected — starting fresh');
-  }
-
-  // 0b) Check if DB tables exist
+  // Check if DB tables exist
   await checkDbTables();
 
-  // 1) Try new DB tables first (if previously migrated or has cache)
-  const migrated = cacheGet('db_migrated', false);
-  if (migrated) {
-    try {
-      await loadStateFromDB();
-      dataLoaded = STOPS.length > 0;
-      console.log('Init: loaded from new DB, STOPS:', STOPS.length);
-    } catch (e) {
-      console.warn('Init: loadStateFromDB failed:', e.message);
-    }
-  }
-
-  // 2) If no data yet and DB is ready, try to fetch from new tables directly
-  if (!dataLoaded && _dbReady) {
-    try {
-      const customers = await dbSelect('customers', 'select=id&limit=1');
-      if (customers && customers.length > 0) {
-        console.log('Init: new tables have data, loading from DB');
-        cacheSet('db_migrated', true);
-        await loadStateFromDB();
-        dataLoaded = STOPS.length > 0;
-      }
-    } catch (e) {
-      console.warn('Init: new tables check failed:', e.message);
-    }
-  }
-
-  // 3) If still no data, try legacy localStorage / cr4_store
-  //    Skip if we just did a reset — legacy data should NOT be restored
-  if (!dataLoaded && !justReset) {
-    console.log('Init: trying legacy data');
-    loadStateLegacy();
-    dataLoaded = STOPS.length > 0;
-
-    if (!dataLoaded) {
-      try {
-        await syncFromSupabase();
-        dataLoaded = STOPS.length > 0;
-        console.log('Init: after legacy sync, STOPS:', STOPS.length);
-      } catch (e) {
-        console.warn('Init: legacy sync failed:', e.message);
-      }
-    }
-  }
-
-  if (!dataLoaded) {
-    console.log('Init: no data found in any source');
-    // Still need to initialize UI state even with no data
-    initUIState();
-  }
-
-  // 4) Auto-upload: tables exist + we have local data + DB is empty
-  //    Skip if we just did a reset — don't re-upload cleared data
-  if (dataLoaded && _dbReady && !justReset) {
-    try {
-      const dbCustomers = await dbSelect('customers', 'select=id&limit=1');
-      if (!dbCustomers || dbCustomers.length === 0) {
-        console.log('Init: DB tables empty, auto-uploading local data...');
-        showToast('Uploading data to cloud...', 'info', 10000);
-        await _initialUpload();
-        showToast('Data uploaded to cloud!', 'success');
-      }
-      cacheSet('db_migrated', true);
-    } catch (e) {
-      console.warn('Init: auto-upload failed:', e.message);
-    }
-  }
-
-  // Notify user if DB tables are missing
   if (!_dbReady) {
     setTimeout(() => {
-      showToast('Database tables not found — data is only saved locally. Go to Settings to set up cloud sync.', 'error', 8000);
+      showToast('Database tables not found — go to Settings to set up.', 'error', 8000);
     }, 1500);
   }
 
-  // Always ensure UI state is initialized (safe to call even if already called)
+  // Always load from Supabase (source of truth)
+  try {
+    await loadStateFromDB();
+    console.log('Init: loaded from Supabase, STOPS:', STOPS.length);
+  } catch (e) {
+    console.warn('Init: loadStateFromDB failed:', e.message);
+  }
+
   initUIState();
 
   // Set initial report range
@@ -663,24 +526,6 @@ async function init() {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && navigator.onLine) doSync();
   });
-}
-
-// Legacy sync function (kept for one-time migration only)
-async function syncFromSupabase() {
-  try {
-    const r = await fetch(`${SB_URL}/rest/v1/cr4_store?select=key,value`, {
-      headers: DB_HEADERS
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const rows = await r.json();
-    if (!Array.isArray(rows)) throw new Error('Invalid response');
-    rows.forEach(row => {
-      try { localStorage.setItem('cr4_' + row.key, JSON.stringify(row.value)); } catch {}
-    });
-    loadStateLegacy();
-  } catch (e) {
-    console.warn('Legacy sync error:', e.message);
-  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
