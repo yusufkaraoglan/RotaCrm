@@ -662,6 +662,7 @@ async function savePricing() {
   S.customerPricing[profileStopId] = cp;
   await save.pricing();
   closeModal();
+  renderProfile();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -699,7 +700,7 @@ function showBrandModal() {
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
       <button class="btn btn-block ${!current ? 'btn-primary' : 'btn-outline'}" onclick="setBrand('')" style="text-align:left">No Brand</button>
       ${brands.map(b => `
-        <button class="btn btn-block ${current === b ? 'btn-primary' : 'btn-outline'}" onclick="setBrand('${escHtml(b)}')" style="text-align:left">${escHtml(b)}</button>
+        <button class="btn btn-block ${current === b ? 'btn-primary' : 'btn-outline'}" data-brand="${escHtml(b)}" onclick="setBrand(this.dataset.brand)" style="text-align:left">${escHtml(b)}</button>
       `).join('')}
     </div>
     <div class="form-group">
