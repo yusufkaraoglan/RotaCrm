@@ -85,7 +85,7 @@ function renderProfile() {
         <div class="debt-actions">
           <button class="btn btn-outline btn-sm" onclick="showAddDebtModal()">Add Debt</button>
           <button class="btn btn-success btn-sm" onclick="showClearDebtModal()" ${debt <= 0 ? 'disabled' : ''}>Collect Debt</button>
-          <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="removeAllDebt()" ${debt <= 0 ? 'disabled' : ''}>Clear Debt</button>
+          <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="removeAllDebt()" ${debt <= 0 ? 'disabled' : ''}>Write Off</button>
         </div>
       </div>
 
@@ -95,12 +95,12 @@ function renderProfile() {
           .filter(o => o.items && o.items.length > 0)
           .sort((a,b) => new Date(b.deliveredAt) - new Date(a.deliveredAt))[0];
         return lastDelivered ? `
-        <div style="margin:8px 0">
-          <button class="btn btn-block" style="background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px" onclick="quickReorder(${stop.id},'${lastDelivered.id}')">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-            Repeat Last Order
+        <div style="margin:8px 0;display:flex;align-items:center;gap:8px">
+          <button class="btn btn-sm" style="background:var(--primary);color:#fff;display:flex;align-items:center;gap:6px;flex-shrink:0;padding:6px 12px" onclick="quickReorder(${stop.id},'${lastDelivered.id}')">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Repeat
           </button>
-          <div class="text-muted" style="font-size:11px;text-align:center;margin-top:4px">${lastDelivered.items.map(i => i.qty + 'x ' + escHtml(i.name)).join(', ')} — ${formatCurrency(calcOrderTotal(lastDelivered))}</div>
+          <span class="text-muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lastDelivered.items.map(i => i.qty + 'x ' + escHtml(i.name)).join(', ')} — ${formatCurrency(calcOrderTotal(lastDelivered))}</span>
         </div>` : '';
       })()}
 
@@ -155,44 +155,50 @@ function renderProfile() {
     const total = calcOrderTotal(o);
     const debtEntries = debtByOrder[o.id] || [];
     // Determine payment status
-    let payStatus, payColor, payIcon;
+    let payStatus, payColor, payIcon, payBadgeClass;
     if (isVisit) {
-      payStatus = 'Visit'; payColor = 'var(--purple)'; payIcon = '';
+      payStatus = 'Visit'; payColor = 'var(--purple)'; payIcon = ''; payBadgeClass = 'badge-purple';
     } else if (o.payMethod === 'bank') {
-      payStatus = 'Paid by bank'; payColor = 'var(--success)'; payIcon = '&#x1f3e6; ';
+      payStatus = 'Paid by bank'; payColor = 'var(--success)'; payIcon = '&#x1f3e6; '; payBadgeClass = 'badge-success';
     } else if (o.payMethod === 'unpaid') {
-      payStatus = 'Not paid'; payColor = 'var(--danger)'; payIcon = '';
+      payStatus = 'Not paid'; payColor = 'var(--danger)'; payIcon = ''; payBadgeClass = 'badge-danger';
     } else if (o.payMethod === 'cash') {
       const cashPaid = o.cashPaid !== undefined ? o.cashPaid : total;
       if (cashPaid >= total) {
-        payStatus = 'Paid cash'; payColor = 'var(--success)'; payIcon = '';
+        payStatus = 'Paid cash'; payColor = 'var(--success)'; payIcon = ''; payBadgeClass = 'badge-success';
       } else {
-        payStatus = `Partial cash (${formatCurrency(cashPaid)} of ${formatCurrency(total)})`; payColor = 'var(--warning)'; payIcon = '';
+        payStatus = `Partial (${formatCurrency(cashPaid)}/${formatCurrency(total)})`; payColor = 'var(--warning)'; payIcon = ''; payBadgeClass = 'badge-warning';
       }
     } else {
-      payStatus = o.payMethod || ''; payColor = 'var(--text-sec)'; payIcon = '';
+      payStatus = o.payMethod || ''; payColor = 'var(--text-sec)'; payIcon = ''; payBadgeClass = 'badge-outline';
     }
     activity.push({
       type: 'order', date: o.deliveredAt || o.createdAt, order: o,
-      total, isVisit, payStatus, payColor, payIcon, debtEntries
+      total, isVisit, payStatus, payColor, payIcon, payBadgeClass, debtEntries
     });
   });
 
   // Add standalone debt entries (payments not linked to a specific order)
   standaloneDebt.forEach(h => {
     activity.push({
-      type: h.type === 'clear' ? 'payment' : 'debt',
+      type: h.type === 'clear' ? 'payment' : h.type === 'adjust' ? 'writeoff' : 'debt',
       date: h.date, entry: h
     });
   });
 
-  // Sort newest first
-  activity.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  // Sort newest first, then by type priority for same-second entries
+  const _typePriority = { order: 0, debt: 1, writeoff: 2, payment: 3 };
+  activity.sort((a, b) => {
+    const d = (b.date || '').localeCompare(a.date || '');
+    if (d !== 0) return d;
+    return (_typePriority[a.type] || 9) - (_typePriority[b.type] || 9);
+  });
 
   html += `<div class="section-head"><h3>Activity</h3></div>`;
   if (activity.length === 0) {
     html += `<p class="text-muted" style="font-size:13px;padding:8px 0">No activity yet</p>`;
   }
+  let _debtOwesShown = false; // Show "Owes" + "Collect Payment" only on the first (newest) entry
   activity.slice(0, 30).forEach(a => {
     if (a.type === 'order') {
       const o = a.order;
@@ -200,6 +206,8 @@ function renderProfile() {
       const badgeClass = a.isVisit ? 'badge-purple' : 'badge-success';
       const hasUnpaidDebt = (o.payMethod === 'unpaid' || (o.payMethod === 'cash' && o.cashPaid !== undefined && o.cashPaid < a.total)) && a.total > 0;
       const debtAmount = getOrderDebtImpact(o);
+      const showOwes = hasUnpaidDebt && debtAmount > 0 && !_debtOwesShown;
+      if (showOwes) _debtOwesShown = true;
       html += `
         <div class="card" style="padding:10px;margin-bottom:6px">
           <div class="flex-between">
@@ -210,12 +218,12 @@ function renderProfile() {
           ${o.deliveryNote ? `<div class="text-muted" style="font-size:12px;font-style:italic">Note: ${escHtml(o.deliveryNote)}</div>` : ''}
           <div class="flex-between" style="margin-top:4px">
             ${o.items.length > 0 ? `<span style="font-size:14px;font-weight:600">${formatCurrency(a.total)}</span>` : '<span></span>'}
-            <span style="font-size:12px;color:${a.payColor}">${a.payIcon}${a.payStatus}</span>
+            <span class="badge ${a.payBadgeClass}">${a.payIcon}${a.payStatus}</span>
           </div>
-          ${hasUnpaidDebt && debtAmount > 0 ? `
+          ${showOwes ? `
           <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);display:flex;align-items:center;justify-content:space-between">
             <span style="font-size:12px;color:var(--danger)">Owes ${formatCurrency(debtAmount)}</span>
-            <button class="btn btn-success btn-sm" style="font-size:11px;padding:3px 10px" onclick="showCollectOrderPayment('${o.id}')">Collect Payment</button>
+            <button class="btn btn-success btn-sm" style="font-size:11px;padding:3px 10px" data-id="${escHtml(o.id)}" onclick="showCollectOrderPayment(this.dataset.id)">Collect Payment</button>
           </div>` : ''}
           ${a.debtEntries.filter(e => e.type === 'clear').length > 0 ? a.debtEntries.filter(e => e.type === 'clear').map(e => `
           <div style="margin-top:4px;padding:4px 8px;background:var(--success-light);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center">
@@ -223,8 +231,8 @@ function renderProfile() {
             <span style="font-size:12px;font-weight:600;color:var(--success)">-${formatCurrency(e.amount)}</span>
           </div>`).join('') : ''}
           <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px">
-            <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDeliveredOrderModal('${o.id}')">Edit</button>
-            <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="deleteOrder('${o.id}')">Delete</button>
+            <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" data-id="${escHtml(o.id)}" onclick="showEditDeliveredOrderModal(this.dataset.id)">Edit</button>
+            <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" data-id="${escHtml(o.id)}" onclick="deleteOrder(this.dataset.id)">Delete</button>
           </div>
         </div>`;
     } else if (a.type === 'payment') {
@@ -238,21 +246,23 @@ function renderProfile() {
           <div class="flex-between" style="margin-top:4px">
             <div class="text-muted" style="font-size:11px">${formatDateTime(e.date)}</div>
             <div style="display:flex;gap:6px">
-              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDebtHistoryModal(${stop.id},${e._idx})">Edit</button>
-              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="removeDebtHistory(${stop.id},${e._idx})">Remove</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},${e._idx}))">Edit</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="btnLock(()=>removeDebtHistory(${stop.id},${e._idx}))">Remove</button>
             </div>
           </div>
         </div>`;
     } else if (a.type === 'debt') {
       const e = a.entry;
       const customerDebt = S.debts[stop.id] || 0;
+      const showDebtOwes = customerDebt > 0 && !_debtOwesShown;
+      if (showDebtOwes) _debtOwesShown = true;
       html += `
         <div class="card" style="padding:10px;margin-bottom:6px;border-left:3px solid var(--danger)">
           <div class="flex-between">
             <span style="font-size:13px">${escHtml(e.note || 'Debt added')}</span>
             <span style="font-size:13px;font-weight:600;color:var(--danger)">+${formatCurrency(e.amount)}</span>
           </div>
-          ${customerDebt > 0 ? `
+          ${showDebtOwes ? `
           <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);display:flex;align-items:center;justify-content:space-between">
             <span style="font-size:12px;color:var(--danger)">Owes ${formatCurrency(customerDebt)}</span>
             <button class="btn btn-success btn-sm" style="font-size:11px;padding:3px 10px" onclick="showClearDebtModal()">Collect Payment</button>
@@ -260,8 +270,24 @@ function renderProfile() {
           <div class="flex-between" style="margin-top:4px">
             <div class="text-muted" style="font-size:11px">${formatDateTime(e.date)}</div>
             <div style="display:flex;gap:6px">
-              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDebtHistoryModal(${stop.id},${e._idx})">Edit</button>
-              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="removeDebtHistory(${stop.id},${e._idx})">Remove</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},${e._idx}))">Edit</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="btnLock(()=>removeDebtHistory(${stop.id},${e._idx}))">Remove</button>
+            </div>
+          </div>
+        </div>`;
+    } else if (a.type === 'writeoff') {
+      const e = a.entry;
+      html += `
+        <div class="card" style="padding:10px;margin-bottom:6px;border-left:3px solid var(--text-muted)">
+          <div class="flex-between">
+            <span style="font-size:13px">${escHtml(e.note || 'Debt written off')}</span>
+            <span style="font-size:13px;font-weight:600;color:var(--text-muted)">-${formatCurrency(e.amount)}</span>
+          </div>
+          <div class="flex-between" style="margin-top:4px">
+            <div class="text-muted" style="font-size:11px">${formatDateTime(e.date)}</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},${e._idx}))">Edit</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="btnLock(()=>removeDebtHistory(${stop.id},${e._idx}))">Remove</button>
             </div>
           </div>
         </div>`;
@@ -786,7 +812,7 @@ function showAddDebtModal() {
     <div class="modal-title">Add Debt</div>
     <div class="form-group">
       <label class="form-label">Amount</label>
-      <input class="input" type="number" step="0.01" id="debt-amount" placeholder="0.00">
+      <input class="input" type="number" step="0.01" min="0" id="debt-amount" placeholder="0.00">
     </div>
     <div class="form-group">
       <label class="form-label">Date & Time</label>
@@ -864,7 +890,11 @@ async function clearOrderDebt(orderId) {
   if (amount >= debtAmount) {
     const prevOrder = JSON.parse(JSON.stringify(o));
     o.payMethod = clearDebtMethod || 'cash';
-    if (o.payMethod === 'cash') o.cashPaid = roundMoney(calcOrderTotal(o));
+    if (o.payMethod === 'cash') {
+      o.cashPaid = roundMoney(calcOrderTotal(o));
+    } else {
+      delete o.cashPaid;
+    }
     reconcileOrderDebtEffect(prevOrder, o);
     save.orders([o.id]);
   } else {
@@ -955,7 +985,22 @@ async function clearDebt() {
     date: payDate, amount: amount, type: 'clear',
     note: 'Payment received (' + clearDebtMethod + ')'
   });
-  await Promise.allSettled([save.debts(), save.debtHistory([profileStopId])]);
+  // If debt fully paid, sync unpaid orders so they no longer show "Not paid"
+  const changedOrderIds = [];
+  if (S.debts[profileStopId] <= 0) {
+    getStopOrders(profileStopId, 'delivered')
+      .filter(o => getOrderDebtImpact(o) > 0)
+      .forEach(o => {
+        const prev = JSON.parse(JSON.stringify(o));
+        o.payMethod = clearDebtMethod || 'cash';
+        if (o.payMethod === 'cash') { o.cashPaid = roundMoney(calcOrderTotal(o)); } else { delete o.cashPaid; }
+        reconcileOrderDebtEffect(prev, o);
+        changedOrderIds.push(o.id);
+      });
+  }
+  const savePromises = [save.debts(), save.debtHistory([profileStopId])];
+  if (changedOrderIds.length > 0) savePromises.push(save.orders(changedOrderIds));
+  await Promise.allSettled(savePromises);
   DB.setDebt(profileStopId, S.debts[profileStopId]);
   closeModal();
   renderProfile();
@@ -964,9 +1009,15 @@ async function clearDebt() {
 async function removeAllDebt() {
   const debt = S.debts[profileStopId] || 0;
   if (debt <= 0) return;
-  if (!(await appConfirm(formatCurrency(debt) + ' debt - are you sure you want to clear all debt?<br>This will not create a payment record.', true))) return;
+  if (!(await appConfirm(formatCurrency(debt) + ' debt will be written off.<br>This will create a record but not count as payment. Continue?', true))) return;
   S.debts[profileStopId] = 0;
-  await save.debts();
+  createDebtHistoryEntry(profileStopId, {
+    date: new Date().toISOString(),
+    amount: debt,
+    type: 'adjust',
+    note: 'Debt written off'
+  });
+  await Promise.allSettled([save.debts(), save.debtHistory([profileStopId])]);
   DB.setDebt(profileStopId, 0);
   renderProfile();
 }
