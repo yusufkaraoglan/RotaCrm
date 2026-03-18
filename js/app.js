@@ -94,10 +94,19 @@ async function loadStateFromDB() {
     stock: p.stock, trackStock: p.track_stock
   }));
   S.customerPricing = pricing || {};
-  S.customerProducts = {};
   S.recurringOrders = recurring || {};
-  S.brands = {};
-  S.brandList = [];
+
+  // Load settings stored in app_settings table
+  const [customerProducts, brands, brandList, ordersLockedOrders] = await Promise.all([
+    DB.getSetting('customer_products', {}),
+    DB.getSetting('customer_brands', {}),
+    DB.getSetting('brand_list', []),
+    DB.getSetting('ordersLockedOrders', [])
+  ]);
+  S.customerProducts = customerProducts || {};
+  S.brands = brands || {};
+  S.brandList = brandList || [];
+  S.ordersLockedOrders = ordersLockedOrders || [];
 
   // Load route locked stops for all days
   if (typeof _routeLockedCache !== 'undefined') {
@@ -117,7 +126,6 @@ function initUIState() {
   S.routeDay = getTodayDayIndex();
   S.ordersFilter = 'pending';
   S.ordersSearch = '';
-  S.ordersLockedOrders = cacheGet('setting_ordersLockedOrders', []);
   S.customersFilter = 'all';
   S.customersBrandFilter = '';
   S.customersSearch = '';
@@ -232,9 +240,18 @@ const save = {
       ))
     );
   },
-  customerProducts: () => cacheSet('customer_products', S.customerProducts),
-  brands: () => cacheSet('customer_brands', S.brands),
-  brandList: () => cacheSet('brand_list', S.brandList),
+  customerProducts: () => {
+    cacheSet('customer_products', S.customerProducts);
+    DB.setSetting('customer_products', S.customerProducts);
+  },
+  brands: () => {
+    cacheSet('customer_brands', S.brands);
+    DB.setSetting('customer_brands', S.brands);
+  },
+  brandList: () => {
+    cacheSet('brand_list', S.brandList);
+    DB.setSetting('brand_list', S.brandList);
+  },
   recurringOrders: () => {
     return _persist('recurring_orders', { ...S.recurringOrders }, () =>
       Promise.allSettled(Object.entries(S.recurringOrders).map(([cid, data]) =>

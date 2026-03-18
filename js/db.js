@@ -38,37 +38,20 @@ async function dbSelect(table, params = '') {
   }
 }
 
-// Check if required tables exist and RLS policies are configured
+// Check if required tables exist
 async function checkDbTables() {
   try {
-    // 1) Check if tables exist
-    const r = await fetch(`${SB_URL}/rest/v1/orders?select=id&limit=1`, {
+    const r = await fetch(`${SB_URL}/rest/v1/customers?select=id&limit=1`, {
       headers: DB_HEADERS
     });
     if (r.status === 404 || r.status === 400) {
       _dbReady = false;
-      console.warn('DB tables not found — running in cache-only mode');
-      if (typeof dbLog === 'function') dbLog('DB tables NOT found — cache-only mode');
+      console.warn('DB tables not found');
+      if (typeof dbLog === 'function') dbLog('DB tables NOT found');
       return false;
     }
-
-    // 2) Check if RLS policies allow writes (test with a dummy upsert to app_settings)
-    const testR = await fetch(`${SB_URL}/rest/v1/app_settings`, {
-      method: 'POST',
-      headers: { ...DB_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
-      body: JSON.stringify([{ key: '_health_check', value: new Date().toISOString() }])
-    });
-    if (testR.status === 403 || testR.status === 401) {
-      _dbReady = false;
-      const msg = 'Database connection blocked — RLS policies may be missing. Go to Settings for help.';
-      console.error(msg);
-      if (typeof dbLog === 'function') dbLog(msg);
-      if (typeof showToast === 'function') setTimeout(() => showToast(msg, 'error', 10000), 1500);
-      return false;
-    }
-
     _dbReady = true;
-    if (typeof dbLog === 'function') dbLog('DB tables OK + RLS policies OK');
+    if (typeof dbLog === 'function') dbLog('DB tables OK');
     return true;
   } catch (e) {
     _dbReady = false;
@@ -78,12 +61,6 @@ async function checkDbTables() {
 }
 
 async function dbInsert(table, data, opts = {}) {
-  if (!_dbReady) {
-    // Queue operation instead of silently discarding (#7)
-    offlineQueue.push({ action: 'insert', table, data, opts });
-    console.warn(`dbInsert ${table}: DB not ready, queued for later`);
-    return null;
-  }
   try {
     const headers = { ...DB_HEADERS };
     if (opts.upsert) headers['Prefer'] = 'resolution=merge-duplicates';
@@ -113,11 +90,6 @@ async function dbInsert(table, data, opts = {}) {
 }
 
 async function dbUpdate(table, match, data) {
-  if (!_dbReady) {
-    offlineQueue.push({ action: 'update', table, match, data });
-    console.warn(`dbUpdate ${table}: DB not ready, queued for later`);
-    return null;
-  }
   try {
     const params = Object.entries(match).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
     const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, {
@@ -141,11 +113,6 @@ async function dbUpdate(table, match, data) {
 }
 
 async function dbDelete(table, match) {
-  if (!_dbReady) {
-    offlineQueue.push({ action: 'delete', table, match });
-    console.warn(`dbDelete ${table}: DB not ready, queued for later`);
-    return null;
-  }
   try {
     const params = Object.entries(match).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
     const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, {
