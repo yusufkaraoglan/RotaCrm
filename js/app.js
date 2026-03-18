@@ -150,19 +150,52 @@ async function _persist(cacheKey, data, supabaseWrite) {
   // Update memory immediately so UI reflects changes
   cacheSet(cacheKey, data);
   _savePending++;
+  _updateSaveIndicator();
   const promise = (async () => {
     try {
-      await supabaseWrite();
+      const result = await supabaseWrite();
+      // Promise.allSettled never throws — check individual results
+      if (Array.isArray(result)) {
+        const failed = result.filter(r =>
+          r.status === 'rejected' || (r.status === 'fulfilled' && r.value === null)
+        );
+        if (failed.length > 0) {
+          console.warn(`save ${cacheKey}: ${failed.length}/${result.length} write(s) failed`);
+          if (typeof showToast === 'function') showToast(`Save failed (${failed.length} error${failed.length > 1 ? 's' : ''})`, 'error', 4000);
+        }
+      }
     } catch (e) {
       console.warn(`save ${cacheKey}: Supabase write failed`, e.message);
       if (typeof showToast === 'function') showToast(`Save failed: ${cacheKey}`, 'error', 3000);
     } finally {
       _savePending--;
+      _updateSaveIndicator();
       delete _persistLocks[cacheKey];
     }
   })();
   _persistLocks[cacheKey] = promise;
   return promise;
+}
+
+// Visual indicator when saves are in-flight
+function _updateSaveIndicator() {
+  let el = document.getElementById('save-indicator');
+  if (_savePending > 0 || offlineQueue.length > 0) {
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'save-indicator';
+      el.style.cssText = 'position:fixed;top:0;left:0;right:0;height:3px;background:var(--primary,#E85D3A);z-index:9999;animation:save-pulse 1.5s ease-in-out infinite';
+      document.body.appendChild(el);
+      if (!document.getElementById('save-pulse-style')) {
+        const style = document.createElement('style');
+        style.id = 'save-pulse-style';
+        style.textContent = '@keyframes save-pulse{0%,100%{opacity:1}50%{opacity:0.3}}';
+        document.head.appendChild(style);
+      }
+    }
+  } else if (el) {
+    el.remove();
+  }
 }
 
 const save = {
@@ -548,6 +581,15 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// Prevent accidental data loss — warn user if writes are still in-flight
+window.addEventListener('beforeunload', (e) => {
+  if (_savePending > 0 || offlineQueue.length > 0) {
+    e.preventDefault();
+    e.returnValue = 'Changes are still saving. Are you sure you want to leave?';
+    return e.returnValue;
+  }
+});
 
 // Register service worker
 if ('serviceWorker' in navigator) {

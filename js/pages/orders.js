@@ -595,7 +595,7 @@ function removeOrderItem(idx) {
   renderOrderFormModal(editingOrderId ? 'Edit Order' : 'New Order');
 }
 
-function saveOrder() {
+async function saveOrder() {
   if (_btnLock) return;
   _btnLock = true;
   setTimeout(() => _btnLock = false, 2000);
@@ -649,7 +649,7 @@ function saveOrder() {
 
   const savedOrderId = editingOrderId || newOrderId;
   editingOrderId = null;
-  save.orders([savedOrderId]);
+  await save.orders([savedOrderId]);
   closeOrderForm();
   closeModal();
   if (curPage === 'orders') renderOrders();

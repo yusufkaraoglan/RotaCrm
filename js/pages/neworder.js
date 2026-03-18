@@ -408,7 +408,7 @@ function pickNewOrderCustomer(stopId) {
 
 // ── Save ──
 
-function saveNewOrderPage() {
+async function saveNewOrderPage() {
   if (_btnLock) return;
   _btnLock = true;
   setTimeout(() => _btnLock = false, 1500);
@@ -462,7 +462,7 @@ function saveNewOrderPage() {
 
   const savedOrderId = editingOrderId || newOrderId;
   editingOrderId = null;
-  save.orders([savedOrderId]);
+  await save.orders([savedOrderId]);
 
   showToast(newOrderId ? 'Order created' : 'Order updated', 'success');
   showPage(newOrderPreviousPage);

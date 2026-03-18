@@ -208,20 +208,22 @@ async function importJSON(input) {
     if (!backup.data) { appAlert('Invalid backup file.'); return; }
     if (!(await appConfirm(`This backup is dated ${backup.exportedAt ? escHtml(formatDate(backup.exportedAt)) : 'unknown'}.<br>Existing data will be overwritten. Continue?`, true))) return;
     const d = backup.data;
-    if (d.stops) { STOPS = d.stops; save.stops(); }
-    if (d.assign) { S.assign = d.assign; save.assign(); }
-    if (d.routeOrder) { S.routeOrder = d.routeOrder; save.routeOrder(); }
-    if (d.geo) { S.geo = d.geo; save.geo(); }
-    if (d.orders) { S.orders = d.orders; save.orders(Object.keys(d.orders)); }
-    if (d.debts) { S.debts = d.debts; save.debts(); }
-    if (d.debtHistory) { S.debtHistory = d.debtHistory; save.debtHistory(Object.keys(d.debtHistory)); }
-    if (d.cnotes) { S.cnotes = d.cnotes; save.cnotes(); }
-    if (d.catalog) { S.catalog = d.catalog; save.catalog(); }
-    if (d.customerPricing) { S.customerPricing = d.customerPricing; save.pricing(); }
+    const importPromises = [];
+    if (d.stops) { STOPS = d.stops; importPromises.push(save.stops()); }
+    if (d.assign) { S.assign = d.assign; importPromises.push(save.assign()); }
+    if (d.routeOrder) { S.routeOrder = d.routeOrder; importPromises.push(save.routeOrder()); }
+    if (d.geo) { S.geo = d.geo; importPromises.push(save.geo()); }
+    if (d.orders) { S.orders = d.orders; importPromises.push(save.orders(Object.keys(d.orders))); }
+    if (d.debts) { S.debts = d.debts; importPromises.push(save.debts()); }
+    if (d.debtHistory) { S.debtHistory = d.debtHistory; importPromises.push(save.debtHistory(Object.keys(d.debtHistory))); }
+    if (d.cnotes) { S.cnotes = d.cnotes; importPromises.push(save.cnotes()); }
+    if (d.catalog) { S.catalog = d.catalog; importPromises.push(save.catalog()); }
+    if (d.customerPricing) { S.customerPricing = d.customerPricing; importPromises.push(save.pricing()); }
     if (d.customerProducts) { S.customerProducts = d.customerProducts; save.customerProducts(); }
-    if (d.recurringOrders) { S.recurringOrders = d.recurringOrders; save.recurringOrders(); }
+    if (d.recurringOrders) { S.recurringOrders = d.recurringOrders; importPromises.push(save.recurringOrders()); }
     if (d.brands) { S.brands = d.brands; save.brands(); }
     if (d.brandList) { S.brandList = d.brandList; save.brandList(); }
+    await Promise.allSettled(importPromises);
     appAlert('Data restored successfully.');
     renderSettings();
   } catch (e) {

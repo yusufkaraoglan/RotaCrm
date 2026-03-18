@@ -144,14 +144,9 @@ async function saveNewCustomer() {
     em: document.getElementById('add-cust-em').value.trim()
   };
   STOPS.push(stop);
-  save.stops();
+  await save.stops();
   closeModal();
   renderCustomers();
-  // Supabase sync + geocoding in background
-  DB.saveCustomer({
-    id: stop.id, name: stop.n, address: stop.a, city: stop.c,
-    postcode: stop.p, note: '', lat: null, lng: null
-  });
   geocodeStop(stop, { force: true });
 }
 

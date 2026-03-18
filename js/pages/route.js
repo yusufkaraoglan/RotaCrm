@@ -577,7 +577,7 @@ function selectVisitPayMethod(method, el) {
   }
 }
 
-function confirmVisitOnly() {
+async function confirmVisitOnly() {
   const stopId = parseInt(deliveryStopId);
   const now = new Date().toISOString();
   const visitNote = document.getElementById('visit-note')?.value?.trim() || '';
@@ -587,12 +587,12 @@ function confirmVisitOnly() {
     note: visitNote || 'Visit (no orders)', status: 'delivered',
     payMethod: 'visit', createdAt: now, deliveredAt: now
   };
-  save.orders([vid]);
+  await save.orders([vid]);
   closeModal();
   rerenderRouteKeepScroll();
 }
 
-function confirmVisitWithPayment() {
+async function confirmVisitWithPayment() {
   const stopId = parseInt(deliveryStopId);
   if (!visitPayMethod) return;
   const debt = S.debts[stopId] || 0;
@@ -617,8 +617,7 @@ function confirmVisitWithPayment() {
       note: `Overpayment credit (${visitPayMethod})`
     });
   }
-  save.debts();
-  save.debtHistory([stopId]);
+  const savePromises = [save.debts(), save.debtHistory([stopId])];
   DB.setDebt(stopId, S.debts[stopId]);
 
   const visitNote = document.getElementById('visit-note')?.value?.trim() || '';
@@ -628,7 +627,8 @@ function confirmVisitWithPayment() {
     note: visitNote || `Visit - debt payment ${formatCurrency(cleared)}`, status: 'delivered',
     payMethod: visitPayMethod, createdAt: now, deliveredAt: now
   };
-  save.orders([vid]);
+  savePromises.push(save.orders([vid]));
+  await Promise.allSettled(savePromises);
   closeModal();
   rerenderRouteKeepScroll();
 }
@@ -666,7 +666,7 @@ function updateCashRemainder() {
   }
 }
 
-function confirmDelivery() {
+async function confirmDelivery() {
   try {
     if (!deliveryStopId && deliveryStopId !== 0) { appAlert('Error: no stopId'); return; }
     if (!deliveryPayMethod) { appAlert('Please select a payment method.'); return; }
@@ -709,20 +709,24 @@ function confirmDelivery() {
       const sc = applyTrackedStockChange([], o.items || []);
       if (sc.changed) stockChanged = true;
     });
-    if (stockChanged) save.catalog();
+
+    // Await all saves to ensure data reaches Supabase before UI closes
+    const savePromises = [];
+    if (stockChanged) savePromises.push(save.catalog());
 
     let debtChanged = false;
     pending.forEach(o => {
       if (addOrderDebtEffect(o) > 0) debtChanged = true;
     });
     if (debtChanged) {
-      save.debts();
-      save.debtHistory([parseInt(deliveryStopId)]);
-      const stopId = parseInt(deliveryStopId);
+      savePromises.push(save.debts());
+      savePromises.push(save.debtHistory([parseInt(deliveryStopId)]));
       DB.setDebt(stopId, S.debts[stopId] || 0);
     }
 
-    save.orders(pending.map(o => o.id));
+    savePromises.push(save.orders(pending.map(o => o.id)));
+    await Promise.allSettled(savePromises);
+
     closeModal();
     if (curPage === 'orders') renderOrders();
     else if (curPage === 'profile') renderProfile();

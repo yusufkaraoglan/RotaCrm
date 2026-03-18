@@ -343,12 +343,27 @@ const DB = {
   ),
 
   async saveRouteOrder(dayId, customerIds) {
-    await dbDelete('route_order', { day_id: dayId });
     if (customerIds.length > 0) {
       const rows = customerIds.map((cid, i) => ({
         day_id: dayId, customer_id: cid, position: i
       }));
-      await dbInsert('route_order', rows);
+      // Upsert new entries first (composite PK: day_id, customer_id)
+      const ok = await dbInsert('route_order', rows, { upsert: true, onConflict: 'day_id,customer_id' });
+      if (ok) {
+        // Delete entries not in the new list
+        const current = await dbSelect('route_order', `day_id=eq.${encodeURIComponent(dayId)}`);
+        if (current) {
+          const newSet = new Set(customerIds.map(Number));
+          for (const entry of current) {
+            if (!newSet.has(entry.customer_id)) {
+              await dbDelete('route_order', { day_id: dayId, customer_id: entry.customer_id });
+            }
+          }
+        }
+      }
+    } else {
+      // Empty list — safe to delete all for this day
+      await dbDelete('route_order', { day_id: dayId });
     }
     delete _memCacheTs['route_order'];
   },
@@ -387,16 +402,29 @@ const DB = {
       if (typeof dbLog === 'function') dbLog(`saveOrder ${order.id} FAILED at upsert (status=${order.status})`);
       return;
     }
-    // Replace order items — insert new first, then delete old to avoid data loss
+    // Replace order items — INSERT new first, only DELETE old after insert succeeds
     const newItems = (order.items || []).map(i => ({
       order_id: order.id, product_name: i.name, qty: i.qty, price: i.price
     }));
-    const deleteOk = await dbDelete('order_items', { order_id: order.id });
     if (newItems.length > 0) {
       const insertOk = await dbInsert('order_items', newItems);
-      if (!insertOk && deleteOk) {
-        if (typeof dbLog === 'function') dbLog(`saveOrder ${order.id} WARNING: items deleted but re-insert failed`);
+      if (insertOk) {
+        // New items saved — now safe to delete old duplicates
+        // Fetch current items to find the newly inserted IDs
+        const currentItems = await dbSelect('order_items', `order_id=eq.${encodeURIComponent(order.id)}&order=id.desc`);
+        if (currentItems && currentItems.length > newItems.length) {
+          // Keep only the newest N items (just inserted), delete the rest
+          const keepIds = new Set(currentItems.slice(0, newItems.length).map(r => r.id));
+          for (const item of currentItems) {
+            if (!keepIds.has(item.id)) await dbDelete('order_items', { id: item.id });
+          }
+        }
+      } else {
+        if (typeof dbLog === 'function') dbLog(`saveOrder ${order.id} FAILED: items insert failed`);
       }
+    } else {
+      // No items — delete all existing items for this order
+      await dbDelete('order_items', { order_id: order.id });
     }
     delete _memCacheTs['orders'];
     if (typeof dbLog === 'function') dbLog(`saveOrder OK: ${order.id} status=${order.status}`);
@@ -444,9 +472,7 @@ const DB = {
   },
 
   async replaceDebtHistory(customerId, entries) {
-    // Delete ALL existing entries for this customer from Supabase
-    await dbDelete('debt_history', { customer_id: customerId });
-    // Re-insert current entries
+    // INSERT new entries first, only DELETE old after insert succeeds
     if (entries && entries.length > 0) {
       const rows = entries.map(e => ({
         customer_id: customerId,
@@ -455,7 +481,22 @@ const DB = {
         order_id: e.orderId || null,
         created_at: e.date || new Date().toISOString()
       }));
-      await dbInsert('debt_history', rows);
+      const insertOk = await dbInsert('debt_history', rows);
+      if (insertOk) {
+        // New entries saved — delete old ones (that were there before this insert)
+        const allRows = await dbSelect('debt_history', `customer_id=eq.${customerId}&order=id.desc`);
+        if (allRows && allRows.length > rows.length) {
+          const keepIds = new Set(allRows.slice(0, rows.length).map(r => r.id));
+          for (const row of allRows) {
+            if (!keepIds.has(row.id)) await dbDelete('debt_history', { id: row.id });
+          }
+        }
+      } else {
+        if (typeof dbLog === 'function') dbLog(`replaceDebtHistory ${customerId} FAILED: insert failed`);
+      }
+    } else {
+      // No entries — safe to delete all
+      await dbDelete('debt_history', { customer_id: customerId });
     }
   },
 
@@ -483,12 +524,28 @@ const DB = {
   ),
 
   async setCustomerPricing(customerId, pricingMap) {
-    await dbDelete('customer_pricing', { customer_id: customerId });
     const entries = Object.entries(pricingMap).filter(([, p]) => p != null);
     if (entries.length > 0) {
-      await dbInsert('customer_pricing', entries.map(([name, price]) => ({
+      // Upsert new pricing first (composite PK: customer_id, product_name)
+      const rows = entries.map(([name, price]) => ({
         customer_id: customerId, product_name: name, price
-      })));
+      }));
+      const ok = await dbInsert('customer_pricing', rows, { upsert: true, onConflict: 'customer_id,product_name' });
+      if (ok) {
+        // Delete pricing entries not in the new map
+        const current = await dbSelect('customer_pricing', `customer_id=eq.${customerId}`);
+        if (current) {
+          const newNames = new Set(entries.map(([n]) => n));
+          for (const row of current) {
+            if (!newNames.has(row.product_name)) {
+              await dbDelete('customer_pricing', { customer_id: customerId, product_name: row.product_name });
+            }
+          }
+        }
+      }
+    } else {
+      // No pricing — safe to delete all
+      await dbDelete('customer_pricing', { customer_id: customerId });
     }
     delete _memCacheTs['customer_pricing'];
   },

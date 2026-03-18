@@ -462,7 +462,7 @@ function showEditCustomerModal() {
   `);
 }
 
-function saveEditCustomer() {
+async function saveEditCustomer() {
   const stop = getStop(profileStopId);
   if (!stop) return;
   const previousAddressKey = getStopAddressKey(stop);
@@ -473,11 +473,9 @@ function saveEditCustomer() {
   stop.cn = document.getElementById('edit-cust-cn').value.trim();
   stop.ph = document.getElementById('edit-cust-ph').value.trim();
   stop.em = document.getElementById('edit-cust-em').value.trim();
-  save.stops();
+  await save.stops();
   closeModal();
   renderProfile();
-  // Supabase sync in background — no await so UI stays fast
-  DB.saveCustomer({id: stop.id, name: stop.n, address: stop.a, city: stop.c, postcode: stop.p, note: S.cnotes[stop.id] || '', lat: (S.geo[stop.id]&&S.geo[stop.id].lat)||null, lng: (S.geo[stop.id]&&S.geo[stop.id].lng)||null});
   if (previousAddressKey !== getStopAddressKey(stop)) {
     geocodeStop(stop, { force: true }).then(() => { if (leafletMap) refreshMapMarkers(); });
   }
@@ -533,17 +531,17 @@ function showAssignModal() {
   openModal(html);
 }
 
-function assignToDay(dayId) {
+async function assignToDay(dayId) {
   S.assign[profileStopId] = dayId;
-  save.assign();
+  await save.assign();
   DB.setAssignment(profileStopId, dayId);
   closeModal();
   renderProfile();
 }
 
-function unassignFromDay() {
+async function unassignFromDay() {
   delete S.assign[profileStopId];
-  save.assign();
+  await save.assign();
   DB.removeAssignment(profileStopId);
   closeModal();
   renderProfile();
@@ -635,15 +633,14 @@ function showPricingModal() {
   openModal(html);
 }
 
-function savePricing() {
+async function savePricing() {
   const cp = {};
   S.catalog.forEach((c, i) => {
     const el = document.getElementById('cp-' + i);
     if (el && el.value !== '') cp[c.name] = parseFloat(el.value) || 0;
   });
   S.customerPricing[profileStopId] = cp;
-  save.pricing();
-  DB.setCustomerPricing(profileStopId, cp);
+  await save.pricing();
   closeModal();
 }
 
@@ -661,14 +658,12 @@ function showNoteModal() {
   `);
 }
 
-function saveNote() {
+async function saveNote() {
   if (profileStopId == null) return;
   const note = document.getElementById('note-text').value.trim();
   if (note) S.cnotes[profileStopId] = note;
   else delete S.cnotes[profileStopId];
-  save.cnotes();
-  const stop = getStop(profileStopId);
-  if (stop) DB.saveCustomer({id: profileStopId, name: stop.n, address: stop.a, city: stop.c, postcode: stop.p, note: note || ''});
+  await save.cnotes();
   closeModal();
   renderProfile();
 }
@@ -741,7 +736,7 @@ function showAddDebtModal() {
   `);
 }
 
-function addDebt() {
+async function addDebt() {
   const amount = parseFloat(document.getElementById('debt-amount').value) || 0;
   if (amount <= 0) { appAlert('Please enter a valid amount.'); return; }
   const note = document.getElementById('debt-note').value.trim() || 'Manual entry';
@@ -752,8 +747,7 @@ function addDebt() {
   const debtEntry = { date: debtDate, amount, type: 'add', note };
   if (!S.debtHistory[profileStopId]) S.debtHistory[profileStopId] = [];
   S.debtHistory[profileStopId].unshift(debtEntry);
-  save.debts();
-  save.debtHistory([profileStopId]);
+  await Promise.allSettled([save.debts(), save.debtHistory([profileStopId])]);
   DB.setDebt(profileStopId, S.debts[profileStopId]);
   closeModal();
   renderProfile();
@@ -792,7 +786,7 @@ function showCollectOrderPayment(orderId) {
   `);
 }
 
-function clearOrderDebt(orderId) {
+async function clearOrderDebt(orderId) {
   const o = S.orders[orderId];
   if (!o) return;
   const debtAmount = getOrderDebtImpact(o);
@@ -819,8 +813,7 @@ function clearOrderDebt(orderId) {
       orderId: o.id
     });
   }
-  save.debts();
-  save.debtHistory([profileStopId]);
+  await Promise.allSettled([save.debts(), save.debtHistory([profileStopId])]);
   DB.setDebt(profileStopId, S.debts[profileStopId] || 0);
   closeModal();
   renderProfile();
@@ -886,7 +879,7 @@ function selectClearMethod(method, el) {
   el.classList.add('selected');
 }
 
-function clearDebt() {
+async function clearDebt() {
   const debt = S.debts[profileStopId] || 0;
   const requested = parseFloat(document.getElementById('clear-amount').value) || 0;
   const amount = roundMoney(Math.min(debt, Math.max(0, requested)));
@@ -898,8 +891,7 @@ function clearDebt() {
     date: payDate, amount: amount, type: 'clear',
     note: 'Payment received (' + clearDebtMethod + ')'
   });
-  save.debts();
-  save.debtHistory([profileStopId]);
+  await Promise.allSettled([save.debts(), save.debtHistory([profileStopId])]);
   DB.setDebt(profileStopId, S.debts[profileStopId]);
   closeModal();
   renderProfile();
@@ -910,7 +902,7 @@ async function removeAllDebt() {
   if (debt <= 0) return;
   if (!(await appConfirm(formatCurrency(debt) + ' debt - are you sure you want to clear all debt?<br>This will not create a payment record.', true))) return;
   S.debts[profileStopId] = 0;
-  save.debts();
+  await save.debts();
   DB.setDebt(profileStopId, 0);
   renderProfile();
 }
