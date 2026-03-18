@@ -509,12 +509,14 @@ async function deleteCustomer() {
   delete S.customerPricing[profileStopId];
   delete S.customerProducts[profileStopId];
   delete S.brands[profileStopId];
+  delete S.recurringOrders[profileStopId];
 
   await Promise.allSettled([
     save.stops(), save.assign(), save.orders(Object.keys(S.orders)),
     save.debts(), save.debtHistory([profileStopId]),
     save.routeOrder(), save.geo(), save.cnotes(),
-    save.pricing(), save.customerProducts(), save.brands()
+    save.pricing(), save.customerProducts(), save.brands(),
+    save.recurringOrders()
   ]);
   closeModal();
   showPage('customers');
@@ -700,7 +702,15 @@ function showBrandModal() {
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
       <button class="btn btn-block ${!current ? 'btn-primary' : 'btn-outline'}" onclick="setBrand('')" style="text-align:left">No Brand</button>
       ${brands.map(b => `
-        <button class="btn btn-block ${current === b ? 'btn-primary' : 'btn-outline'}" data-brand="${escHtml(b)}" onclick="setBrand(this.dataset.brand)" style="text-align:left">${escHtml(b)}</button>
+        <div style="display:flex;gap:6px;align-items:stretch">
+          <button class="btn ${current === b ? 'btn-primary' : 'btn-outline'}" data-brand="${escHtml(b)}" onclick="setBrand(this.dataset.brand)" style="text-align:left;flex:1">${escHtml(b)}</button>
+          <button class="btn btn-outline" data-brand="${escHtml(b)}" onclick="event.stopPropagation();renameBrand(this.dataset.brand)" title="Rename" style="padding:0 10px;font-size:14px;flex-shrink:0">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+          </button>
+          <button class="btn btn-outline" data-brand="${escHtml(b)}" onclick="event.stopPropagation();deleteBrand(this.dataset.brand)" title="Delete" style="padding:0 10px;color:var(--danger);border-color:var(--danger);font-size:14px;flex-shrink:0">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        </div>
       `).join('')}
     </div>
     <div class="form-group">
@@ -732,6 +742,39 @@ function addAndSetBrand() {
     save.brandList();
   }
   setBrand(name);
+}
+
+async function renameBrand(oldName) {
+  closeModal();
+  const newName = await appPromptInput('Enter new name for "' + oldName + '":');
+  if (!newName || !newName.trim() || newName.trim() === oldName) { showBrandModal(); return; }
+  const trimmed = newName.trim();
+  if (S.brandList.includes(trimmed)) { await appAlert('A brand with this name already exists.'); showBrandModal(); return; }
+  const idx = S.brandList.indexOf(oldName);
+  if (idx !== -1) S.brandList[idx] = trimmed;
+  for (const key of Object.keys(S.brands)) {
+    if (S.brands[key] === oldName) S.brands[key] = trimmed;
+  }
+  await Promise.allSettled([save.brandList(), save.brands()]);
+  renderProfile();
+  showBrandModal();
+}
+
+async function deleteBrand(name) {
+  closeModal();
+  const count = Object.values(S.brands).filter(b => b === name).length;
+  const msg = count > 0
+    ? 'Delete brand "' + name + '"? It is assigned to ' + count + ' customer' + (count > 1 ? 's' : '') + '. They will be set to No Brand.'
+    : 'Delete brand "' + name + '"?';
+  const ok = await appConfirm(msg);
+  if (!ok) { showBrandModal(); return; }
+  S.brandList = S.brandList.filter(b => b !== name);
+  for (const key of Object.keys(S.brands)) {
+    if (S.brands[key] === name) delete S.brands[key];
+  }
+  await Promise.allSettled([save.brandList(), save.brands()]);
+  renderProfile();
+  showBrandModal();
 }
 
 // ══════════════════════════════════════════════════════════════

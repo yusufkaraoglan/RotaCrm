@@ -29,7 +29,7 @@ function renderCustomers(fullRender) {
         <div class="chip-group" style="margin-top:6px">
           <button class="chip ${!S.customersBrandFilter?'active':''}" onclick="S.customersBrandFilter='';renderCustomers(true)">All Brands</button>
           ${S.brandList.map(b => `
-            <button class="chip ${S.customersBrandFilter===b?'active':''}" onclick="S.customersBrandFilter='${escHtml(b)}';renderCustomers(true)">${escHtml(b)}</button>
+            <button class="chip ${S.customersBrandFilter===b?'active':''}" data-brand="${escHtml(b)}" onclick="S.customersBrandFilter=this.dataset.brand;renderCustomers(true)">${escHtml(b)}</button>
           `).join('')}
           <button class="chip ${S.customersBrandFilter==='none'?'active':''}" onclick="S.customersBrandFilter='none';renderCustomers(true)">No Brand</button>
         </div>` : ''}
@@ -125,7 +125,7 @@ function showAddCustomerModal() {
       <label class="form-label">Email</label>
       <input class="input" id="add-cust-em" type="email" placeholder="email@ornek.com">
     </div>
-    <button class="btn btn-primary btn-block" onclick="btnLock(saveNewCustomer)()">Save Customer</button>
+    <button class="btn btn-primary btn-block" onclick="btnLock(saveNewCustomer)">Save Customer</button>
   `);
 }
 

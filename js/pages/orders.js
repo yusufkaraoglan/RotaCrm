@@ -97,7 +97,7 @@ function renderOrderResults() {
         <div class="order-card-v2${isPending ? ' draggable-order' : ''}" data-order-id="${o.id}" ${isPending && !isLocked ? 'draggable="true"' : ''}>
           <div class="order-card-v2-header">
             ${isPending ? `<div class="order-drag-row">
-              <button class="order-lock-btn${isLocked ? ' locked' : ''}" onclick="event.stopPropagation();toggleOrderLock('${o.id}')" title="${isLocked ? 'Unlock' : 'Lock'}">
+              <button class="order-lock-btn${isLocked ? ' locked' : ''}" data-id="${escHtml(o.id)}" onclick="event.stopPropagation();toggleOrderLock(this.dataset.id)" title="${isLocked ? 'Unlock' : 'Lock'}">
                 ${isLocked ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>' : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg>'}
               </button>
             </div>` : ''}
@@ -110,10 +110,10 @@ function renderOrderResults() {
             ${isDelivered ? `<span style="font-size:11px;color:var(--text-muted)">${o.payMethod || ''} · ${formatDate(o.deliveredAt)}</span>` : ''}
             <div class="order-card-v2-actions">
               ${o.status === 'pending' ? `
-                <button class="btn btn-success btn-sm" onclick="showDeliveryFromOrder('${o.id}')">Deliver</button>
-                <button class="btn btn-outline btn-sm" onclick="openEditOrderPage('${o.id}')">Edit</button>
+                <button class="btn btn-success btn-sm" data-id="${escHtml(o.id)}" onclick="showDeliveryFromOrder(this.dataset.id)">Deliver</button>
+                <button class="btn btn-outline btn-sm" data-id="${escHtml(o.id)}" onclick="openEditOrderPage(this.dataset.id)">Edit</button>
               ` : ''}
-              <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="deleteOrderFromList('${o.id}')">Delete</button>
+              <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" data-id="${escHtml(o.id)}" onclick="deleteOrderFromList(this.dataset.id)">Delete</button>
             </div>
           </div>
         </div>`;
