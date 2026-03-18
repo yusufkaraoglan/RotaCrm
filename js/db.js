@@ -71,6 +71,7 @@ async function checkDbTables() {
     if (typeof dbLog === 'function') dbLog('DB tables OK + RLS policies OK');
     return true;
   } catch (e) {
+    _dbReady = false;
     console.warn('DB check failed:', e.message);
     return false;
   }
@@ -105,9 +106,8 @@ async function dbInsert(table, data, opts = {}) {
   } catch (e) {
     if (typeof dbLog === 'function') dbLog(`INSERT ${table}: ${e.message}`);
     else console.error(`dbInsert ${table}:`, e.message);
-    if (!navigator.onLine) {
-      offlineQueue.push({ action: 'insert', table, data, opts });
-    }
+    // Queue for retry whether online or offline — write failed either way
+    offlineQueue.push({ action: 'insert', table, data, opts });
     return null;
   }
 }
@@ -135,9 +135,7 @@ async function dbUpdate(table, match, data) {
   } catch (e) {
     if (typeof dbLog === 'function') dbLog(`UPDATE ${table} FAILED: ${e.message}`);
     else console.error(`dbUpdate ${table} FAILED:`, e.message);
-    if (!navigator.onLine) {
-      offlineQueue.push({ action: 'update', table, match, data });
-    }
+    offlineQueue.push({ action: 'update', table, match, data });
     return null;
   }
 }
@@ -164,9 +162,7 @@ async function dbDelete(table, match) {
   } catch (e) {
     if (typeof dbLog === 'function') dbLog(`DELETE ${table} FAILED: ${e.message}`);
     else console.error(`dbDelete ${table} FAILED:`, e.message);
-    if (!navigator.onLine) {
-      offlineQueue.push({ action: 'delete', table, match });
-    }
+    offlineQueue.push({ action: 'delete', table, match });
     return null;
   }
 }
@@ -311,6 +307,9 @@ const DB = {
     const cached = cacheGet('customers', null);
     if (cached && cacheIsFresh('customers')) return cached;
     const rows = await dbSelect('customers', 'order=name.asc');
+    if (rows && rows.length > 0) { cacheSet('customers', rows); return rows; }
+    // If Supabase returned empty but we have local cache, prefer local cache
+    if (rows && rows.length === 0 && cached && cached.length > 0) return cached;
     if (rows) { cacheSet('customers', rows); return rows; }
     return cached || [];
   },
@@ -343,6 +342,8 @@ const DB = {
     const cached = cacheGet('products', null);
     if (cached && cacheIsFresh('products')) return cached;
     const rows = await dbSelect('products', 'order=sort_order.asc,name.asc');
+    if (rows && rows.length > 0) { cacheSet('products', rows); return rows; }
+    if (rows && rows.length === 0 && cached && cached.length > 0) return cached;
     if (rows) { cacheSet('products', rows); return rows; }
     return cached || [];
   },
@@ -369,6 +370,7 @@ const DB = {
     if (cached && cacheIsFresh('assignments')) return cached;
     const rows = await dbSelect('assignments', 'select=customer_id,day_id');
     if (rows) {
+      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
       const map = {};
       rows.forEach(r => map[r.customer_id] = r.day_id);
       cacheSet('assignments', map);
@@ -395,6 +397,7 @@ const DB = {
     if (cached && cacheIsFresh('route_order')) return cached;
     const rows = await dbSelect('route_order', 'order=position.asc');
     if (rows) {
+      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
       const map = {};
       rows.forEach(r => {
         if (!map[r.day_id]) map[r.day_id] = [];
@@ -423,6 +426,7 @@ const DB = {
     if (cached && cacheIsFresh('orders')) return cached;
     const rows = await dbSelect('orders', 'select=*,order_items(*)&order=created_at.desc');
     if (rows) {
+      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
       const map = {};
       rows.forEach(o => {
         map[o.id] = {
@@ -480,6 +484,7 @@ const DB = {
     if (cached && cacheIsFresh('debts')) return cached;
     const rows = await dbSelect('debts', 'select=customer_id,amount');
     if (rows) {
+      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
       const map = {};
       rows.forEach(r => map[r.customer_id] = parseFloat(r.amount));
       cacheSet('debts', map);
@@ -501,6 +506,7 @@ const DB = {
     if (cached && cacheIsFresh('debt_history')) return cached;
     const rows = await dbSelect('debt_history', 'order=created_at.desc');
     if (rows) {
+      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
       const map = {};
       rows.forEach(r => {
         const cid = r.customer_id;
@@ -556,6 +562,7 @@ const DB = {
     if (cached && cacheIsFresh('customer_pricing')) return cached;
     const rows = await dbSelect('customer_pricing');
     if (rows) {
+      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
       const map = {};
       rows.forEach(r => {
         if (!map[r.customer_id]) map[r.customer_id] = {};
@@ -584,6 +591,7 @@ const DB = {
     if (cached && cacheIsFresh('recurring_orders')) return cached;
     const rows = await dbSelect('recurring_orders');
     if (rows) {
+      if (rows.length === 0 && cached && Object.keys(cached).length > 0) return cached;
       const map = {};
       rows.forEach(r => {
         map[r.customer_id] = { items: r.items, note: r.note || '' };
@@ -650,14 +658,15 @@ async function syncAll() {
            debts, debtHistory, pricing, recurring] = results.map(r => r.status === 'fulfilled' ? r.value : null);
 
     // Only update cache for tables that were successfully fetched
-    if (customers) cacheSet('customers', customers);
-    if (products) cacheSet('products', products);
-    if (assignments) {
+    // IMPORTANT: Don't overwrite local cache with empty Supabase data if we have local data
+    if (customers && customers.length > 0) cacheSet('customers', customers);
+    if (products && products.length > 0) cacheSet('products', products);
+    if (assignments && assignments.length > 0) {
       const map = {};
       assignments.forEach(r => map[r.customer_id] = r.day_id);
       cacheSet('assignments', map);
     }
-    if (routeOrder) {
+    if (routeOrder && routeOrder.length > 0) {
       const map = {};
       routeOrder.forEach(r => {
         if (!map[r.day_id]) map[r.day_id] = [];
@@ -665,7 +674,7 @@ async function syncAll() {
       });
       cacheSet('route_order', map);
     }
-    if (orders) {
+    if (orders && orders.length > 0) {
       const map = {};
       orders.forEach(o => {
         map[o.id] = {
@@ -680,12 +689,12 @@ async function syncAll() {
       });
       cacheSet('orders', map);
     }
-    if (debts) {
+    if (debts && debts.length > 0) {
       const map = {};
       debts.forEach(r => map[r.customer_id] = parseFloat(r.amount));
       cacheSet('debts', map);
     }
-    if (debtHistory) {
+    if (debtHistory && debtHistory.length > 0) {
       const map = {};
       debtHistory.forEach(r => {
         const cid = r.customer_id;
@@ -695,7 +704,7 @@ async function syncAll() {
       Object.keys(map).forEach(cid => { map[cid] = dedupeDebtHistory(map[cid]); });
       cacheSet('debt_history', map);
     }
-    if (pricing) {
+    if (pricing && pricing.length > 0) {
       const map = {};
       pricing.forEach(r => {
         if (!map[r.customer_id]) map[r.customer_id] = {};
@@ -703,7 +712,7 @@ async function syncAll() {
       });
       cacheSet('customer_pricing', map);
     }
-    if (recurring) {
+    if (recurring && recurring.length > 0) {
       const map = {};
       recurring.forEach(r => {
         map[r.customer_id] = { items: r.items, note: r.note || '' };
