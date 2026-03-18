@@ -15,8 +15,10 @@ Coffee delivery route management application for Costadoro Coffee.
 - Reports and Excel export
 - Offline-first + Supabase cloud sync
 - JSON data backup/restore
-- Drag-and-drop route ordering
+- Drag-and-drop route ordering (touch + mouse)
 - Debt tracking with payment history
 - Recurring orders
 - Interactive map with Leaflet.js
-- PWA with service worker caching
+- PWA with service worker caching (costadoro-v8)
+- WCAG AA accessible (contrast, touch targets, pinch-to-zoom)
+- XSS-safe templating via `escHtml()` + `data-*` attributes
