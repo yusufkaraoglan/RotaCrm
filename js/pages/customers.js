@@ -1,4 +1,5 @@
 'use strict';
+const _debouncedCustomerSearch = debounce(() => renderCustomerResults(), 300);
 // CUSTOMERS PAGE
 // ══════════════════════════════════════════════════════════════
 function renderCustomers(fullRender) {
@@ -16,7 +17,7 @@ function renderCustomers(fullRender) {
       <div class="page-body">
         <div class="search-bar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" placeholder="Search customer..." value="${escHtml(S.customersSearch)}" oninput="S.customersSearch=this.value;renderCustomerResults()">
+          <input type="text" placeholder="Search customer..." value="${escHtml(S.customersSearch)}" oninput="S.customersSearch=this.value;_debouncedCustomerSearch()">
         </div>
         <div class="chip-group">
           <button class="chip ${S.customersFilter==='all'?'active':''}" onclick="S.customersFilter='all';renderCustomers(true)">All</button>
@@ -58,6 +59,12 @@ function renderCustomerResults() {
   }
   stops.sort((a, b) => a.n.localeCompare(b.n));
 
+  // Pre-compute pending counts per customer
+  const pendingCounts = {};
+  Object.values(S.orders).forEach(o => {
+    if (o.status === 'pending') pendingCounts[o.customerId] = (pendingCounts[o.customerId] || 0) + 1;
+  });
+
   let html = '';
   if (stops.length === 0) {
     html = `<div class="empty-state"><p><b>No customers found</b></p></div>`;
@@ -65,7 +72,7 @@ function renderCustomerResults() {
     stops.forEach(s => {
       const dayId = S.assign[s.id];
       const dayObj = dayId ? getDayObj(dayId) : null;
-      const pending = getStopOrders(s.id, 'pending').length;
+      const pending = pendingCounts[s.id] || 0;
       const debt = S.debts[s.id] || 0;
       html += `
         <div class="customer-card" onclick="showProfile(${s.id})">
@@ -138,13 +145,14 @@ async function saveNewCustomer() {
   };
   STOPS.push(stop);
   save.stops();
-  await DB.saveCustomer({
+  closeModal();
+  renderCustomers();
+  // Supabase sync + geocoding in background
+  DB.saveCustomer({
     id: stop.id, name: stop.n, address: stop.a, city: stop.c,
     postcode: stop.p, note: '', lat: null, lng: null
   });
-  await geocodeStop(stop, { force: true });
-  closeModal();
-  renderCustomers();
+  geocodeStop(stop, { force: true });
 }
 
 // ══════════════════════════════════════════════════════════════

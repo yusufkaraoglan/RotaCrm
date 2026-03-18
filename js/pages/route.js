@@ -5,6 +5,7 @@
 let routeSearchTerm = '';
 let routeLockedStops = [];
 let visitPayMethod = null;
+const _debouncedRouteSearch = debounce(() => renderRouteSearchResults(), 300);
 
 function renderRoute() {
   const week = S.routeWeek;
@@ -58,7 +59,7 @@ function renderRoute() {
     <div class="route-search-bar">
       <div class="search-bar" style="margin:0">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="Search all customers..." value="${escHtml(routeSearchTerm)}" oninput="routeSearchTerm=this.value;renderRouteSearchResults()">
+        <input type="text" placeholder="Search all customers..." value="${escHtml(routeSearchTerm)}" oninput="routeSearchTerm=this.value;_debouncedRouteSearch()">
       </div>
     </div>
     ${buildStockWarningBannerHtml()}
@@ -71,7 +72,8 @@ function renderRoute() {
     <div class="day-tabs">
       ${days.map((d, i) => {
         const dayStops = Object.entries(S.assign).filter(([,did]) => did === d.id).map(([sid]) => parseInt(sid));
-        const dayPending = dayStops.reduce((sum, sid) => sum + getStopOrders(sid, 'pending').length, 0);
+        const dayStopSet = new Set(dayStops);
+        const dayPending = Object.values(S.orders).filter(o => o.status === 'pending' && dayStopSet.has(o.customerId)).length;
         return `
         <button class="day-tab ${i===S.routeDay?'active':''}"
                 style="${i===S.routeDay ? 'background:'+d.color+';color:#fff' : ''};position:relative"
@@ -113,22 +115,38 @@ function buildRouteListHtml(filtered, dayObj, allSorted) {
     </div>`;
   }
 
+  // Pre-compute order data per customer to avoid O(N×M) loops
+  const thisMonday = getWeekMondayStr(new Date());
+  const pendingByCustomer = {};
+  const weekOrdersByCustomer = {};
+  Object.values(S.orders).forEach(o => {
+    const cid = o.customerId;
+    if (o.status === 'pending') {
+      if (!pendingByCustomer[cid]) pendingByCustomer[cid] = [];
+      pendingByCustomer[cid].push(o);
+    }
+    if (o.status === 'delivered' && o.deliveredAt && getWeekMondayStr(o.deliveredAt) === thisMonday) {
+      if (!weekOrdersByCustomer[cid]) weekOrdersByCustomer[cid] = [];
+      weekOrdersByCustomer[cid].push(o);
+    }
+  });
+
+  const stopMap = new Map(STOPS.map(s => [s.id, s]));
+  const lockedSet = new Set(routeLockedStops);
+  const sortedIndexMap = new Map(allSorted.map((id, i) => [id, i]));
+
   let html = '';
   filtered.forEach((stopId) => {
-    const stop = getStop(stopId);
+    const stop = stopMap.get(stopId) || getStop(stopId);
     if (!stop) return;
-    const idx = allSorted.indexOf(stopId);
-    const pending = getStopOrders(stopId, 'pending');
-    const delivered = isDeliveredThisWeek(stopId);
-    const thisMonday = getWeekMondayStr(new Date());
-    const weekOrders = Object.values(S.orders).filter(o =>
-      o.customerId === stopId && o.status === 'delivered' &&
-      o.deliveredAt && getWeekMondayStr(o.deliveredAt) === thisMonday
-    );
+    const idx = sortedIndexMap.get(stopId) ?? allSorted.indexOf(stopId);
+    const pending = pendingByCustomer[stopId] || [];
+    const weekOrders = weekOrdersByCustomer[stopId] || [];
+    const delivered = weekOrders.length > 0;
     const todayRev = weekOrders.reduce((s, o) => s + calcOrderTotal(o), 0);
     const isVisited = delivered && weekOrders.every(o => o.payMethod === 'visit');
     const debt = S.debts[stopId] || 0;
-    const isLocked = routeLockedStops.includes(stopId);
+    const isLocked = lockedSet.has(stopId);
 
     html += `
       <div class="route-card ${delivered ? 'delivered' : ''}${!isLocked ? ' draggable-route' : ''}" style="border-left-color:${dayObj.color}" data-stop-id="${stopId}" ${!isLocked ? 'draggable="true"' : ''}>
@@ -251,16 +269,15 @@ function toggleRouteLock(stopId) {
   rerenderRouteKeepScroll();
 }
 
+let _routeDragAbort = null;
 function initRouteDragDrop() {
   const list = document.getElementById('route-list');
   if (!list) return;
 
-  // Remove old listeners by replacing the node (clears all event listeners)
-  if (list._dragInitialized) {
-    const fresh = list.cloneNode(true);
-    list.parentNode.replaceChild(fresh, list);
-    return initRouteDragDrop(); // Re-init with fresh node
-  }
+  // Abort previous listeners cleanly
+  if (_routeDragAbort) _routeDragAbort.abort();
+  _routeDragAbort = new AbortController();
+  const signal = _routeDragAbort.signal;
 
   const week = S.routeWeek;
   const days = DAYS.filter(d => d.week === week);
@@ -268,7 +285,6 @@ function initRouteDragDrop() {
   if (!dayObj) return;
   const dayId = dayObj.id;
 
-  list._dragInitialized = true;
   let draggedId = null;
 
   list.addEventListener('dragstart', e => {
@@ -277,14 +293,14 @@ function initRouteDragDrop() {
     draggedId = parseInt(card.dataset.stopId);
     card.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
-  });
+  }, { signal });
 
   list.addEventListener('dragend', e => {
     const card = e.target.closest('.draggable-route');
     if (card) card.classList.remove('dragging');
     list.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
     draggedId = null;
-  });
+  }, { signal });
 
   list.addEventListener('dragover', e => {
     e.preventDefault();
@@ -294,14 +310,14 @@ function initRouteDragDrop() {
     if (target && parseInt(target.dataset.stopId) !== draggedId) {
       target.classList.add('drag-over');
     }
-  });
+  }, { signal });
 
   list.addEventListener('drop', e => {
     e.preventDefault();
     const target = e.target.closest('.route-card');
     if (!target || !draggedId || parseInt(target.dataset.stopId) === draggedId) return;
     applyRouteDrop(draggedId, parseInt(target.dataset.stopId), dayId);
-  });
+  }, { signal });
 
   // Touch drag support
   let touchDragId = null;
@@ -319,7 +335,7 @@ function initRouteDragDrop() {
       touchClone.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0.8;width:' + card.offsetWidth + 'px;transform:scale(0.95);box-shadow:0 8px 24px rgba(0,0,0,0.2);left:' + card.getBoundingClientRect().left + 'px;top:' + (e.touches[0].clientY - 30) + 'px';
       document.body.appendChild(touchClone);
     }, 300);
-  }, { passive: true });
+  }, { passive: true, signal });
 
   list.addEventListener('touchmove', e => {
     if (!touchDragId) {
@@ -334,7 +350,7 @@ function initRouteDragDrop() {
       const target = el.closest('.route-card');
       if (target && parseInt(target.dataset.stopId) !== touchDragId) target.classList.add('drag-over');
     }
-  }, { passive: false });
+  }, { passive: false, signal });
 
   list.addEventListener('touchend', e => {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
@@ -350,7 +366,7 @@ function initRouteDragDrop() {
       }
     }
     touchDragId = null;
-  });
+  }, { signal });
 }
 
 function applyRouteDrop(srcId, targetId, dayId) {

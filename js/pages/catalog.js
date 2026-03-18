@@ -1,5 +1,6 @@
 'use strict';
 let catalogSearchTerm = '';
+const _debouncedCatalogSearch = debounce(() => renderCatalogGrid(), 300);
 
 function renderCatalog() {
   const body = document.querySelector('#page-catalog .page-body');
@@ -17,7 +18,7 @@ function renderCatalog() {
     <div class="page-body">
       <div class="search-bar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="Search products..." value="${escHtml(catalogSearchTerm)}" oninput="catalogSearchTerm=this.value;renderCatalogGrid()">
+        <input type="text" placeholder="Search products..." value="${escHtml(catalogSearchTerm)}" oninput="catalogSearchTerm=this.value;_debouncedCatalogSearch()">
       </div>
       <div id="catalog-grid-container">`;
 
@@ -81,16 +82,14 @@ function renderCatalogGrid() {
   }
 }
 
+let _catalogDragAbort = null;
 function initCatalogDragDrop() {
   const list = document.getElementById('catalog-list');
   if (!list) return;
 
-  if (list._dragInitialized) {
-    const fresh = list.cloneNode(true);
-    list.parentNode.replaceChild(fresh, list);
-    return initCatalogDragDrop();
-  }
-  list._dragInitialized = true;
+  if (_catalogDragAbort) _catalogDragAbort.abort();
+  _catalogDragAbort = new AbortController();
+  const signal = _catalogDragAbort.signal;
 
   let draggedIdx = null;
 
@@ -100,14 +99,14 @@ function initCatalogDragDrop() {
     draggedIdx = parseInt(row.dataset.idx);
     row.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
-  });
+  }, { signal });
 
   list.addEventListener('dragend', e => {
     const row = e.target.closest('.catalog-row');
     if (row) row.classList.remove('dragging');
     list.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
     draggedIdx = null;
-  });
+  }, { signal });
 
   list.addEventListener('dragover', e => {
     e.preventDefault();
@@ -117,7 +116,7 @@ function initCatalogDragDrop() {
     if (target && parseInt(target.dataset.idx) !== draggedIdx) {
       target.classList.add('drag-over');
     }
-  });
+  }, { signal });
 
   list.addEventListener('drop', e => {
     e.preventDefault();
@@ -126,7 +125,7 @@ function initCatalogDragDrop() {
     const targetIdx = parseInt(target.dataset.idx);
     if (targetIdx === draggedIdx) return;
     applyCatalogDrop(draggedIdx, targetIdx);
-  });
+  }, { signal });
 
   // Touch drag support
   let touchDragIdx = null;
@@ -144,7 +143,7 @@ function initCatalogDragDrop() {
       touchClone.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0.8;width:' + row.offsetWidth + 'px;transform:scale(0.95);box-shadow:0 8px 24px rgba(0,0,0,0.2);left:' + row.getBoundingClientRect().left + 'px;top:' + (e.touches[0].clientY - 20) + 'px';
       document.body.appendChild(touchClone);
     }, 300);
-  }, { passive: true });
+  }, { passive: true, signal });
 
   list.addEventListener('touchmove', e => {
     if (touchDragIdx == null) {
@@ -159,7 +158,7 @@ function initCatalogDragDrop() {
       const target = el.closest('.catalog-row');
       if (target && parseInt(target.dataset.idx) !== touchDragIdx) target.classList.add('drag-over');
     }
-  }, { passive: false });
+  }, { passive: false, signal });
 
   list.addEventListener('touchend', e => {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
@@ -174,7 +173,7 @@ function initCatalogDragDrop() {
       }
     }
     touchDragIdx = null;
-  });
+  }, { signal });
 }
 
 function applyCatalogDrop(fromIdx, toIdx) {
@@ -460,10 +459,12 @@ async function resetOrdersAndDebts() {
   cacheSet('debts', {});
   cacheSet('debt_history', {});
 
-  // Clear from Supabase (delete all rows — use broad filter per table PK)
+  appAlert('Orders and debts cleared successfully.');
+  renderSettings();
+
+  // Supabase cleanup in background
   try {
     if (typeof SB_URL !== 'undefined' && SB_URL) {
-      // order_items & debt_history have serial id PK; orders has text id PK; debts has customer_id PK
       const deletes = [
         ['order_items', 'id=gt.0'],
         ['debt_history', 'id=gt.0'],
@@ -471,21 +472,17 @@ async function resetOrdersAndDebts() {
         ['debts', 'customer_id=gt.0']
       ];
       for (const [table, filter] of deletes) {
-        await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+        fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
           method: 'DELETE', headers: DB_HEADERS
         }).catch(() => {});
       }
-      // Also clear legacy cr4_store keys for debts/orders
       for (const key of ['debts', 'debtHistory', 'ordersV2', 'orders']) {
-        await fetch(`${SB_URL}/rest/v1/cr4_store?key=eq.${key}`, {
+        fetch(`${SB_URL}/rest/v1/cr4_store?key=eq.${key}`, {
           method: 'DELETE', headers: DB_HEADERS
         }).catch(() => {});
       }
     }
   } catch (e) { console.error('resetOrdersAndDebts Supabase cleanup error:', e); }
-
-  appAlert('Orders and debts cleared successfully.');
-  renderSettings();
 }
 
 async function resetAllData() {

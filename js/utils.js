@@ -5,6 +5,15 @@
 
 function uid() { return 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
+function debounce(fn, ms) {
+  let timer;
+  return function() {
+    const args = arguments;
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), ms);
+  };
+}
+
 function repairDebtHistoryTypes(dhMap) {
   if (!dhMap || typeof dhMap !== 'object') return {};
   Object.keys(dhMap).forEach(cid => {

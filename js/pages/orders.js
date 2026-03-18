@@ -1,4 +1,7 @@
 'use strict';
+const _debouncedOrderSearch = debounce(() => renderOrderResults(), 300);
+const _debouncedProductFilter = debounce((q) => filterProductPicker(q), 200);
+const _debouncedCustomerFilter = debounce((q) => filterCPicker(q), 200);
 
 function renderOrders(fullRender) {
   const isSearchUpdate = !fullRender && document.getElementById('orders-results');
@@ -14,7 +17,7 @@ function renderOrders(fullRender) {
       <div class="page-body">
         <div class="search-bar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" placeholder="Search customer..." value="${escHtml(S.ordersSearch)}" oninput="S.ordersSearch=this.value;renderOrderResults()">
+          <input type="text" placeholder="Search customer..." value="${escHtml(S.ordersSearch)}" oninput="S.ordersSearch=this.value;_debouncedOrderSearch()">
         </div>
         <div class="chip-group">
           <button class="chip ${S.ordersFilter==='pending'?'active':''}" onclick="S.ordersFilter='pending';renderOrders(true)">Pending</button>
@@ -48,12 +51,14 @@ function renderOrderResults() {
   if (S.ordersFilter === 'pending') {
     // Pending: locked orders first (in their saved order), then unlocked by date
     const locked = S.ordersLockedOrders || [];
+    const orderMap = new Map(orders.map(o => [o.id, o]));
+    const lockedSet = new Set(locked);
     const lockedOrders = [];
     locked.forEach(id => {
-      const o = orders.find(x => x.id === id);
+      const o = orderMap.get(id);
       if (o) lockedOrders.push(o);
     });
-    const unlockedOrders = orders.filter(o => !locked.includes(o.id));
+    const unlockedOrders = orders.filter(o => !lockedSet.has(o.id));
     unlockedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     orders = [...lockedOrders, ...unlockedOrders];
   } else if (S.ordersFilter === 'delivered') {
@@ -145,18 +150,16 @@ function toggleOrderLock(orderId) {
   renderOrderResults();
 }
 
+let _orderDragAbort = null;
 function initOrderDragDrop() {
   const list = document.getElementById('orders-drag-list');
   if (!list) return;
 
-  // Remove old listeners by replacing the node (clears all event listeners)
-  if (list._dragInitialized) {
-    const fresh = list.cloneNode(true);
-    list.parentNode.replaceChild(fresh, list);
-    return initOrderDragDrop(); // Re-init with fresh node
-  }
+  // Abort previous listeners cleanly
+  if (_orderDragAbort) _orderDragAbort.abort();
+  _orderDragAbort = new AbortController();
+  const signal = _orderDragAbort.signal;
 
-  list._dragInitialized = true;
   let draggedId = null;
 
   list.addEventListener('dragstart', e => {
@@ -165,14 +168,14 @@ function initOrderDragDrop() {
     draggedId = card.dataset.orderId;
     card.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
-  });
+  }, { signal });
 
   list.addEventListener('dragend', e => {
     const card = e.target.closest('.draggable-order');
     if (card) card.classList.remove('dragging');
     list.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
     draggedId = null;
-  });
+  }, { signal });
 
   list.addEventListener('dragover', e => {
     e.preventDefault();
@@ -182,7 +185,7 @@ function initOrderDragDrop() {
     if (target && target.dataset.orderId !== draggedId) {
       target.classList.add('drag-over');
     }
-  });
+  }, { signal });
 
   list.addEventListener('drop', e => {
     e.preventDefault();
@@ -191,11 +194,8 @@ function initOrderDragDrop() {
     const targetId = target.dataset.orderId;
     if (!S.orders[draggedId] || !S.orders[targetId]) return;
 
-    // Build new locked order: insert dragged before target
     const locked = S.ordersLockedOrders || [];
-    // Remove dragged from locked if present
     const filteredLocked = locked.filter(id => id !== draggedId);
-    // Find target position - if target is locked, insert before it in locked array
     const targetIdx = filteredLocked.indexOf(targetId);
     if (targetIdx >= 0) {
       filteredLocked.splice(targetIdx, 0, draggedId);
@@ -205,7 +205,7 @@ function initOrderDragDrop() {
     S.ordersLockedOrders = filteredLocked;
     cacheSet('setting_ordersLockedOrders', filteredLocked);
     renderOrderResults();
-  });
+  }, { signal });
 
   // Touch drag support
   let touchDragId = null;
@@ -221,12 +221,11 @@ function initOrderDragDrop() {
     longPressTimer = setTimeout(() => {
       touchDragId = card.dataset.orderId;
       card.classList.add('dragging');
-      // Create visual clone
       touchClone = card.cloneNode(true);
       touchClone.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0.8;width:' + card.offsetWidth + 'px;transform:scale(0.95);box-shadow:0 8px 24px rgba(0,0,0,0.2);left:' + card.getBoundingClientRect().left + 'px;top:' + (e.touches[0].clientY - 30) + 'px';
       document.body.appendChild(touchClone);
     }, 300);
-  }, { passive: true });
+  }, { passive: true, signal });
 
   list.addEventListener('touchmove', e => {
     if (!touchDragId) {
@@ -241,7 +240,7 @@ function initOrderDragDrop() {
       const target = el.closest('.draggable-order');
       if (target && target.dataset.orderId !== touchDragId) target.classList.add('drag-over');
     }
-  }, { passive: false });
+  }, { passive: false, signal });
 
   list.addEventListener('touchend', e => {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
@@ -269,7 +268,7 @@ function initOrderDragDrop() {
       }
     }
     touchDragId = null;
-  });
+  }, { signal });
 }
 
 function quickReorder(customerId, lastOrderId) {
@@ -447,7 +446,7 @@ function openProductPicker() {
     <div class="ppick-header">
       <button class="btn-ghost" onclick="closeProductPicker()" style="font-size:20px;padding:4px">&larr;</button>
       <input type="text" id="ppick-search" placeholder="Search product..." autofocus
-             oninput="filterProductPicker(this.value)">
+             oninput="_debouncedProductFilter(this.value)">
     </div>
     <div class="ppick-list" id="ppick-list"></div>
     <div style="padding:12px 16px calc(12px + var(--safe-b));background:var(--card);border-top:1px solid var(--border)">
@@ -529,7 +528,7 @@ function openCustomerPicker() {
     <div class="cpick-header">
       <button class="btn-ghost" onclick="closeCustomerPicker()" style="font-size:20px;padding:4px">&larr;</button>
       <input type="text" id="cpick-search" placeholder="Search customer..." autofocus
-             oninput="filterCPicker(this.value)">
+             oninput="_debouncedCustomerFilter(this.value)">
     </div>
     <div class="cpick-list" id="cpick-list"></div>
   `;

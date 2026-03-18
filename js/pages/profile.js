@@ -462,7 +462,7 @@ function showEditCustomerModal() {
   `);
 }
 
-async function saveEditCustomer() {
+function saveEditCustomer() {
   const stop = getStop(profileStopId);
   if (!stop) return;
   const previousAddressKey = getStopAddressKey(stop);
@@ -474,13 +474,13 @@ async function saveEditCustomer() {
   stop.ph = document.getElementById('edit-cust-ph').value.trim();
   stop.em = document.getElementById('edit-cust-em').value.trim();
   save.stops();
-  await DB.saveCustomer({id: stop.id, name: stop.n, address: stop.a, city: stop.c, postcode: stop.p, note: S.cnotes[stop.id] || '', lat: (S.geo[stop.id]&&S.geo[stop.id].lat)||null, lng: (S.geo[stop.id]&&S.geo[stop.id].lng)||null});
-  if (previousAddressKey !== getStopAddressKey(stop)) {
-    await geocodeStop(stop, { force: true });
-    if (leafletMap) refreshMapMarkers();
-  }
   closeModal();
   renderProfile();
+  // Supabase sync in background — no await so UI stays fast
+  DB.saveCustomer({id: stop.id, name: stop.n, address: stop.a, city: stop.c, postcode: stop.p, note: S.cnotes[stop.id] || '', lat: (S.geo[stop.id]&&S.geo[stop.id].lat)||null, lng: (S.geo[stop.id]&&S.geo[stop.id].lng)||null});
+  if (previousAddressKey !== getStopAddressKey(stop)) {
+    geocodeStop(stop, { force: true }).then(() => { if (leafletMap) refreshMapMarkers(); });
+  }
 }
 
 async function deleteCustomer() {
@@ -498,9 +498,9 @@ async function deleteCustomer() {
   delete S.assign[profileStopId];
   save.stops();
   save.assign();
-  await DB.deleteCustomer(profileStopId);
   closeModal();
   showPage('customers');
+  DB.deleteCustomer(profileStopId);
 }
 
 // ══════════════════════════════════════════════════════════════

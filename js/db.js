@@ -210,22 +210,30 @@ async function flushOfflineQueue() {
 window.addEventListener('online', flushOfflineQueue);
 
 // Retry offline queue periodically in case flush was skipped (e.g., isSyncing was true)
-setInterval(() => {
+const _offlineQueueInterval = setInterval(() => {
   if (navigator.onLine && offlineQueue.length > 0) flushOfflineQueue();
 }, 30000);
 
 // ── localStorage Cache ─────────────────────────────────────
 
 const CACHE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes staleness threshold
+const _memCache = {}; // In-memory cache to avoid repeated JSON.parse
 
 function cacheGet(key, fallback) {
+  if (_memCache.hasOwnProperty(key)) return _memCache[key];
   try {
     const v = localStorage.getItem('cr5_' + key);
-    return v !== null ? JSON.parse(v) : fallback;
+    if (v !== null) {
+      const parsed = JSON.parse(v);
+      _memCache[key] = parsed;
+      return parsed;
+    }
+    return fallback;
   } catch { return fallback; }
 }
 
 function cacheSet(key, value) {
+  _memCache[key] = value;
   try {
     localStorage.setItem('cr5_' + key, JSON.stringify(value));
     localStorage.setItem('cr5_ts_' + key, Date.now().toString());
