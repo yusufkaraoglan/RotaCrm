@@ -22,6 +22,7 @@ let _dbReady = true;
 // Stores pending operations when offline
 const offlineQueue = [];
 let isSyncing = false;
+let _isFlushing = false; // prevents re-enqueue during flush
 
 // ── Low-level REST helpers ─────────────────────────────────
 
@@ -81,10 +82,10 @@ async function dbInsert(table, data, opts = {}) {
     if (opts.returnData) return await r.json();
     return true;
   } catch (e) {
-    if (typeof dbLog === 'function') dbLog(`INSERT ${table}: ${e.message}`);
+    if (typeof dbLog === 'function') dbLog(`INSERT ${table} FAILED: ${e.message}`);
     else console.error(`dbInsert ${table}:`, e.message);
-    // Queue for retry whether online or offline — write failed either way
-    offlineQueue.push({ action: 'insert', table, data, opts });
+    // Queue for retry — but not if we're already retrying from the queue
+    if (!_isFlushing) offlineQueue.push({ action: 'insert', table, data, opts });
     return null;
   }
 }
@@ -107,7 +108,7 @@ async function dbUpdate(table, match, data) {
   } catch (e) {
     if (typeof dbLog === 'function') dbLog(`UPDATE ${table} FAILED: ${e.message}`);
     else console.error(`dbUpdate ${table} FAILED:`, e.message);
-    offlineQueue.push({ action: 'update', table, match, data });
+    if (!_isFlushing) offlineQueue.push({ action: 'update', table, match, data });
     return null;
   }
 }
@@ -129,7 +130,7 @@ async function dbDelete(table, match) {
   } catch (e) {
     if (typeof dbLog === 'function') dbLog(`DELETE ${table} FAILED: ${e.message}`);
     else console.error(`dbDelete ${table} FAILED:`, e.message);
-    offlineQueue.push({ action: 'delete', table, match });
+    if (!_isFlushing) offlineQueue.push({ action: 'delete', table, match });
     return null;
   }
 }
@@ -143,6 +144,7 @@ async function dbUpsert(table, data) {
 async function flushOfflineQueue() {
   if (isSyncing || offlineQueue.length === 0 || !navigator.onLine) return;
   isSyncing = true;
+  _isFlushing = true;
   try {
     let retries = 0;
     while (offlineQueue.length > 0) {
@@ -166,7 +168,8 @@ async function flushOfflineQueue() {
       }
     }
   } finally {
-    isSyncing = false; // Always reset even if loop breaks unexpectedly
+    _isFlushing = false;
+    isSyncing = false;
   }
 }
 

@@ -121,8 +121,6 @@ async function loadStateFromDB() {
     );
     await Promise.allSettled(lockPromises);
   }
-
-  initUIState();
 }
 
 function initUIState() {
@@ -520,7 +518,7 @@ async function init() {
   let _syncInProgress = false;
   let _lastSyncHash = '';
   const doSync = async () => {
-    if (!_dbReady || _syncInProgress || _savePending > 0) return;
+    if (!_dbReady || _syncInProgress || _savePending > 0 || offlineQueue.length > 0) return;
     _syncInProgress = true;
     try {
       const ok = await syncAll();
