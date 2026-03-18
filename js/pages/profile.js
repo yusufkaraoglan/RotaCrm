@@ -85,7 +85,7 @@ function renderProfile() {
         <div class="debt-actions">
           <button class="btn btn-outline btn-sm" onclick="showAddDebtModal()">Add Debt</button>
           <button class="btn btn-success btn-sm" onclick="showClearDebtModal()" ${debt <= 0 ? 'disabled' : ''}>Collect Debt</button>
-          <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="removeAllDebt()" ${debt <= 0 ? 'disabled' : ''}>Clear Debt</button>
+          <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="removeAllDebt()" ${debt <= 0 ? 'disabled' : ''}>Write Off</button>
         </div>
       </div>
 
@@ -193,6 +193,7 @@ function renderProfile() {
   if (activity.length === 0) {
     html += `<p class="text-muted" style="font-size:13px;padding:8px 0">No activity yet</p>`;
   }
+  let _debtOwesShown = false; // Show "Owes" + "Collect Payment" only on the first (newest) entry
   activity.slice(0, 30).forEach(a => {
     if (a.type === 'order') {
       const o = a.order;
@@ -200,6 +201,8 @@ function renderProfile() {
       const badgeClass = a.isVisit ? 'badge-purple' : 'badge-success';
       const hasUnpaidDebt = (o.payMethod === 'unpaid' || (o.payMethod === 'cash' && o.cashPaid !== undefined && o.cashPaid < a.total)) && a.total > 0;
       const debtAmount = getOrderDebtImpact(o);
+      const showOwes = hasUnpaidDebt && debtAmount > 0 && !_debtOwesShown;
+      if (showOwes) _debtOwesShown = true;
       html += `
         <div class="card" style="padding:10px;margin-bottom:6px">
           <div class="flex-between">
@@ -212,10 +215,10 @@ function renderProfile() {
             ${o.items.length > 0 ? `<span style="font-size:14px;font-weight:600">${formatCurrency(a.total)}</span>` : '<span></span>'}
             <span style="font-size:12px;color:${a.payColor}">${a.payIcon}${a.payStatus}</span>
           </div>
-          ${hasUnpaidDebt && debtAmount > 0 ? `
+          ${showOwes ? `
           <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);display:flex;align-items:center;justify-content:space-between">
             <span style="font-size:12px;color:var(--danger)">Owes ${formatCurrency(debtAmount)}</span>
-            <button class="btn btn-success btn-sm" style="font-size:11px;padding:3px 10px" onclick="showCollectOrderPayment('${o.id}')">Collect Payment</button>
+            <button class="btn btn-success btn-sm" style="font-size:11px;padding:3px 10px" data-id="${escHtml(o.id)}" onclick="showCollectOrderPayment(this.dataset.id)">Collect Payment</button>
           </div>` : ''}
           ${a.debtEntries.filter(e => e.type === 'clear').length > 0 ? a.debtEntries.filter(e => e.type === 'clear').map(e => `
           <div style="margin-top:4px;padding:4px 8px;background:var(--success-light);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center">
@@ -223,8 +226,8 @@ function renderProfile() {
             <span style="font-size:12px;font-weight:600;color:var(--success)">-${formatCurrency(e.amount)}</span>
           </div>`).join('') : ''}
           <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px">
-            <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDeliveredOrderModal('${o.id}')">Edit</button>
-            <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="deleteOrder('${o.id}')">Delete</button>
+            <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" data-id="${escHtml(o.id)}" onclick="showEditDeliveredOrderModal(this.dataset.id)">Edit</button>
+            <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" data-id="${escHtml(o.id)}" onclick="deleteOrder(this.dataset.id)">Delete</button>
           </div>
         </div>`;
     } else if (a.type === 'payment') {
@@ -238,21 +241,23 @@ function renderProfile() {
           <div class="flex-between" style="margin-top:4px">
             <div class="text-muted" style="font-size:11px">${formatDateTime(e.date)}</div>
             <div style="display:flex;gap:6px">
-              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDebtHistoryModal(${stop.id},${e._idx})">Edit</button>
-              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="removeDebtHistory(${stop.id},${e._idx})">Remove</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},${e._idx}))">Edit</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="btnLock(()=>removeDebtHistory(${stop.id},${e._idx}))">Remove</button>
             </div>
           </div>
         </div>`;
     } else if (a.type === 'debt') {
       const e = a.entry;
       const customerDebt = S.debts[stop.id] || 0;
+      const showDebtOwes = customerDebt > 0 && !_debtOwesShown;
+      if (showDebtOwes) _debtOwesShown = true;
       html += `
         <div class="card" style="padding:10px;margin-bottom:6px;border-left:3px solid var(--danger)">
           <div class="flex-between">
             <span style="font-size:13px">${escHtml(e.note || 'Debt added')}</span>
             <span style="font-size:13px;font-weight:600;color:var(--danger)">+${formatCurrency(e.amount)}</span>
           </div>
-          ${customerDebt > 0 ? `
+          ${showDebtOwes ? `
           <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);display:flex;align-items:center;justify-content:space-between">
             <span style="font-size:12px;color:var(--danger)">Owes ${formatCurrency(customerDebt)}</span>
             <button class="btn btn-success btn-sm" style="font-size:11px;padding:3px 10px" onclick="showClearDebtModal()">Collect Payment</button>
@@ -260,8 +265,8 @@ function renderProfile() {
           <div class="flex-between" style="margin-top:4px">
             <div class="text-muted" style="font-size:11px">${formatDateTime(e.date)}</div>
             <div style="display:flex;gap:6px">
-              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="showEditDebtHistoryModal(${stop.id},${e._idx})">Edit</button>
-              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="removeDebtHistory(${stop.id},${e._idx})">Remove</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},${e._idx}))">Edit</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="btnLock(()=>removeDebtHistory(${stop.id},${e._idx}))">Remove</button>
             </div>
           </div>
         </div>`;
@@ -786,7 +791,7 @@ function showAddDebtModal() {
     <div class="modal-title">Add Debt</div>
     <div class="form-group">
       <label class="form-label">Amount</label>
-      <input class="input" type="number" step="0.01" id="debt-amount" placeholder="0.00">
+      <input class="input" type="number" step="0.01" min="0" id="debt-amount" placeholder="0.00">
     </div>
     <div class="form-group">
       <label class="form-label">Date & Time</label>
