@@ -16,7 +16,7 @@ function renderProfile() {
   const dayId = S.assign[stop.id];
   const dayObj = dayId ? getDayObj(dayId) : null;
   const pending = getStopOrders(stop.id, 'pending');
-  const delivered = getStopOrders(stop.id, 'delivered').sort((a, b) => (b.deliveredAt || '').localeCompare(a.deliveredAt || ''));
+  const delivered = getStopOrders(stop.id, 'delivered').sort((a, b) => new Date(b.deliveredAt || 0) - new Date(a.deliveredAt || 0));
   const recentDelivered = delivered.slice(0, 20);
   const debt = S.debts[stop.id] || 0;
   const note = S.cnotes[stop.id] || '';
@@ -192,13 +192,13 @@ function renderProfile() {
     });
   });
 
-  // Sort newest first, then by type priority for same-millisecond entries
-  const _typePriority = { order: 0, debt: 1, writeoff: 2, payment: 3 };
+  // Sort newest first with full millisecond precision
+  activity.forEach((a, i) => { a._idx = i; });
   activity.sort((a, b) => {
     const da = a.date ? new Date(a.date).getTime() : 0;
     const db = b.date ? new Date(b.date).getTime() : 0;
     if (db !== da) return db - da;
-    return (_typePriority[a.type] || 9) - (_typePriority[b.type] || 9);
+    return b._idx - a._idx; // same ms: later-added entry is newer
   });
 
   html += `<div class="section-head"><h3>Activity</h3></div>`;
