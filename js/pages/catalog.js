@@ -415,7 +415,7 @@ function addCatalogItem() {
   const unit = document.getElementById('cat-unit').value.trim();
   const price = parseFloat(document.getElementById('cat-price').value) || 0;
   const stockVal = document.getElementById('cat-stock').value;
-  const stock = stockVal !== '' ? parseInt(stockVal) : null;
+  const stock = stockVal !== '' ? Math.max(0, parseInt(stockVal) || 0) : null;
   const noStock = document.getElementById('cat-nostock')?.checked;
   if (!name) { appAlert('Product name is required.'); return; }
   if (S.catalog.some(c => c.name === name)) { appAlert('This product already exists.'); return; }
@@ -460,7 +460,7 @@ async function resetOrdersAndDebts() {
   const tables = [
     ['order_items', 'id=gt.0'],
     ['debt_history', 'id=gt.0'],
-    ['orders', 'id=neq.___none___'],
+    ['orders', 'id=not.is.null'],
     ['debts', 'customer_id=gt.0']
   ];
   for (const [table, filter] of tables) {

@@ -235,11 +235,12 @@ function getStopOrders(stopId, status) {
 
 function calcOrderTotal(order) {
   if (!order || !order.items) return 0;
-  return order.items.reduce((s, i) => s + (i.qty || 0) * (i.price || 0), 0);
+  return order.items.reduce((s, i) => s + (parseInt(i.qty) || 0) * (parseFloat(i.price) || 0), 0);
 }
 
 function roundMoney(n) {
-  return Math.round((n || 0) * 100) / 100;
+  const v = parseFloat(n);
+  return Math.round((isNaN(v) ? 0 : v) * 100) / 100;
 }
 
 function getTrackedCatalogItem(name) {

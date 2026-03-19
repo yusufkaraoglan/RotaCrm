@@ -260,7 +260,9 @@ function _fetchOrCache(cacheKey, fallback, fetchFn, transformFn) {
     const data = transformFn ? transformFn(rows) : rows;
     const isEmpty = Array.isArray(data) ? data.length === 0 : Object.keys(data).length === 0;
     const hasCached = cached && (Array.isArray(cached) ? cached.length > 0 : Object.keys(cached).length > 0);
-    if (isEmpty && hasCached) return cached; // don't overwrite local data with empty
+    // If local cache was explicitly set to empty (e.g. by reset), trust it
+    const cacheIsEmpty = cached && (Array.isArray(cached) ? cached.length === 0 : Object.keys(cached).length === 0);
+    if (isEmpty && hasCached && !cacheIsEmpty) return cached;
     cacheSet(cacheKey, data);
     return data;
   };

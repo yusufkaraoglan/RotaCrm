@@ -60,7 +60,7 @@ function refreshMapMarkers() {
 
   STOPS.forEach(stop => {
     const geo = S.geo[stop.id];
-    if (!geo || !geo.lat || !geo.lng) return;
+    if (!geo || geo.lat == null || geo.lng == null || isNaN(geo.lat) || isNaN(geo.lng)) return;
 
     const dayId = S.assign[stop.id];
     const dayObj = dayId ? getDayObj(dayId) : null;

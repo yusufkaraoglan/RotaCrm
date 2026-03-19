@@ -407,7 +407,7 @@ function calcReportData() {
 
   if (S.reportProducts.length > 0) {
     filtered = filtered.filter(o =>
-      o.items.some(item => S.reportProducts.includes(item.name))
+      (o.items || []).some(item => S.reportProducts.includes(item.name))
     );
   }
 
@@ -419,7 +419,7 @@ function calcReportData() {
 
   const products = {};
   filtered.forEach(o => {
-    o.items.forEach(item => {
+    (o.items || []).forEach(item => {
       if (S.reportProducts.length > 0 && !S.reportProducts.includes(item.name)) return;
       if (!products[item.name]) products[item.name] = { qty: 0, revenue: 0 };
       products[item.name].qty += item.qty;
@@ -467,7 +467,7 @@ function calcProductSalesReport() {
     const d = o.deliveredAt.slice(0, 10);
     if (S.reportStart && d < S.reportStart) return false;
     if (S.reportEnd && d > S.reportEnd) return false;
-    return o.items.some(item => S.reportProducts.includes(item.name));
+    return (o.items || []).some(item => S.reportProducts.includes(item.name));
   });
 
   filtered.sort((a, b) => (a.deliveredAt || '').localeCompare(b.deliveredAt || ''));
@@ -481,7 +481,7 @@ function calcProductSalesReport() {
 
     const total = calcOrderTotal(o);
     const prodMap = {};
-    o.items.forEach(item => {
+    (o.items || []).forEach(item => {
       if (S.reportProducts.includes(item.name)) {
         prodMap[item.name] = (prodMap[item.name] || 0) + item.qty;
       }
@@ -769,7 +769,7 @@ function renderDeliveryHistoryContent() {
           const dayName = dt.toLocaleDateString('en-GB', { weekday: 'short' });
           const time = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
           html += `<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-sec);padding:2px 0">
-            <span>${dayName} ${time} — ${isVisit ? 'Visit' : o.items.map(i => i.qty + 'x ' + i.name).join(', ')}</span>
+            <span>${dayName} ${time} — ${isVisit ? 'Visit' : (o.items || []).map(i => i.qty + 'x ' + i.name).join(', ')}</span>
             <span>${isVisit ? '' : (o.payMethod || '')}</span>
           </div>`;
         });

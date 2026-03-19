@@ -899,7 +899,7 @@ async function clearOrderDebt(orderId) {
       delete o.cashPaid;
     }
     reconcileOrderDebtEffect(prevOrder, o);
-    save.orders([o.id]);
+    await save.orders([o.id]);
   } else {
     // Partial payment: reduce debt balance and add history entry
     S.debts[profileStopId] = Math.max(0, roundMoney((S.debts[profileStopId] || 0) - amount));

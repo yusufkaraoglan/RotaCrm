@@ -503,7 +503,7 @@ function showDeliveryModal(stopId, singleOrderId) {
             </div>
           </div>
         </div>
-        <button class="btn btn-success btn-block mt-2" onclick="confirmVisitWithPayment()" id="btn-confirm-visit-pay" disabled>
+        <button class="btn btn-success btn-block mt-2" onclick="btnLock(confirmVisitWithPayment)" id="btn-confirm-visit-pay" disabled>
           Collect Payment & Mark as Visited
         </button>`;
     }
@@ -513,7 +513,7 @@ function showDeliveryModal(stopId, singleOrderId) {
         <label class="form-label">Visit Note (optional)</label>
         <textarea class="textarea" id="visit-note" rows="2" style="min-height:50px" placeholder="Add a note..."></textarea>
       </div>
-      <button class="btn ${debt > 0 ? 'btn-outline' : 'btn-success'} btn-block mt-1" onclick="confirmVisitOnly()">
+      <button class="btn ${debt > 0 ? 'btn-outline' : 'btn-success'} btn-block mt-1" onclick="btnLock(confirmVisitOnly)">
         ${debt > 0 ? 'Mark as Visited (No Payment)' : 'Mark as Visited'}
       </button>`;
 
@@ -557,7 +557,7 @@ function showDeliveryModal(stopId, singleOrderId) {
         <label class="form-label">Delivery Note (optional)</label>
         <textarea class="textarea" id="delivery-note" rows="2" placeholder="Add a note..." style="width:100%;font-size:14px;padding:8px;border:1px solid var(--border);border-radius:8px;resize:vertical"></textarea>
       </div>
-      <button class="btn btn-success btn-block mt-2" id="btn-confirm-delivery" style="opacity:0.5" onclick="confirmDelivery()">
+      <button class="btn btn-success btn-block mt-2" id="btn-confirm-delivery" style="opacity:0.5" onclick="btnLock(confirmDelivery)">
         Confirm Delivery
       </button>
     `);
