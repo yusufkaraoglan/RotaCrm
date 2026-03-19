@@ -566,6 +566,19 @@ const DB = {
     return fallback;
   },
 
+  // Bulk-load ALL settings in one request (used at init to avoid N+1 queries)
+  async getAllSettings() {
+    const rows = await dbSelect('app_settings', 'select=key,value');
+    const map = {};
+    if (rows) {
+      rows.forEach(r => {
+        map[r.key] = r.value;
+        cacheSet('setting_' + r.key, r.value);
+      });
+    }
+    return map;
+  },
+
   async setSetting(key, value) {
     await dbUpsert('app_settings', {
       key, value, updated_at: new Date().toISOString()

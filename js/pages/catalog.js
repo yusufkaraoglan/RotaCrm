@@ -342,50 +342,6 @@ function updateStockPreview(idx) {
   }
 }
 
-function catalogModalAdjustStock(idx, delta) {
-  const input = document.getElementById('cat-edit-stock-' + idx);
-  if (!input) return;
-  const cur = parseInt(input.value) || 0;
-  input.value = Math.max(0, cur + delta);
-}
-
-function adjustStock(idx, delta) {
-  if (!S.catalog[idx]) return;
-  const cur = S.catalog[idx].stock;
-  if (cur == null) {
-    S.catalog[idx].stock = Math.max(0, delta);
-  } else {
-    S.catalog[idx].stock = Math.max(0, cur + delta);
-  }
-  save.catalog();
-  renderCatalog();
-}
-
-function addToStock(idx) {
-  if (!S.catalog[idx]) return;
-  const input = document.getElementById('cat-stock-add-' + idx);
-  if (!input) return;
-  const val = parseInt(input.value);
-  if (!val || val <= 0) return;
-  const cur = S.catalog[idx].stock;
-  S.catalog[idx].stock = (cur != null ? cur : 0) + val;
-  save.catalog();
-  input.value = '';
-  renderCatalog();
-}
-
-function setStock(idx, val) {
-  if (!S.catalog[idx]) return;
-  const trimmed = (val + '').trim();
-  if (trimmed === '') { S.catalog[idx].stock = null; }
-  else { S.catalog[idx].stock = Math.max(0, parseInt(trimmed) || 0); }
-  save.catalog();
-}
-
-function toggleCatalogEdit(idx) {
-  showEditProductModal(idx);
-}
-
 function saveCatalogEdit(idx) {
   const name = document.getElementById('cat-edit-name-' + idx).value.trim();
   const unit = document.getElementById('cat-edit-unit-' + idx).value.trim();
@@ -578,56 +534,6 @@ async function resetAllData() {
 // ══════════════════════════════════════════════════════════════
 // RECURRING ORDERS
 // ══════════════════════════════════════════════════════════════
-function showRecurringModal(stopId) {
-  const stop = getStop(stopId);
-  if (!stop) return;
-  const existing = S.recurringOrders[stopId];
-  if (existing) {
-    openModal(`
-      <div class="modal-handle"></div>
-      <div class="modal-title">Recurring Order — ${escHtml(stop.n)}</div>
-      <div style="margin-bottom:12px">
-        <div style="font-size:13px;font-weight:600;color:var(--text-sec);margin-bottom:8px">Current Recurring Order:</div>
-        ${existing.items.map(i => `<div style="padding:4px 0;font-size:14px">${i.qty}x ${escHtml(i.name)} — ${formatCurrency(i.price * i.qty)}</div>`).join('')}
-        <div style="font-weight:700;padding-top:4px;font-size:15px">Total: ${formatCurrency(existing.items.reduce((s, i) => s + i.qty * i.price, 0))}</div>
-      </div>
-      <button class="btn btn-primary btn-block" onclick="createRecurringFromLast(${stopId})">Update (From Last Order)</button>
-      <button class="btn btn-danger btn-block mt-1" onclick="removeRecurring(${stopId})">Remove Recurring Order</button>
-    `);
-  } else {
-    openModal(`
-      <div class="modal-handle"></div>
-      <div class="modal-title">Recurring Order — ${escHtml(stop.n)}</div>
-      <p class="text-muted" style="font-size:13px;margin-bottom:12px">Create an automatic recurring order for this customer. Orders will be created on their assigned route day.</p>
-      <button class="btn btn-primary btn-block" onclick="createRecurringFromLast(${stopId})">Create from Last Order</button>
-    `);
-  }
-}
-
-function createRecurringFromLast(stopId) {
-  const delivered = getStopOrders(stopId, 'delivered').filter(o => o.items && o.items.length > 0)
-    .sort((a, b) => new Date(b.deliveredAt) - new Date(a.deliveredAt));
-  if (delivered.length === 0) {
-    const pending = getStopOrders(stopId, 'pending').filter(o => o.items && o.items.length > 0);
-    if (pending.length === 0) { appAlert('This customer has no orders yet.'); return; }
-    S.recurringOrders[stopId] = { items: pending[0].items.map(i => ({ name: i.name, qty: i.qty, price: i.price })) };
-  } else {
-    S.recurringOrders[stopId] = { items: delivered[0].items.map(i => ({ name: i.name, qty: i.qty, price: i.price })) };
-  }
-  save.recurringOrders();
-  closeModal();
-  appAlert('Recurring order saved.');
-  if (curPage === 'profile') renderProfile();
-}
-
-function removeRecurring(stopId) {
-  delete S.recurringOrders[stopId];
-  save.recurringOrders();
-  closeModal();
-  appAlert('Recurring order removed.');
-  if (curPage === 'profile') renderProfile();
-}
-
 async function autoCreateRecurringOrders() {
   const week = getCurrentWeek();
   const dayIdx = getTodayDayIndex();

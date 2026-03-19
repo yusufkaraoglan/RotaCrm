@@ -5,8 +5,6 @@
 
 // ── Constants ──────────────────────────────────────────────
 
-const STOPS_DEFAULT = [];  // Will be populated from DB
-
 const DAYS = [
   {id:'wA0',label:'Monday',   week:'A',color:'#E85D3A',ci:0},
   {id:'wA1',label:'Tuesday',  week:'A',color:'#F0A500',ci:1},
@@ -53,6 +51,8 @@ function btnLock(fn) {
 // ── Load state from Supabase ──────────────────────────────
 
 async function loadStateFromDB() {
+  // Fetch all entities + all settings in ONE parallel batch
+  // (previously 4 sequential phases with 26 HTTP requests, now 10 in 1 phase)
   const results = await Promise.allSettled([
     DB.getCustomers(),
     DB.getProducts(),
@@ -62,12 +62,14 @@ async function loadStateFromDB() {
     DB.getDebts(),
     DB.getDebtHistory(),
     DB.getCustomerPricing(),
-    DB.getRecurringOrders()
+    DB.getRecurringOrders(),
+    DB.getAllSettings()
   ]);
   const [customers, products, assignments, routeOrder, orders,
-         debts, debtHistory, pricing, recurring] = results.map(r =>
+         debts, debtHistory, pricing, recurring, allSettings] = results.map(r =>
     r.status === 'fulfilled' ? r.value : null
   );
+  const settings = allSettings || {};
 
   // Map customers to STOPS format for backward compat
   STOPS = (customers || []).map(c => ({
@@ -96,30 +98,19 @@ async function loadStateFromDB() {
   S.customerPricing = pricing || {};
   S.recurringOrders = recurring || {};
 
-  // Load settings stored in app_settings table
-  const [customerProducts, brands, brandList, ordersLockedOrders, savedLastPage, savedLastProfileId] = await Promise.all([
-    DB.getSetting('customer_products', {}),
-    DB.getSetting('customer_brands', {}),
-    DB.getSetting('brand_list', []),
-    DB.getSetting('ordersLockedOrders', []),
-    DB.getSetting('lastPage', 'route'),
-    DB.getSetting('lastProfileId', null)
-  ]);
-  S.customerProducts = customerProducts || {};
-  S.brands = brands || {};
-  S.brandList = brandList || [];
-  S.ordersLockedOrders = ordersLockedOrders || [];
-  cacheSet('_lastPage', savedLastPage || 'route');
-  cacheSet('_lastProfileId', savedLastProfileId);
+  // Apply settings from bulk load (no extra HTTP requests)
+  S.customerProducts = settings.customer_products || {};
+  S.brands = settings.customer_brands || {};
+  S.brandList = settings.brand_list || [];
+  S.ordersLockedOrders = settings.ordersLockedOrders || [];
+  cacheSet('_lastPage', settings.lastPage || 'route');
+  cacheSet('_lastProfileId', settings.lastProfileId || null);
 
-  // Load route locked stops for all days
+  // Apply route locked stops from bulk settings
   if (typeof _routeLockedCache !== 'undefined') {
-    const lockPromises = DAYS.map(d =>
-      DB.getSetting('routeLockedStops_' + d.id, []).then(v => {
-        _routeLockedCache[d.id] = v || [];
-      }).catch(() => {})
-    );
-    await Promise.allSettled(lockPromises);
+    DAYS.forEach(d => {
+      _routeLockedCache[d.id] = settings['routeLockedStops_' + d.id] || [];
+    });
   }
 }
 
@@ -499,21 +490,21 @@ function _renderDebugPanel() {
 // ── Init ───────────────────────────────────────────────────
 
 async function init() {
-  // Check if DB tables exist
-  await checkDbTables();
+  // Load from Supabase (checkDbTables runs in parallel with data fetch)
+  try {
+    const [, dbOk] = await Promise.all([
+      loadStateFromDB(),
+      checkDbTables()
+    ]);
+    console.log('Init: loaded from Supabase, STOPS:', STOPS.length);
+  } catch (e) {
+    console.warn('Init: loadStateFromDB failed:', e.message);
+  }
 
   if (!_dbReady) {
     setTimeout(() => {
       showToast('Database tables not found — go to Settings to set up.', 'error', 8000);
     }, 1500);
-  }
-
-  // Always load from Supabase (source of truth)
-  try {
-    await loadStateFromDB();
-    console.log('Init: loaded from Supabase, STOPS:', STOPS.length);
-  } catch (e) {
-    console.warn('Init: loadStateFromDB failed:', e.message);
   }
 
   initUIState();

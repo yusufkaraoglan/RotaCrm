@@ -16,7 +16,7 @@ function renderProfile() {
   const dayId = S.assign[stop.id];
   const dayObj = dayId ? getDayObj(dayId) : null;
   const pending = getStopOrders(stop.id, 'pending');
-  const delivered = getStopOrders(stop.id, 'delivered').sort((a, b) => (b.deliveredAt || '').localeCompare(a.deliveredAt || ''));
+  const delivered = getStopOrders(stop.id, 'delivered').sort((a, b) => new Date(b.deliveredAt || 0) - new Date(a.deliveredAt || 0));
   const recentDelivered = delivered.slice(0, 20);
   const debt = S.debts[stop.id] || 0;
   const note = S.cnotes[stop.id] || '';
@@ -192,13 +192,13 @@ function renderProfile() {
     });
   });
 
-  // Sort newest first, then by type priority for same-millisecond entries
-  const _typePriority = { order: 0, debt: 1, writeoff: 2, payment: 3 };
+  // Sort newest first with full millisecond precision
+  activity.forEach((a, i) => { a._idx = i; });
   activity.sort((a, b) => {
     const da = a.date ? new Date(a.date).getTime() : 0;
     const db = b.date ? new Date(b.date).getTime() : 0;
     if (db !== da) return db - da;
-    return (_typePriority[a.type] || 9) - (_typePriority[b.type] || 9);
+    return b._idx - a._idx; // same ms: later-added entry is newer
   });
 
   html += `<div class="section-head"><h3>Activity</h3></div>`;
@@ -238,11 +238,14 @@ function renderProfile() {
             <span style="font-size:12px;color:var(--danger)">Owes ${formatCurrency(debtAmount)}</span>
             <button class="btn btn-success btn-sm" style="font-size:11px;padding:3px 10px" data-id="${escHtml(o.id)}" onclick="showCollectOrderPayment(this.dataset.id)">Collect Payment</button>
           </div>` : ''}
-          ${a.debtEntries.filter(e => e.type === 'clear').length > 0 ? a.debtEntries.filter(e => e.type === 'clear').map(e => `
+          ${(() => {
+            const payments = a.debtEntries.filter(e => e.type === 'clear').sort((x, y) => new Date(y.date) - new Date(x.date));
+            return payments.length > 0 ? payments.map(e => `
           <div style="margin-top:4px;padding:4px 8px;background:var(--success-light);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:12px;color:var(--success)">${escHtml(e.note || 'Payment received')}</span>
             <span style="font-size:12px;font-weight:600;color:var(--success)">-${formatCurrency(e.amount)}</span>
-          </div>`).join('') : ''}
+          </div>`).join('') : '';
+          })()}
           <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px">
             <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" data-id="${escHtml(o.id)}" onclick="showEditDeliveredOrderModal(this.dataset.id)">Edit</button>
             <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" data-id="${escHtml(o.id)}" onclick="deleteOrder(this.dataset.id)">Delete</button>

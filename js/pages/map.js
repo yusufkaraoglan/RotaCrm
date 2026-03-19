@@ -4,7 +4,6 @@
 let mapAssignStopId = null;
 
 function showMapModal() { showPage('map'); }
-function closeMapModal() { showPage('settings'); }
 
 function renderMapPage() {
   let html = `

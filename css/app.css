@@ -72,8 +72,6 @@ a{text-decoration:none;color:inherit}
 .btn-sm{padding:6px 12px;font-size:13px;min-height:40px}
 .btn:disabled,.btn[disabled]{opacity:0.4;pointer-events:none}
 .btn-block{width:100%}
-.btn-icon{width:44px;height:44px;padding:0;border-radius:50%}
-.btn-icon-sm{width:32px;height:32px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
 
 /* === FORM === */
 .form-group{margin-bottom:14px}
@@ -85,7 +83,6 @@ a{text-decoration:none;color:inherit}
 
 /* === CARD === */
 .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:10px}
-.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 
 /* === BADGE === */
 .badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
@@ -128,8 +125,6 @@ body.modal-open .page{touch-action:none}
 .route-card.delivered{border-left-color:var(--success);background:var(--success-light)}
 .route-card.dragging{opacity:0.45;box-shadow:0 8px 24px rgba(0,0,0,0.15)}
 .route-card.drag-over{border-top:3px solid var(--primary);margin-top:-3px}
-.drag-handle{cursor:grab;touch-action:none;padding:6px 8px;color:#aaa;display:flex;align-items:center;flex-shrink:0;-webkit-user-select:none;user-select:none;font-size:18px;letter-spacing:1px}
-.drag-handle:active{cursor:grabbing;color:var(--primary)}
 .route-card-body{flex:1;min-width:0}
 .route-card-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .route-card-sub{font-size:12px;color:var(--text-sec);margin-top:2px}
@@ -146,7 +141,6 @@ body.modal-open .page{touch-action:none}
 .order-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:10px;transition:box-shadow .15s}
 .order-card:hover{box-shadow:0 2px 8px rgba(0,0,0,0.08)}
 .order-card-head{display:flex;justify-content:space-between;align-items:start;margin-bottom:6px}
-.order-card-name{font-size:14px;font-weight:600}
 .order-card-date{font-size:11px;color:var(--text-muted)}
 .order-card-items{font-size:13px;color:var(--text-sec);margin-bottom:6px}
 .order-card-footer{display:flex;justify-content:space-between;align-items:center}
@@ -177,13 +171,6 @@ body.modal-open .page{touch-action:none}
 .customer-area{font-size:12px;color:var(--text-sec);margin-top:1px}
 
 /* === PROFILE === */
-.profile-header{text-align:center;padding:20px 16px;background:var(--card);border-bottom:1px solid var(--border)}
-.profile-avatar{width:64px;height:64px;border-radius:50%;background:var(--primary-light);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:24px;margin:0 auto 10px}
-.profile-name{font-size:20px;font-weight:700}
-.profile-address{font-size:13px;color:var(--text-sec);margin-top:4px}
-.action-bar{display:flex;gap:8px;padding:12px 16px;overflow-x:auto;flex-shrink:0}
-.action-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow);font-size:11px;font-weight:500;color:var(--text-sec);min-width:72px;flex-shrink:0}
-.action-btn svg{width:20px;height:20px;color:var(--primary)}
 
 /* Profile V2 - Mobile-first */
 .profile-info-card{padding:14px!important}
@@ -214,17 +201,11 @@ body.modal-open .page{touch-action:none}
 .metric-label{font-size:12px;color:var(--text-sec);margin-top:2px}
 .report-section{margin-bottom:20px}
 .report-section h3{font-size:15px;font-weight:700;margin-bottom:10px}
-.report-table{width:100%;border-collapse:collapse;font-size:13px}
-.report-table th{text-align:left;padding:8px 10px;background:var(--bg);font-weight:600;color:var(--text-sec);border-bottom:1px solid var(--border)}
-.report-table td{padding:8px 10px;border-bottom:1px solid var(--border)}
-.report-table tr:last-child td{border-bottom:none}
 .date-range-bar{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px}
 .date-btn{padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;border:1.5px solid var(--border);color:var(--text-sec);background:var(--card);white-space:nowrap}
 .date-btn.active{background:var(--primary);color:#fff;border-color:var(--primary)}
 .custom-dates{display:flex;gap:8px;margin-bottom:12px}
 .custom-dates input{flex:1;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px}
-.progress-bar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin-top:6px}
-.progress-fill{height:100%;border-radius:4px;transition:width .3s}
 .chart-card{padding:12px;height:220px;position:relative}
 
 /* === PRODUCT FILTER DROPDOWN === */
@@ -298,7 +279,6 @@ body.modal-open .page{touch-action:none}
 
 /* === UTILITY === */
 .text-center{text-align:center}
-.text-right{text-align:right}
 .text-muted{color:var(--text-muted)}
 .text-success{color:var(--success)}
 .text-danger{color:var(--danger)}
@@ -308,8 +288,6 @@ body.modal-open .page{touch-action:none}
 .mb-2{margin-bottom:16px}
 .flex{display:flex}
 .flex-between{display:flex;justify-content:space-between;align-items:center}
-.gap-1{gap:8px}
-.gap-2{gap:16px}
 .hidden{display:none!important}
 
 /* === CUSTOMER PICKER OVERLAY === */
@@ -330,27 +308,16 @@ body.modal-open .page{touch-action:none}
 }
 
 /* === MOBILE RESPONSIVE === */
-.report-table{table-layout:fixed;word-wrap:break-word}
-.report-table th,.report-table td{word-break:break-word;overflow-wrap:break-word}
 @media(max-width:480px){
   .topbar h1{font-size:16px}
   .metric-grid{grid-template-columns:1fr 1fr;gap:8px}
   .metric-value{font-size:18px}
   .metric-label{font-size:11px}
-  .report-table{font-size:12px}
-  .report-table th,.report-table td{padding:6px 4px}
-  .day-tabs{gap:2px;padding:8px 8px}
+.day-tabs{gap:2px;padding:8px 8px}
   .day-tab{min-width:50px;padding:8px 4px;font-size:12px}
   .chip-group{gap:4px}
   .chip{padding:5px 10px;font-size:12px}
-  .order-item-card{padding:8px 10px;gap:8px}
-  .order-item-card-name{font-size:13px}
-  .order-item-card-total{min-width:48px;font-size:13px}
   .qty-btn{width:28px;height:28px;font-size:14px}
-  .catalog-edit-form{gap:4px}
-  .catalog-edit-form .input{font-size:14px;padding:8px}
-  .action-bar{padding:8px 12px;gap:6px}
-  .action-btn{padding:8px 10px;min-width:62px;font-size:10px}
   .profile-action-grid{gap:6px}
   .profile-action-btn{padding:10px 4px;min-height:54px;font-size:10px}
   .profile-action-btn svg{width:16px;height:16px}
@@ -381,32 +348,11 @@ body.modal-open .page{touch-action:none}
 .ppick-item-check{width:24px;height:24px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:12px;color:transparent;transition:all .15s}
 .ppick-item.selected .ppick-item-check{background:var(--primary);border-color:var(--primary);color:#fff}
 
-/* === ORDER ITEM CARD (new design) === */
-.order-item-card{background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px}
-.order-item-card-info{flex:1;min-width:0}
-.order-item-card-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.order-item-card-price{font-size:12px;color:var(--text-sec);margin-top:2px}
-.order-item-card-controls{display:flex;align-items:center;gap:6px;flex-shrink:0}
 .qty-btn{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--text);background:var(--card);transition:all .15s}
 .qty-btn:active{background:var(--primary-light);border-color:var(--primary)}
 .qty-input{width:42px;font-size:16px;font-weight:700;text-align:center;border:none;background:transparent;color:var(--text);padding:0;-moz-appearance:textfield}
 .qty-input::-webkit-outer-spin-button,.qty-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .qty-input:focus{outline:none;background:var(--card);border-radius:4px;box-shadow:0 0 0 2px var(--primary)}
-.order-item-card-total{font-size:14px;font-weight:700;min-width:55px;text-align:right;flex-shrink:0}
-.order-item-card-remove{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;flex-shrink:0;transition:color .15s}
-.order-item-card-remove:active{color:var(--danger)}
-
-/* === CATALOG EDIT === */
-.catalog-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:8px;transition:all .15s}
-.catalog-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.catalog-card-info{flex:1;min-width:0}
-.catalog-card-name{font-size:15px;font-weight:600}
-.catalog-card-unit{font-size:12px;color:var(--text-sec);margin-top:2px}
-.catalog-card-price{font-size:16px;font-weight:700;flex-shrink:0;text-align:right}
-.catalog-card-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-.catalog-card-actions{display:flex;gap:6px;flex-shrink:0}
-.catalog-edit-form{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-.catalog-edit-form .input{flex:1;min-width:0}
 
 /* === ORDER FORM FULL PAGE === */
 .order-form-overlay{position:fixed;inset:0;background:var(--bg);z-index:240;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -476,8 +422,6 @@ body.modal-open .page{touch-action:none}
 .pay-breakdown-row:last-child{margin-bottom:0}
 .pay-breakdown-label{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;min-width:65px;flex-shrink:0}
 .pay-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.pay-breakdown-bar{flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
-.pay-breakdown-fill{height:100%;border-radius:4px;transition:width .3s}
 .pay-breakdown-amount{font-size:13px;font-weight:700;min-width:65px;text-align:right;flex-shrink:0}
 
 /* === STOCK WARNING BANNER === */

@@ -176,31 +176,6 @@ function buildRouteListHtml(filtered, dayObj, allSorted) {
   return html;
 }
 
-function renderRouteList() {
-  const week = S.routeWeek;
-  const days = DAYS.filter(d => d.week === week);
-  const dayObj = days[S.routeDay] || days[0];
-  if (!dayObj) return;
-  const dayId = dayObj.id;
-
-  const assigned = [];
-  Object.entries(S.assign).forEach(([sid, did]) => {
-    if (did === dayId) assigned.push(parseInt(sid));
-  });
-  const ro = S.routeOrder[dayId] || [];
-  const allSorted = [...new Set([...ro.filter(id => assigned.includes(id)), ...assigned])];
-  const lockedStops = [];
-  routeLockedStops.forEach(id => { if (allSorted.includes(id)) lockedStops.push(id); });
-  const unlockedStops = allSorted.filter(id => !routeLockedStops.includes(id));
-  const sorted = [...lockedStops, ...unlockedStops];
-
-  const container = document.getElementById('route-list');
-  if (container) {
-    container.innerHTML = buildRouteListHtml(sorted, dayObj, sorted);
-    initRouteDragDrop();
-  }
-}
-
 function renderRouteSearchResults() {
   const searchContainer = document.getElementById('route-search-results');
   const mainContent = document.getElementById('route-main-content');
