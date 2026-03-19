@@ -445,17 +445,8 @@ async function resetOrdersAndDebts() {
   // Auto-backup before reset
   try { exportJSON(); } catch (e) { console.warn('Auto-backup failed:', e); }
 
-  // Clear local state
-  S.orders = {};
-  S.debts = {};
-  S.debtHistory = {};
-
-  // Update memory cache
-  cacheSet('orders', {});
-  cacheSet('debts', {});
-  cacheSet('debt_history', {});
-
-  // Delete from Supabase (await to prevent data returning on next sync)
+  // Delete from Supabase FIRST (order matters for FK constraints)
+  let sbFailed = false;
   try {
     const deletes = [
       ['order_items', 'id=not.is.null'],
@@ -464,13 +455,34 @@ async function resetOrdersAndDebts() {
       ['debts', 'customer_id=not.is.null']
     ];
     for (const [table, filter] of deletes) {
-      await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+      const resp = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
         method: 'DELETE', headers: DB_HEADERS
-      }).catch(() => {});
+      });
+      if (!resp.ok) {
+        console.error(`Reset: failed to delete ${table}`, resp.status, await resp.text().catch(() => ''));
+        sbFailed = true;
+      }
     }
-  } catch (e) { console.error('resetOrdersAndDebts Supabase cleanup error:', e); }
+  } catch (e) {
+    console.error('resetOrdersAndDebts Supabase cleanup error:', e);
+    sbFailed = true;
+  }
 
-  appAlert('Orders and debts cleared successfully.');
+  // Clear local state
+  S.orders = {};
+  S.debts = {};
+  S.debtHistory = {};
+
+  // Persist empty state through save helpers (updates cache + Supabase)
+  await save.orders([]);
+  await save.debts();
+  await save.debtHistory([]);
+
+  if (sbFailed) {
+    showToast('Local data cleared but cloud sync had errors. Try syncing again.', 'warning', 5000);
+  } else {
+    appAlert('Orders and debts cleared successfully.');
+  }
   renderSettings();
 }
 
