@@ -433,44 +433,35 @@ async function resetOrdersAndDebts() {
   const cacheKeys = ['orders', 'debts', 'debt_history', 'recurring_orders'];
   cacheKeys.forEach(k => cacheSet(k, {}));
 
-  // Delete from Supabase (FK order: children first, then parents)
-  const deleteHeaders = { ...DB_HEADERS, Prefer: 'return=minimal' };
-  const tables = [
-    'order_items',
-    'debt_history',
-    'orders',
-    'debts',
-    'recurring_orders'
-  ];
+  // Delete from Supabase using proven dbDelete helper with retry logic.
+  // Order: debt_history first (no cascade), then orders (cascades to order_items),
+  // then debts, then recurring_orders. Skip order_items — cascaded from orders.
   let failCount = 0;
-  for (const table of tables) {
+
+  // Helper: select all IDs from a table, then delete each batch
+  async function deleteAllRows(table, pkColumn) {
     try {
-      // Use customer_id=gte.0 for tables with integer PKs, or select all rows
-      const filter = (table === 'orders') ? 'id=not.is.null'
-        : (table === 'order_items') ? 'order_id=not.is.null'
-        : 'customer_id=gte.0';
-      const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-        method: 'DELETE', headers: deleteHeaders
-      });
-      if (!r.ok) {
-        const body = await r.text().catch(() => '');
-        console.warn(`Reset: ${table} delete HTTP ${r.status}`, body);
-        failCount++;
+      const rows = await dbSelect(table, `select=${pkColumn}`);
+      if (!rows || rows.length === 0) return true;
+      for (const row of rows) {
+        const match = {};
+        match[pkColumn] = row[pkColumn];
+        await dbDelete(table, match);
       }
+      return true;
     } catch (e) {
       console.warn(`Reset: ${table} delete failed`, e.message);
-      failCount++;
+      return false;
     }
   }
 
+  if (!(await deleteAllRows('debt_history', 'id'))) failCount++;
+  if (!(await deleteAllRows('orders', 'id'))) failCount++;
+  if (!(await deleteAllRows('debts', 'customer_id'))) failCount++;
+  if (!(await deleteAllRows('recurring_orders', 'customer_id'))) failCount++;
+
   // Clean app_settings key for locked orders
-  try {
-    await fetch(`${SB_URL}/rest/v1/app_settings?key=eq.ordersLockedOrders`, {
-      method: 'DELETE', headers: deleteHeaders
-    });
-  } catch (e) {
-    console.warn('Reset: app_settings ordersLockedOrders delete failed', e.message);
-  }
+  try { await dbDelete('app_settings', { key: 'ordersLockedOrders' }); } catch (e) {}
 
   // Invalidate cache timestamps to prevent stale data from being served
   ['orders', 'debts', 'debt_history', 'recurring_orders', 'customer_pricing'].forEach(k => {
