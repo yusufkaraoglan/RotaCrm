@@ -131,7 +131,7 @@ function renderSettings() {
           <div class="settings-item">
             <div>
               <div class="settings-item-label">Reset Orders & Debts</div>
-              <div class="settings-item-desc">Clear orders, debts, and debt history. Keeps customers, routes, and map.</div>
+              <div class="settings-item-desc">Clear orders, debts, debt history, recurring orders, pricing, and brands. Keeps customers, routes, map, and catalog.</div>
             </div>
             <button class="btn btn-danger btn-sm" onclick="resetOrdersAndDebts()">Reset</button>
           </div>

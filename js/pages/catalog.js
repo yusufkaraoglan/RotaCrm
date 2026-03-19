@@ -407,7 +407,7 @@ async function removeCatalogItem(idx) {
 
 
 async function resetOrdersAndDebts() {
-  if (!(await appConfirm('This will delete all <b>orders, debts, and debt history</b>.<br>Customers, routes, and map will be kept.<br><br>A backup will be downloaded first.', true))) return;
+  if (!(await appConfirm('This will delete all <b>orders, debts, debt history, recurring orders, customer pricing, brands, and customer products</b>.<br>Customers, routes, map, and product catalog will be kept.<br><br>A backup will be downloaded first.', true))) return;
   if (!(await appConfirm('This cannot be undone. Proceed?'))) return;
 
   // Auto-backup before reset
@@ -417,31 +417,70 @@ async function resetOrdersAndDebts() {
   S.orders = {};
   S.debts = {};
   S.debtHistory = {};
+  S.recurringOrders = {};
+  S.customerPricing = {};
+  S.customerProducts = {};
+  S.brands = {};
+  S.brandList = [];
+  S.ordersLockedOrders = [];
 
   // Persist empty state to cache
-  cacheSet('orders', {});
-  cacheSet('debts', {});
-  cacheSet('debt_history', {});
+  const cacheKeys = ['orders', 'debts', 'debt_history', 'recurring_orders', 'customer_pricing'];
+  cacheKeys.forEach(k => cacheSet(k, {}));
 
-  // Delete from Supabase (FK order: children first)
+  // Delete from Supabase (FK order: children first, then parents)
   const deleteHeaders = { ...DB_HEADERS, Prefer: 'return=minimal' };
   const tables = [
-    ['order_items', 'id=gt.0'],
-    ['debt_history', 'id=gt.0'],
-    ['orders', 'id=not.is.null'],
-    ['debts', 'customer_id=gt.0']
+    'order_items',
+    'debt_history',
+    'orders',
+    'debts',
+    'recurring_orders',
+    'customer_pricing'
   ];
-  for (const [table, filter] of tables) {
+  let failCount = 0;
+  for (const table of tables) {
     try {
-      await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+      // Use customer_id=gte.0 for tables with integer PKs, or select all rows
+      const filter = (table === 'orders') ? 'id=not.is.null'
+        : (table === 'order_items') ? 'order_id=not.is.null'
+        : 'customer_id=gte.0';
+      const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
         method: 'DELETE', headers: deleteHeaders
       });
+      if (!r.ok) {
+        const body = await r.text().catch(() => '');
+        console.warn(`Reset: ${table} delete HTTP ${r.status}`, body);
+        failCount++;
+      }
     } catch (e) {
       console.warn(`Reset: ${table} delete failed`, e.message);
+      failCount++;
     }
   }
 
-  appAlert('Orders and debts cleared successfully.');
+  // Clean app_settings keys for brands, customer products, locked orders
+  const settingsKeys = ['customer_products', 'customer_brands', 'brand_list', 'ordersLockedOrders'];
+  for (const key of settingsKeys) {
+    try {
+      await fetch(`${SB_URL}/rest/v1/app_settings?key=eq.${encodeURIComponent(key)}`, {
+        method: 'DELETE', headers: deleteHeaders
+      });
+    } catch (e) {
+      console.warn(`Reset: app_settings ${key} delete failed`, e.message);
+    }
+  }
+
+  // Invalidate cache timestamps to prevent stale data from being served
+  ['orders', 'debts', 'debt_history', 'recurring_orders', 'customer_pricing'].forEach(k => {
+    delete _memCacheTs[k];
+  });
+
+  if (failCount > 0) {
+    appAlert(`Reset completed with ${failCount} error(s). Some data may reappear after sync. Try again if needed.`, true);
+  } else {
+    appAlert('Orders and debts cleared successfully.');
+  }
   renderSettings();
 }
 
