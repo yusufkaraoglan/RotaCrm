@@ -372,7 +372,7 @@ function saveCatalogEdit(idx) {
       }
     }
   }
-  S.catalog[idx] = { name, unit, price, stock, trackStock: noStockChecked ? false : true };
+  S.catalog[idx] = { ...S.catalog[idx], name, unit, price, stock, trackStock: noStockChecked ? false : true };
   save.catalog();
   closeModal();
   renderCatalog();

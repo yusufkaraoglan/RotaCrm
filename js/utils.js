@@ -23,7 +23,7 @@ function repairDebtHistoryTypes(dhMap) {
       // Fix entries incorrectly marked as 'clear' due to old regex matching "unpaid"
       if (e.type === 'clear' && /unpaid/i.test(e.note)) e.type = 'add';
       if (!e.type) {
-        if (/payment received|(?<!un)paid/i.test(e.note)) e.type = 'clear';
+        if (/payment received/i.test(e.note) || (/\bpaid\b/i.test(e.note) && !/unpaid/i.test(e.note))) e.type = 'clear';
         else if (/correction|adjust/i.test(e.note)) e.type = 'adjust';
         else if (/visit/i.test(e.note)) e.type = 'visit';
         else e.type = 'add';
@@ -192,8 +192,8 @@ async function geocodeAllStops() {
   // Step 2: Remaining failures — try Nominatim one by one (with rate limit)
   const stillMissing = missing.filter(s => !S.geo[s.id] || !S.geo[s.id].lat);
   for (const stop of stillMissing) {
-    await geocodeStop(stop, { force: true, silent: true });
-    done++;
+    const ok = await geocodeStop(stop, { force: true, silent: true });
+    if (ok) done++;
     if (stillMissing.indexOf(stop) < stillMissing.length - 1) {
       await new Promise(r => setTimeout(r, 1100));
     }
@@ -235,12 +235,12 @@ function getStopOrders(stopId, status) {
 
 function calcOrderTotal(order) {
   if (!order || !order.items) return 0;
-  return order.items.reduce((s, i) => s + (parseInt(i.qty) || 0) * (parseFloat(i.price) || 0), 0);
+  return roundMoney(order.items.reduce((s, i) => s + (parseInt(i.qty) || 0) * (parseFloat(i.price) || 0), 0));
 }
 
 function roundMoney(n) {
   const v = parseFloat(n);
-  return Math.round((isNaN(v) ? 0 : v) * 100) / 100;
+  return Math.round(((isNaN(v) ? 0 : v) + Number.EPSILON) * 100) / 100;
 }
 
 function getTrackedCatalogItem(name) {
@@ -307,12 +307,11 @@ function getOrderDebtImpact(order) {
     return roundMoney(Math.max(0, total - paid));
   }
   if (order.payMethod === 'bank' || order.payMethod === 'visit') return 0;
-  // Unknown payMethod — treat as unpaid to avoid silent debt loss
-  if (order.payMethod && order.payMethod !== 'bank' && order.payMethod !== 'visit') {
+  // Unknown or missing payMethod — treat as unpaid to avoid silent debt loss
+  if (order.payMethod) {
     console.warn('getOrderDebtImpact: unknown payMethod "' + order.payMethod + '" for order ' + order.id);
-    return total;
   }
-  return 0;
+  return total;
 }
 
 function getRemainingOrderDebt(order) {
@@ -384,12 +383,22 @@ function reconcileOrderDebtEffect(prevOrder, nextOrder) {
   const stopId = order.customerId;
   let changed = false;
   if (prevOrder) {
+    // Sum up clear (payment) entries linked to this order before removing add entries
+    const history = S.debtHistory[stopId] || [];
+    let paidForOrder = 0;
+    history.forEach(h => {
+      if (h.orderId === prevOrder.id && h.type === 'clear') paidForOrder += h.amount;
+    });
+    paidForOrder = roundMoney(paidForOrder);
+
     const removed = removeLinkedOrderDebtEntries(prevOrder);
-    // Only subtract what was actually found in history entries.
-    // If no entries were found (removed === 0), don't guess — the debt balance
-    // may have already been adjusted manually or via a payment.
+    // Net debt impact = original add amount minus payments already collected
+    // Only subtract the net (what's still owed), not the full add amount
     if (removed > 0) {
-      S.debts[stopId] = Math.max(0, roundMoney((S.debts[stopId] || 0) - removed));
+      const netToRemove = roundMoney(Math.max(0, removed - paidForOrder));
+      if (netToRemove > 0) {
+        S.debts[stopId] = Math.max(0, roundMoney((S.debts[stopId] || 0) - netToRemove));
+      }
       changed = true;
     }
   }

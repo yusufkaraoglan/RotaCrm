@@ -100,7 +100,7 @@ function renderOverviewTab(data) {
       <div class="report-hero-label">${hasProductFilter ? 'Filtered Revenue' : 'Total Revenue'}</div>
       <div class="report-hero-value">${formatCurrency(hasProductFilter ? productRevenue : data.totalRevenue)}</div>
       <div class="report-hero-sub">${data.deliveryCount} deliveries &middot; ${data.visitCount} visits</div>
-      ${hasProductFilter ? `<div class="report-hero-sub" style="font-size:11px;margin-top:4px">${S.reportProducts.join(', ')}</div>` : ''}
+      ${hasProductFilter ? `<div class="report-hero-sub" style="font-size:11px;margin-top:4px">${S.reportProducts.map(p => escHtml(p)).join(', ')}</div>` : ''}
     </div>
 
     <div class="metric-grid">

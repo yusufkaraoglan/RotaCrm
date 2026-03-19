@@ -94,7 +94,7 @@ function refreshMapMarkers() {
     </div>`;
 
     const marker = L.marker([geo.lat, geo.lng], { icon }).bindPopup(popupHtml).addTo(leafletMap);
-    marker.bindTooltip(stop.n, {
+    marker.bindTooltip(escHtml(stop.n), {
       permanent: false, direction: 'bottom', offset: [0, 10],
       className: 'map-label'
     });

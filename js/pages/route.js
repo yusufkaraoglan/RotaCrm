@@ -341,21 +341,32 @@ function initRouteDragDrop() {
     }
   }, { passive: false, signal });
 
+  function cleanupTouchDrag() {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (touchClone) { touchClone.remove(); touchClone = null; }
+    list.querySelectorAll('.dragging,.drag-over').forEach(c => { c.classList.remove('dragging'); c.classList.remove('drag-over'); });
+    touchDragOver = null;
+    touchDragId = null;
+  }
+
   list.addEventListener('touchend', e => {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     if (!touchDragId) return;
+    const dragId = touchDragId;
     if (touchClone) { touchClone.remove(); touchClone = null; }
     list.querySelectorAll('.dragging,.drag-over').forEach(c => { c.classList.remove('dragging'); c.classList.remove('drag-over'); });
     touchDragOver = null;
     const el = document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
     if (el) {
       const target = el.closest('.route-card');
-      if (target && parseInt(target.dataset.stopId) !== touchDragId) {
-        applyRouteDrop(touchDragId, parseInt(target.dataset.stopId), dayId);
+      if (target && parseInt(target.dataset.stopId) !== dragId) {
+        applyRouteDrop(dragId, parseInt(target.dataset.stopId), dayId);
       }
     }
     touchDragId = null;
   }, { signal });
+
+  list.addEventListener('touchcancel', cleanupTouchDrag, { signal });
 }
 
 function applyRouteDrop(srcId, targetId, dayId) {
@@ -598,11 +609,7 @@ async function confirmVisitWithPayment() {
     note: `Visit payment (${visitPayMethod})`
   });
   if (overpaid > 0) {
-    showToast(`${formatCurrency(overpaid)} overpayment — recorded as credit`, 'info', 5000);
-    createDebtHistoryEntry(stopId, {
-      date: now, amount: overpaid, type: 'clear',
-      note: `Overpayment credit (${visitPayMethod})`
-    });
+    showToast(`${formatCurrency(overpaid)} overpayment returned/noted`, 'info', 5000);
   }
   const savePromises = [save.debts(), save.debtHistory([stopId])];
 
@@ -638,7 +645,8 @@ function selectPayMethod(method, el) {
 
 function updateCashRemainder() {
   const stopId = parseInt(deliveryStopId);
-  const pending = getStopOrders(stopId, 'pending');
+  const allPending = getStopOrders(stopId, 'pending');
+  const pending = deliveryOrderIds ? allPending.filter(o => deliveryOrderIds.includes(o.id)) : allPending;
   const grandTotal = pending.reduce((s, o) => s + calcOrderTotal(o), 0);
   const cashInput = document.getElementById('cash-amount-input');
   const msg = document.getElementById('cash-remainder-msg');

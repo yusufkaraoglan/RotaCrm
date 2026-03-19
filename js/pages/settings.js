@@ -393,7 +393,11 @@ async function _uploadAllToSupabase() {
 }
 
 async function clearLocalCache() {
-  if (!(await appConfirm('This will reload the app and re-fetch all data from the cloud database.', true))) return;
+  if (!(await appConfirm('This will clear local cache and reload the app. All data will be re-fetched from the cloud database.', true))) return;
+  // Clear in-memory cache timestamps so all data is re-fetched
+  Object.keys(_memCacheTs).forEach(k => delete _memCacheTs[k]);
+  Object.keys(_memCache).forEach(k => delete _memCache[k]);
+  try { localStorage.clear(); } catch (e) { console.warn('localStorage.clear failed:', e); }
   location.reload();
 }
 

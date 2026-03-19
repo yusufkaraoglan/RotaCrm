@@ -839,8 +839,8 @@ async function addDebt() {
   const dateInput = document.getElementById('debt-date');
   const debtDate = dateInput && dateInput.value ? new Date(dateInput.value).toISOString() : new Date().toISOString();
 
-  S.debts[profileStopId] = (S.debts[profileStopId] || 0) + amount;
-  createDebtHistoryEntry(profileStopId, { date: debtDate, amount, type: 'add', note });
+  S.debts[profileStopId] = roundMoney((S.debts[profileStopId] || 0) + amount);
+  createDebtHistoryEntry(profileStopId, { date: debtDate, amount: roundMoney(amount), type: 'add', note });
   await Promise.allSettled([save.debts(), save.debtHistory([profileStopId])]);
   closeModal();
   renderProfile();
@@ -1058,11 +1058,14 @@ async function saveEditDebtHistory(stopId, entryId) {
   dh[idx].note = document.getElementById('edit-dh-note').value.trim();
   // Adjust debt balance
   if (oldType === 'add') {
-    S.debts[stopId] = (S.debts[stopId] || 0) - oldAmount + newAmount;
+    S.debts[stopId] = roundMoney((S.debts[stopId] || 0) - oldAmount + newAmount);
   } else {
-    S.debts[stopId] = (S.debts[stopId] || 0) + oldAmount - newAmount;
+    S.debts[stopId] = roundMoney((S.debts[stopId] || 0) + oldAmount - newAmount);
   }
-  S.debts[stopId] = Math.max(0, S.debts[stopId]);
+  if (S.debts[stopId] < 0) {
+    console.warn('saveEditDebtHistory: debt went negative, clamping to 0. Lost:', Math.abs(S.debts[stopId]));
+    S.debts[stopId] = 0;
+  }
   await Promise.allSettled([save.debts(), save.debtHistory([stopId])]);
   closeModal();
   renderProfile();

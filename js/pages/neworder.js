@@ -265,7 +265,7 @@ function filterNewOrderProductPicker(q) {
 
     html += `
       <div class="ppick-item ${isSelected ? 'selected' : ''}" style="${outOfStock ? 'opacity:0.4' : ''}"
-           onclick="${outOfStock ? '' : `toggleNewOrderProductFromPicker('${escHtml(c.name)}')`}">
+           data-product="${escHtml(c.name)}" onclick="${outOfStock ? '' : 'toggleNewOrderProductFromPicker(this.dataset.product)'}">
         <div class="ppick-item-info">
           <div class="ppick-item-name" style="display:flex;align-items:center;gap:4px">
             ${escHtml(c.name)}
@@ -411,18 +411,23 @@ function pickNewOrderCustomer(stopId) {
 async function saveNewOrderPage() {
   if (_btnLock) return;
   _btnLock = true;
-  setTimeout(() => _btnLock = false, 1500);
+  const unlock = () => { _btnLock = false; };
 
-  if (tempOrderCustomerId == null || isNaN(parseInt(tempOrderCustomerId))) { appAlert('Please select a customer.'); return; }
+  try {
+  if (tempOrderCustomerId == null || isNaN(parseInt(tempOrderCustomerId))) { appAlert('Please select a customer.'); unlock(); return; }
   const items = tempOrderItems.filter(i => i.name && i.qty > 0);
-  if (items.length === 0) { appAlert('Please add at least one product.'); return; }
+  if (items.length === 0) { appAlert('Please add at least one product.'); unlock(); return; }
 
   const existingOrder = editingOrderId ? S.orders[editingOrderId] : null;
-  const previousItems = existingOrder ? (existingOrder.items || []) : [];
-  const stockIssues = validateTrackedStockChange(previousItems, items);
-  if (stockIssues.length > 0) {
-    appAlert('Insufficient stock: ' + stockIssues.join(', '));
-    return;
+  const isDelivered = editingOrderId && existingOrder && existingOrder.status === 'delivered';
+  // Only validate stock for delivered orders (pending orders don't affect stock)
+  if (isDelivered) {
+    const previousItems = existingOrder ? (existingOrder.items || []) : [];
+    const stockIssues = validateTrackedStockChange(previousItems, items);
+    if (stockIssues.length > 0) {
+      appAlert('Insufficient stock: ' + stockIssues.join(', '));
+      unlock(); return;
+    }
   }
 
   const note = document.getElementById('neworder-note')?.value || '';
@@ -449,11 +454,11 @@ async function saveNewOrderPage() {
   }
 
   // Only deduct stock if editing a DELIVERED order (pending orders don't affect stock)
-  const isDelivered = editingOrderId && existingOrder && existingOrder.status === 'delivered';
   if (isDelivered) {
+    const previousItems = existingOrder ? (existingOrder.items || []) : [];
     const stockChange = applyTrackedStockChange(previousItems, items);
     if (stockChange.changed) {
-      save.catalog();
+      await save.catalog();
       if (stockChange.lowStockWarnings.length > 0) {
         setTimeout(() => appAlert('Low stock:<br>' + stockChange.lowStockWarnings.map(w => escHtml(w)).join('<br>'), true), 300);
       }
@@ -466,4 +471,5 @@ async function saveNewOrderPage() {
 
   showToast(newOrderId ? 'Order created' : 'Order updated', 'success');
   showPage(newOrderPreviousPage);
+  } finally { unlock(); }
 }

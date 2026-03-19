@@ -248,19 +248,16 @@ function dedupeDebtHistory(entries) {
 }
 
 // ── Cache-aware fetch helper ─────────────────────────────
-// Fetches from Supabase when cache is stale. Never overwrites local data with
-// an empty Supabase response if we already have cached data (protects against
-// temporary server issues returning empty results).
+// Fetches from Supabase when cache is stale. When fetch fails (returns null),
+// falls back to cached data. When fetch succeeds with empty results, that is
+// respected as a legitimate empty state (e.g. after a reset).
 function _fetchOrCache(cacheKey, fallback, fetchFn, transformFn) {
   return async function () {
     const cached = cacheGet(cacheKey, null);
     if (cached && cacheIsFresh(cacheKey)) return cached;
     const rows = await fetchFn();
-    if (!rows) return cached || fallback; // fetch failed entirely
+    if (!rows) return cached || fallback; // fetch failed entirely — keep cached data
     const data = transformFn ? transformFn(rows) : rows;
-    const isEmpty = Array.isArray(data) ? data.length === 0 : Object.keys(data).length === 0;
-    const hasCached = cached && (Array.isArray(cached) ? cached.length > 0 : Object.keys(cached).length > 0);
-    if (isEmpty && hasCached) return cached;
     cacheSet(cacheKey, data);
     return data;
   };

@@ -172,7 +172,9 @@ async function _persist(cacheKey, data, supabaseWrite) {
     } finally {
       _savePending--;
       _updateSaveIndicator();
-      delete _persistLocks[cacheKey];
+      // Only delete lock if it still points to this promise (prevents race condition
+      // where Call A's finally deletes Call B's lock)
+      if (_persistLocks[cacheKey] === promise) delete _persistLocks[cacheKey];
     }
   })();
   _persistLocks[cacheKey] = promise;
@@ -250,7 +252,7 @@ const save = {
       if (Array.isArray(entries)) entries.forEach(e => delete e._new);
     });
     const ids = Array.isArray(changedCustomerIds) && changedCustomerIds.length > 0
-      ? changedCustomerIds : (profileStopId ? [profileStopId] : []);
+      ? changedCustomerIds : [];
     return _persist('debt_history', { ...S.debtHistory }, () =>
       Promise.allSettled(ids.map(cid => DB.replaceDebtHistory(cid, S.debtHistory[cid] || [])))
     );
