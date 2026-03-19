@@ -114,25 +114,29 @@ async function dbUpdate(table, match, data) {
 }
 
 async function dbDelete(table, match) {
-  try {
-    const params = Object.entries(match).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
-    const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, {
-      method: 'DELETE',
-      headers: DB_HEADERS
-    });
-    if (!r.ok) {
+  const params = Object.entries(match).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
+  let lastErr = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * attempt));
+      const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, {
+        method: 'DELETE',
+        headers: DB_HEADERS
+      });
+      if (r.ok) return true;
       const body = await r.text().catch(() => '');
       let detail = `HTTP ${r.status}`;
       try { const j = JSON.parse(body); detail = j.message || j.details || detail; } catch {}
-      throw new Error(detail);
+      lastErr = new Error(detail);
+      if (r.status < 500) break; // Only retry on 5xx
+    } catch (e) {
+      lastErr = e;
     }
-    return true;
-  } catch (e) {
-    if (typeof dbLog === 'function') dbLog(`DELETE ${table} FAILED: ${e.message}`);
-    else console.error(`dbDelete ${table} FAILED:`, e.message);
-    if (!_isFlushing) offlineQueue.push({ action: 'delete', table, match });
-    return null;
   }
+  if (typeof dbLog === 'function') dbLog(`DELETE ${table} FAILED: ${lastErr.message}`);
+  else console.error(`dbDelete ${table} FAILED:`, lastErr.message);
+  if (!_isFlushing) offlineQueue.push({ action: 'delete', table, match });
+  return null;
 }
 
 async function dbUpsert(table, data, onConflict) {
@@ -256,7 +260,7 @@ function _fetchOrCache(cacheKey, fallback, fetchFn, transformFn) {
     const data = transformFn ? transformFn(rows) : rows;
     const isEmpty = Array.isArray(data) ? data.length === 0 : Object.keys(data).length === 0;
     const hasCached = cached && (Array.isArray(cached) ? cached.length > 0 : Object.keys(cached).length > 0);
-    if (isEmpty && hasCached) return cached; // don't overwrite local data with empty
+    if (isEmpty && hasCached) return cached;
     cacheSet(cacheKey, data);
     return data;
   };
@@ -460,7 +464,11 @@ const DB = {
 
   async replaceDebtHistory(customerId, entries) {
     // Delete existing entries first, then insert fresh
-    await dbDelete('debt_history', { customer_id: customerId });
+    const deleted = await dbDelete('debt_history', { customer_id: customerId });
+    if (!deleted) {
+      console.warn(`replaceDebtHistory ${customerId}: delete failed, skipping insert to prevent duplicates`);
+      return;
+    }
     if (entries && entries.length > 0) {
       const rows = entries.map(e => ({
         customer_id: customerId,

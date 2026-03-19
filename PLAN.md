@@ -29,3 +29,11 @@ The application has been split from a single 4700+ line file into a modular stru
 All UI text has been translated from Turkish to English.
 Supabase DB persistence has been added to all save functions.
 Tailwind CSS CDN has been integrated for styling.
+
+## Post-v2 Maintenance
+
+### DB & Performance Fixes (March 2026)
+- Removed redundant `DB.setDebt()` calls — `save.debts()` handles persistence
+- `save.*` helpers now all return Promises for proper await support
+- Simplified `_fetchOrCache` cache protection logic
+- Drag-drop optimized: touchmove throttling (~60fps), CSS transform positioning, single-element tracking

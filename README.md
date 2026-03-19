@@ -15,7 +15,7 @@ Coffee delivery route management application for Costadoro Coffee.
 - Reports and Excel export
 - Offline-first + Supabase cloud sync
 - JSON data backup/restore
-- Drag-and-drop route ordering (touch + mouse)
+- Drag-and-drop route ordering (touch + mouse, GPU-accelerated)
 - Debt tracking with payment history
 - Recurring orders
 - Interactive map with Leaflet.js

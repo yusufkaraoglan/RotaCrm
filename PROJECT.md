@@ -146,7 +146,7 @@ index.html
 ```
 Write:  save.*(key)
           ├── cacheSet(key, value)  -> localStorage['cr5_' + key] (instant)
-          └── DB.*(data)            -> Supabase REST API (async)
+          └── DB.*(data)            -> Supabase REST API (async, returns Promise)
 
 Read:   loadStateFromDB() or loadStateLegacy()
           └── localStorage cache (for speed)
@@ -155,6 +155,9 @@ Sync:   syncAll()
           ├── Pull all tables from Supabase
           ├── Update localStorage cache
           └── Re-render current page
+
+Note: save.* helpers return Promises. Do NOT call DB.set*() separately
+      after save.*() — this causes duplicate writes and race conditions.
 ```
 
 **Note:** Supabase SDK is NOT used — pure `fetch()` REST API calls.
@@ -195,3 +198,5 @@ Sync:   syncAll()
 3. **Offline first load** — Supabase sync won't work without internet
 4. **Geocoding** — OpenStreetMap Nominatim has rate limits
 5. **Excel export** — requires SheetJS CDN
+6. **Offline queue** — in-memory only, lost on tab crash (operations dropped after 3 retries)
+7. **Cache TTL** — 10 minutes; settings changed on another device may be stale until sync

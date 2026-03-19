@@ -87,7 +87,11 @@ for f in js/*.js js/pages/*.js; do node -c "$f"; done
 ```js
 S.debts[stopId] = newValue;
 save.debts();  // <- MUST call this
+// Do NOT also call DB.setDebt() — save.debts() already persists to Supabase.
+// Calling both causes duplicate writes and race conditions.
 ```
+
+All `save.*` helpers return Promises. Await them when needed (e.g. in `Promise.allSettled`).
 
 ### 5. Adding New Pages
 1. Add `<div class="page" id="page-NAME">` in `index.html`

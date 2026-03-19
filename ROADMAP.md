@@ -84,6 +84,15 @@
 - [x] Service worker cache bumped to costadoro-v8
 - [x] Debt history `|||` parsing uses `lastIndexOf` for robustness
 
+### DB & Performance Fix Round (March 2026)
+- [x] Remove 12 redundant `DB.setDebt()` fire-and-forget calls (profile.js, route.js) — `save.debts()` already persists via `Promise.allSettled`, double-writing caused race conditions
+- [x] `save.customerProducts/brands/brandList` now return promises (were fire-and-forget, callers could not await)
+- [x] Simplify `_fetchOrCache` empty-cache protection logic (remove redundant `cacheIsEmpty` variable)
+- [x] Drag-drop touchmove throttled to ~60fps across route.js, catalog.js, orders.js — was unthrottled at 120+ events/sec
+- [x] Drag clone uses CSS `transform` instead of `top` for GPU-accelerated positioning
+- [x] `will-change: transform` hint added to drag clone elements
+- [x] Drag-over highlight tracks single element instead of `querySelectorAll` per event (O(1) vs O(N))
+
 ---
 
 ## Pending Features
@@ -134,10 +143,12 @@ Kent / London region toggle + region filter
 - [ ] Orders data growth — archive old orders
 - [x] Error handling — sync errors now logged; doSync has try/finally guard
 - [ ] Conflict resolution — timestamp-based merge
+- [x] Redundant DB writes — removed duplicate `DB.setDebt()` calls that raced with `save.debts()`
 
 ### Medium
 - [ ] Batch Supabase writes — debounce for bulk writes
 - [ ] Geocoding retry mechanism
+- [x] Drag-drop performance — touchmove throttling, GPU transform, single-element tracking
 
 ### Low
 - [ ] CSS cleanup — inline styles could be moved to Tailwind classes

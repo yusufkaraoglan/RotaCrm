@@ -177,14 +177,16 @@ function initOrderDragDrop() {
     draggedId = null;
   }, { signal });
 
+  let ordDragOver = null;
   list.addEventListener('dragover', e => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     const target = e.target.closest('.draggable-order');
-    list.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    if (ordDragOver && ordDragOver !== target) ordDragOver.classList.remove('drag-over');
     if (target && target.dataset.orderId !== draggedId) {
       target.classList.add('drag-over');
-    }
+      ordDragOver = target;
+    } else { ordDragOver = null; }
   }, { signal });
 
   list.addEventListener('drop', e => {
@@ -212,6 +214,8 @@ function initOrderDragDrop() {
   let touchClone = null;
   let touchStartY = 0;
   let longPressTimer = null;
+  let ordTouchDragOver = null;
+  let ordLastTouchMove = 0;
 
   list.addEventListener('touchstart', e => {
     const card = e.target.closest('.draggable-order');
@@ -222,7 +226,7 @@ function initOrderDragDrop() {
       touchDragId = card.dataset.orderId;
       card.classList.add('dragging');
       touchClone = card.cloneNode(true);
-      touchClone.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0.8;width:' + card.offsetWidth + 'px;transform:scale(0.95);box-shadow:0 8px 24px rgba(0,0,0,0.2);left:' + card.getBoundingClientRect().left + 'px;top:' + (e.touches[0].clientY - 30) + 'px';
+      touchClone.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0.8;width:' + card.offsetWidth + 'px;box-shadow:0 8px 24px rgba(0,0,0,0.2);left:' + card.getBoundingClientRect().left + 'px;top:' + (e.touches[0].clientY - 30) + 'px;will-change:transform';
       document.body.appendChild(touchClone);
     }, 300);
   }, { passive: true, signal });
@@ -233,12 +237,18 @@ function initOrderDragDrop() {
       return;
     }
     e.preventDefault();
-    if (touchClone) touchClone.style.top = (e.touches[0].clientY - 30) + 'px';
-    list.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    const now = Date.now();
+    if (now - ordLastTouchMove < 16) return;
+    ordLastTouchMove = now;
+    if (touchClone) touchClone.style.transform = 'translateY(' + (e.touches[0].clientY - touchStartY) + 'px) scale(0.95)';
+    if (ordTouchDragOver) ordTouchDragOver.classList.remove('drag-over');
     const el = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
     if (el) {
       const target = el.closest('.draggable-order');
-      if (target && target.dataset.orderId !== touchDragId) target.classList.add('drag-over');
+      if (target && target.dataset.orderId !== touchDragId) {
+        target.classList.add('drag-over');
+        ordTouchDragOver = target;
+      } else { ordTouchDragOver = null; }
     }
   }, { passive: false, signal });
 

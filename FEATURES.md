@@ -17,7 +17,7 @@ Daily visit tracking and route management.
 - Pending order indicator on day tabs (orange dot)
 - Each customer card: name, address, postcode, pending badge
 - Checkbox for delivery marking -> delivery modal
-- Drag-and-drop route ordering (touch + mouse)
+- Drag-and-drop route ordering (touch + mouse, GPU-accelerated with throttled touchmove)
 - Bottom bar: delivered count, Cash/Bank/Unpaid totals
 - Route summary share, Excel export, import buttons
 - Visit mode for customers with no pending orders
@@ -32,7 +32,7 @@ Order list and management.
 - Search (by customer name)
 - Filter: All / Pending / Delivered
 - Sort: Date / Name / Amount / Day / Manual
-- Manual sorting with drag-and-drop
+- Manual sorting with drag-and-drop (GPU-accelerated touch drag)
 - Each order card shows customer name + Week/Day badge
 - Deliver, Edit, Remove buttons
 - FAB (+) button for new order creation

@@ -304,14 +304,16 @@ function initRouteDragDrop() {
     draggedId = null;
   }, { signal });
 
+  let currentDragOver = null;
   list.addEventListener('dragover', e => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     const target = e.target.closest('.route-card');
-    list.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    if (currentDragOver && currentDragOver !== target) currentDragOver.classList.remove('drag-over');
     if (target && parseInt(target.dataset.stopId) !== draggedId) {
       target.classList.add('drag-over');
-    }
+      currentDragOver = target;
+    } else { currentDragOver = null; }
   }, { signal });
 
   list.addEventListener('drop', e => {
@@ -325,16 +327,20 @@ function initRouteDragDrop() {
   let touchDragId = null;
   let touchClone = null;
   let longPressTimer = null;
+  let touchStartY = 0;
+  let touchDragOver = null;
+  let lastTouchMove = 0;
 
   list.addEventListener('touchstart', e => {
     const card = e.target.closest('.draggable-route');
     if (!card || card.getAttribute('draggable') !== 'true') return;
     if (e.target.closest('.order-lock-btn') || e.target.closest('.btn') || e.target.closest('.delivery-btn')) return;
+    touchStartY = e.touches[0].clientY;
     longPressTimer = setTimeout(() => {
       touchDragId = parseInt(card.dataset.stopId);
       card.classList.add('dragging');
       touchClone = card.cloneNode(true);
-      touchClone.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0.8;width:' + card.offsetWidth + 'px;transform:scale(0.95);box-shadow:0 8px 24px rgba(0,0,0,0.2);left:' + card.getBoundingClientRect().left + 'px;top:' + (e.touches[0].clientY - 30) + 'px';
+      touchClone.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0.8;width:' + card.offsetWidth + 'px;box-shadow:0 8px 24px rgba(0,0,0,0.2);left:' + card.getBoundingClientRect().left + 'px;top:' + (e.touches[0].clientY - 30) + 'px;will-change:transform';
       document.body.appendChild(touchClone);
     }, 300);
   }, { passive: true, signal });
@@ -345,12 +351,18 @@ function initRouteDragDrop() {
       return;
     }
     e.preventDefault();
-    if (touchClone) touchClone.style.top = (e.touches[0].clientY - 30) + 'px';
-    list.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    const now = Date.now();
+    if (now - lastTouchMove < 16) return;
+    lastTouchMove = now;
+    if (touchClone) touchClone.style.transform = 'translateY(' + (e.touches[0].clientY - touchStartY) + 'px) scale(0.95)';
+    if (touchDragOver) touchDragOver.classList.remove('drag-over');
     const el = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
     if (el) {
       const target = el.closest('.route-card');
-      if (target && parseInt(target.dataset.stopId) !== touchDragId) target.classList.add('drag-over');
+      if (target && parseInt(target.dataset.stopId) !== touchDragId) {
+        target.classList.add('drag-over');
+        touchDragOver = target;
+      } else { touchDragOver = null; }
     }
   }, { passive: false, signal });
 
@@ -358,8 +370,8 @@ function initRouteDragDrop() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     if (!touchDragId) return;
     if (touchClone) { touchClone.remove(); touchClone = null; }
-    const cards = list.querySelectorAll('.route-card');
-    cards.forEach(c => { c.classList.remove('dragging'); c.classList.remove('drag-over'); });
+    list.querySelectorAll('.dragging,.drag-over').forEach(c => { c.classList.remove('dragging'); c.classList.remove('drag-over'); });
+    touchDragOver = null;
     const el = document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
     if (el) {
       const target = el.closest('.route-card');
@@ -503,7 +515,7 @@ function showDeliveryModal(stopId, singleOrderId) {
             </div>
           </div>
         </div>
-        <button class="btn btn-success btn-block mt-2" onclick="confirmVisitWithPayment()" id="btn-confirm-visit-pay" disabled>
+        <button class="btn btn-success btn-block mt-2" onclick="btnLock(confirmVisitWithPayment)" id="btn-confirm-visit-pay" disabled>
           Collect Payment & Mark as Visited
         </button>`;
     }
@@ -513,7 +525,7 @@ function showDeliveryModal(stopId, singleOrderId) {
         <label class="form-label">Visit Note (optional)</label>
         <textarea class="textarea" id="visit-note" rows="2" style="min-height:50px" placeholder="Add a note..."></textarea>
       </div>
-      <button class="btn ${debt > 0 ? 'btn-outline' : 'btn-success'} btn-block mt-1" onclick="confirmVisitOnly()">
+      <button class="btn ${debt > 0 ? 'btn-outline' : 'btn-success'} btn-block mt-1" onclick="btnLock(confirmVisitOnly)">
         ${debt > 0 ? 'Mark as Visited (No Payment)' : 'Mark as Visited'}
       </button>`;
 
@@ -557,7 +569,7 @@ function showDeliveryModal(stopId, singleOrderId) {
         <label class="form-label">Delivery Note (optional)</label>
         <textarea class="textarea" id="delivery-note" rows="2" placeholder="Add a note..." style="width:100%;font-size:14px;padding:8px;border:1px solid var(--border);border-radius:8px;resize:vertical"></textarea>
       </div>
-      <button class="btn btn-success btn-block mt-2" id="btn-confirm-delivery" style="opacity:0.5" onclick="confirmDelivery()">
+      <button class="btn btn-success btn-block mt-2" id="btn-confirm-delivery" style="opacity:0.5" onclick="btnLock(confirmDelivery)">
         Confirm Delivery
       </button>
     `);
@@ -618,7 +630,6 @@ async function confirmVisitWithPayment() {
     });
   }
   const savePromises = [save.debts(), save.debtHistory([stopId])];
-  DB.setDebt(stopId, S.debts[stopId]);
 
   const visitNote = document.getElementById('visit-note')?.value?.trim() || '';
   const vid = uid();
@@ -721,7 +732,6 @@ async function confirmDelivery() {
     if (debtChanged) {
       savePromises.push(save.debts());
       savePromises.push(save.debtHistory([parseInt(deliveryStopId)]));
-      DB.setDebt(stopId, S.debts[stopId] || 0);
     }
 
     savePromises.push(save.orders(pending.map(o => o.id)));

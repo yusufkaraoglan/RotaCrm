@@ -277,15 +277,15 @@ const save = {
   },
   customerProducts: () => {
     cacheSet('customer_products', S.customerProducts);
-    DB.setSetting('customer_products', S.customerProducts);
+    return DB.setSetting('customer_products', S.customerProducts);
   },
   brands: () => {
     cacheSet('customer_brands', S.brands);
-    DB.setSetting('customer_brands', S.brands);
+    return DB.setSetting('customer_brands', S.brands);
   },
   brandList: () => {
     cacheSet('brand_list', S.brandList);
-    DB.setSetting('brand_list', S.brandList);
+    return DB.setSetting('brand_list', S.brandList);
   },
   recurringOrders: () => {
     return _persist('recurring_orders', { ...S.recurringOrders }, () =>

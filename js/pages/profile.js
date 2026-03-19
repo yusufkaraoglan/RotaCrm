@@ -205,7 +205,6 @@ function renderProfile() {
   if (activity.length === 0) {
     html += `<p class="text-muted" style="font-size:13px;padding:8px 0">No activity yet</p>`;
   }
-  let _debtOwesShown = false; // Show "Owes" + "Collect Payment" only on the first (newest) entry
   let _lastDateGroup = '';
   activity.slice(0, 30).forEach(a => {
     // Date group header
@@ -221,8 +220,7 @@ function renderProfile() {
       const badgeClass = a.isVisit ? 'badge-purple' : 'badge-success';
       const hasUnpaidDebt = (o.payMethod === 'unpaid' || (o.payMethod === 'cash' && o.cashPaid !== undefined && o.cashPaid < a.total)) && a.total > 0;
       const debtAmount = Math.min(getRemainingOrderDebt(o), S.debts[stop.id] || 0);
-      const showOwes = hasUnpaidDebt && debtAmount > 0 && !_debtOwesShown;
-      if (showOwes) _debtOwesShown = true;
+      const showOwes = hasUnpaidDebt && debtAmount > 0;
       html += `
         <div class="card" style="padding:10px;margin-bottom:6px">
           <div class="flex-between">
@@ -332,7 +330,6 @@ async function deleteOrder(orderId) {
   if (stockChange.changed) savePromises.push(save.catalog());
   if (debtChanged) {
     savePromises.push(save.debts(), save.debtHistory([order.customerId]));
-    DB.setDebt(order.customerId, S.debts[order.customerId] || 0);
   }
   await Promise.allSettled(savePromises);
   if (curPage === 'profile') renderProfile();
@@ -449,7 +446,6 @@ async function saveEditDeliveredOrder(orderId) {
   const savePromises = [save.orders([o.id])];
   if (debtChanged) {
     savePromises.push(save.debts(), save.debtHistory([o.customerId]));
-    DB.setDebt(o.customerId, S.debts[o.customerId] || 0);
   }
   await Promise.allSettled(savePromises);
   closeModal();
@@ -829,7 +825,7 @@ function showAddDebtModal() {
       <label class="form-label">Note (optional)</label>
       <input class="input" id="debt-note" placeholder="Reason...">
     </div>
-    <button class="btn btn-primary btn-block" onclick="addDebt()">Add Debt</button>
+    <button class="btn btn-primary btn-block" onclick="btnLock(addDebt)">Add Debt</button>
   `);
 }
 
@@ -843,7 +839,6 @@ async function addDebt() {
   S.debts[profileStopId] = (S.debts[profileStopId] || 0) + amount;
   createDebtHistoryEntry(profileStopId, { date: debtDate, amount, type: 'add', note });
   await Promise.allSettled([save.debts(), save.debtHistory([profileStopId])]);
-  DB.setDebt(profileStopId, S.debts[profileStopId]);
   closeModal();
   renderProfile();
 }
@@ -877,7 +872,7 @@ function showCollectOrderPayment(orderId) {
         <div class="pay-opt" onclick="selectClearMethod('bank',this)">Bank</div>
       </div>
     </div>
-    <button class="btn btn-success btn-block" onclick="clearOrderDebt('${orderId}')">Collect Payment</button>
+    <button class="btn btn-success btn-block" onclick="btnLock(()=>clearOrderDebt('${orderId}'))">Collect Payment</button>
   `);
 }
 
@@ -901,7 +896,7 @@ async function clearOrderDebt(orderId) {
       delete o.cashPaid;
     }
     reconcileOrderDebtEffect(prevOrder, o);
-    save.orders([o.id]);
+    await save.orders([o.id]);
   } else {
     // Partial payment: reduce debt balance and add history entry
     S.debts[profileStopId] = Math.max(0, roundMoney((S.debts[profileStopId] || 0) - amount));
@@ -913,7 +908,6 @@ async function clearOrderDebt(orderId) {
     });
   }
   await Promise.allSettled([save.debts(), save.debtHistory([profileStopId])]);
-  DB.setDebt(profileStopId, S.debts[profileStopId] || 0);
   closeModal();
   renderProfile();
 }
@@ -924,7 +918,7 @@ function showClearDebtModal() {
 
   // Find unpaid orders for this customer
   const unpaidOrders = getStopOrders(profileStopId, 'delivered')
-    .filter(o => getOrderDebtImpact(o) > 0)
+    .filter(o => getRemainingOrderDebt(o) > 0)
     .sort((a, b) => (b.deliveredAt || '').localeCompare(a.deliveredAt || ''));
 
   let html = `<div class="modal-handle"></div>
@@ -935,7 +929,7 @@ function showClearDebtModal() {
     html += `<div style="margin-bottom:12px">
       <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">Unpaid Orders</div>`;
     unpaidOrders.forEach(o => {
-      const owed = getOrderDebtImpact(o);
+      const owed = Math.min(getRemainingOrderDebt(o), debt);
       const items = o.items.map(i => i.qty + 'x ' + i.name).join(', ');
       html += `<div class="card" style="padding:8px;margin-bottom:4px;cursor:pointer;border:1px solid var(--border)" onclick="closeModal();showCollectOrderPayment('${o.id}')">
         <div class="flex-between">
@@ -965,7 +959,7 @@ function showClearDebtModal() {
         <div class="pay-opt" onclick="selectClearMethod('bank',this)" id="clear-bank">Bank</div>
       </div>
     </div>
-    <button class="btn btn-success btn-block" onclick="clearDebt()">Collect Debt</button>`;
+    <button class="btn btn-success btn-block" onclick="btnLock(clearDebt)">Collect Debt</button>`;
 
   if (unpaidOrders.length > 0) html += `</div>`;
   openModal(html);
@@ -1006,7 +1000,6 @@ async function clearDebt() {
   const savePromises = [save.debts(), save.debtHistory([profileStopId])];
   if (changedOrderIds.length > 0) savePromises.push(save.orders(changedOrderIds));
   await Promise.allSettled(savePromises);
-  DB.setDebt(profileStopId, S.debts[profileStopId]);
   closeModal();
   renderProfile();
 }
@@ -1023,7 +1016,6 @@ async function removeAllDebt() {
     note: 'Debt written off'
   });
   await Promise.allSettled([save.debts(), save.debtHistory([profileStopId])]);
-  DB.setDebt(profileStopId, 0);
   renderProfile();
 }
 
@@ -1073,7 +1065,6 @@ async function saveEditDebtHistory(stopId, entryId) {
   }
   S.debts[stopId] = Math.max(0, S.debts[stopId]);
   await Promise.allSettled([save.debts(), save.debtHistory([stopId])]);
-  DB.setDebt(stopId, S.debts[stopId]);
   closeModal();
   renderProfile();
 }
@@ -1093,7 +1084,6 @@ async function removeDebtHistory(stopId, entryId) {
   }
   dh.splice(idx, 1);
   await Promise.allSettled([save.debts(), save.debtHistory([stopId])]);
-  DB.setDebt(stopId, S.debts[stopId]);
   renderProfile();
 }
 
