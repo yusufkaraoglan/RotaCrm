@@ -3,7 +3,8 @@
 // UTILITY FUNCTIONS
 // ═══════════════════════════════════════════════════════════
 
-function uid() { return 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+let _uidCounter = 0;
+function uid() { return 'o' + Date.now().toString(36) + (++_uidCounter).toString(36) + Math.random().toString(36).slice(2, 7); }
 
 function debounce(fn, ms) {
   let timer;
@@ -235,7 +236,7 @@ function getStopOrders(stopId, status) {
 
 function calcOrderTotal(order) {
   if (!order || !order.items) return 0;
-  return roundMoney(order.items.reduce((s, i) => s + (parseInt(i.qty) || 0) * (parseFloat(i.price) || 0), 0));
+  return roundMoney(order.items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.price) || 0), 0));
 }
 
 function roundMoney(n) {
@@ -251,7 +252,7 @@ function buildItemQtyMap(items) {
   const map = {};
   (items || []).forEach(item => {
     if (!item || !item.name) return;
-    map[item.name] = (map[item.name] || 0) + (parseInt(item.qty, 10) || 0);
+    map[item.name] = (map[item.name] || 0) + (parseFloat(item.qty) || 0);
   });
   return map;
 }

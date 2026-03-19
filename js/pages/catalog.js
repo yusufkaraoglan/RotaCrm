@@ -413,6 +413,15 @@ async function resetOrdersAndDebts() {
   // Auto-backup before reset
   try { exportJSON(); } catch (e) { console.warn('Auto-backup failed:', e); }
 
+  // Wait for in-flight saves to finish before resetting
+  if (_savePending > 0) {
+    showToast('Waiting for pending saves...', 'info', 2000);
+    const waitStart = Date.now();
+    while (_savePending > 0 && Date.now() - waitStart < 5000) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
+
   // Clear local state immediately
   S.orders = {};
   S.debts = {};

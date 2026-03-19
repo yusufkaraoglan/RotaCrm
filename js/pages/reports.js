@@ -644,21 +644,20 @@ function exportProductReportExcel() {
   const report = calcProductSalesReport();
   if (report.rows.length === 0) { appAlert('No data to export.'); return; }
 
-  const data = [['Customer', 'Date', 'Payment', 'Unpaid', 'Products']];
+  const data = [['Customer', 'Date', 'Total', 'Cash', 'Bank', 'Unpaid', 'Products']];
   report.rows.forEach(r => {
-    const payText = r.payDisplay.parts.map(p => p.text).join(' + ');
-    const unpaidText = r.payDisplay.unpaidAmount > 0 ? formatCurrency(r.payDisplay.unpaidAmount) : '';
-    data.push([r.name, r.dateTime || '', payText, unpaidText, r.isDebtPayment ? 'Outstanding payment received' : r.productsSummary]);
+    const cashAmt = r.payDisplay.parts.filter(p => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
+    const bankAmt = r.payDisplay.parts.filter(p => p.method === 'bank').reduce((s, p) => s + p.amount, 0);
+    const unpaidAmt = r.payDisplay.unpaidAmount || 0;
+    const totalAmt = cashAmt + bankAmt + unpaidAmt;
+    data.push([r.name, r.dateTime || '', totalAmt, cashAmt || '', bankAmt || '', unpaidAmt || '', r.isDebtPayment ? 'Outstanding payment received' : r.productsSummary]);
   });
   data.push([]);
-  data.push(['TOTAL']);
-  data.push(['Cash', '', formatCurrency(report.totalCash)]);
-  data.push(['Bank', '', formatCurrency(report.totalBank)]);
-  data.push(['Unpaid', '', formatCurrency(report.totalUnpaid)]);
+  data.push(['TOTAL', '', report.totalCash + report.totalBank + report.totalUnpaid, report.totalCash, report.totalBank, report.totalUnpaid]);
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 40 }];
+  ws['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 40 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Product Report');
   XLSX.writeFile(wb, 'product_report_' + todayStr() + '.xlsx');
 }
@@ -667,7 +666,10 @@ function exportProductReportExcel() {
 // DELIVERY HISTORY
 // ══════════════════════════════════════════════════════════════
 function renderDeliveryHistoryContent() {
-  const delivered = Object.values(S.orders).filter(o => o.status === 'delivered' && o.deliveredAt);
+  let delivered = Object.values(S.orders).filter(o => o.status === 'delivered' && o.deliveredAt);
+  // Apply date range filter if set
+  if (S.reportStart) delivered = delivered.filter(o => (o.deliveredAt || '').slice(0, 10) >= S.reportStart);
+  if (S.reportEnd) delivered = delivered.filter(o => (o.deliveredAt || '').slice(0, 10) <= S.reportEnd);
   const weeks = {};
   delivered.forEach(o => {
     const monday = getWeekMondayStr(o.deliveredAt);

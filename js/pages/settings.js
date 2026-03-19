@@ -403,6 +403,8 @@ async function clearLocalCache() {
 
 async function forceSyncNow() {
   showToast('Syncing...', 'info', 2000);
+  // Re-check DB readiness in case tables were created since last check
+  if (!_dbReady) await checkDbTables();
   const ok = await syncAll();
   if (ok) {
     await loadStateFromDB();

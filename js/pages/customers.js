@@ -132,9 +132,14 @@ function showAddCustomerModal() {
 async function saveNewCustomer() {
   const name = document.getElementById('add-cust-name').value.trim();
   if (!name) { appAlert('Name is required.'); return; }
+  const upperName = name.toUpperCase();
+  if (STOPS.some(s => s.n.toUpperCase() === upperName)) {
+    if (!(await appConfirm('A customer named "' + escHtml(upperName) + '" already exists. Add anyway?'))) return;
+  }
   const maxId = STOPS.length > 0 ? STOPS.reduce((m, s) => Math.max(m, s.id), 0) : 0;
+  const newId = Math.max(maxId + 1, Date.now() % 1000000000);
   const stop = {
-    id: maxId + 1,
+    id: newId,
     n: name.toUpperCase(),
     a: document.getElementById('add-cust-addr').value.trim(),
     c: document.getElementById('add-cust-city').value.trim(),

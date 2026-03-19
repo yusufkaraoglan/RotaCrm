@@ -41,11 +41,14 @@ let dhSearchTerm = '';
 
 // ── Double-click protection utility ────────────────────────
 
-let _btnLock = false;
+const _btnLocks = new Set();
+let _btnLock = false; // kept for backward compat with manual checks in neworder.js
 function btnLock(fn) {
-  if (_btnLock) return;
+  const key = fn.toString().slice(0, 80);
+  if (_btnLocks.has(key)) return;
+  _btnLocks.add(key);
   _btnLock = true;
-  const unlock = () => { _btnLock = false; };
+  const unlock = () => { _btnLocks.delete(key); _btnLock = _btnLocks.size > 0; };
   try {
     const result = fn();
     if (result && typeof result.then === 'function') {
@@ -280,16 +283,19 @@ const save = {
     );
   },
   customerProducts: () => {
-    cacheSet('customer_products', S.customerProducts);
-    return DB.setSetting('customer_products', S.customerProducts);
+    return _persist('customer_products', { ...S.customerProducts }, () =>
+      DB.setSetting('customer_products', S.customerProducts)
+    );
   },
   brands: () => {
-    cacheSet('customer_brands', S.brands);
-    return DB.setSetting('customer_brands', S.brands);
+    return _persist('customer_brands', { ...S.brands }, () =>
+      DB.setSetting('customer_brands', S.brands)
+    );
   },
   brandList: () => {
-    cacheSet('brand_list', S.brandList);
-    return DB.setSetting('brand_list', S.brandList);
+    return _persist('brand_list', [...S.brandList], () =>
+      DB.setSetting('brand_list', S.brandList)
+    );
   },
   recurringOrders: () => {
     return _persist('recurring_orders', { ...S.recurringOrders }, () =>
@@ -448,6 +454,9 @@ function _appPromptAnswer(val) {
 // ── Toast Notifications ────────────────────────────────────
 
 function showToast(message, type = 'info', duration = 3000) {
+  // Limit concurrent toasts to prevent DOM accumulation
+  const existing = document.querySelectorAll('.toast');
+  if (existing.length >= 3) existing[0].remove();
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
   toast.textContent = message;
@@ -555,15 +564,21 @@ async function init() {
   let _syncInProgress = false;
   let _lastSyncHash = '';
   const doSync = async () => {
-    if (!_dbReady || _syncInProgress || _savePending > 0 || offlineQueue.length > 0) return;
+    if (_syncInProgress || _savePending > 0 || offlineQueue.length > 0) return;
+    // Re-check DB readiness periodically in case tables were created
+    if (!_dbReady) { await checkDbTables(); if (!_dbReady) return; }
     _syncInProgress = true;
     try {
       const ok = await syncAll();
       if (ok && _savePending === 0) {
+        const customers = cacheGet('customers', null);
+        const orders = cacheGet('orders', null);
+        const debts = cacheGet('debts', null);
         const newHash = JSON.stringify([
-          cacheGet('customers', null)?.length,
-          cacheGet('orders', null) && Object.keys(cacheGet('orders', {})).length,
-          cacheGet('debts', null) && Object.keys(cacheGet('debts', {})).length
+          customers ? customers.length : 0,
+          orders ? Object.keys(orders).length : 0,
+          debts ? JSON.stringify(debts) : '{}',
+          customers ? customers.map(c => c.name + c.note).join('') : ''
         ]);
         if (newHash !== _lastSyncHash) {
           _lastSyncHash = newHash;
