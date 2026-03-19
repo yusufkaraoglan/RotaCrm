@@ -8,7 +8,7 @@ function renderSettings() {
     </header>
     <div class="page-body">
 
-      <!-- Catalog Section -->
+      <!-- Catalog -->
       <div class="settings-section">
         <div class="settings-title">Product Catalog</div>
         <div class="settings-card">
@@ -22,28 +22,21 @@ function renderSettings() {
         </div>
       </div>
 
-      <!-- Map Section -->
+      <!-- Map -->
       <div class="settings-section">
         <div class="settings-title">Map</div>
         <div class="settings-card">
-          <div class="settings-item" onclick="showMapModal()" style="cursor:pointer">
+          <div class="settings-item" onclick="showPage('map')" style="cursor:pointer">
             <div>
               <div class="settings-item-label">View Map</div>
-              <div class="settings-item-desc">View all customers on map</div>
-            </div>
-            <span style="color:var(--text-muted)">&rarr;</span>
-          </div>
-          <div class="settings-item" onclick="geocodeAllStops()" style="cursor:pointer">
-            <div>
-              <div class="settings-item-label">Geocode All</div>
-              <div class="settings-item-desc">Geocode customers without coordinates</div>
+              <div class="settings-item-desc">${STOPS.length} customers</div>
             </div>
             <span style="color:var(--text-muted)">&rarr;</span>
           </div>
         </div>
       </div>
 
-      <!-- Import/Export Section -->
+      <!-- Data -->
       <div class="settings-section">
         <div class="settings-title">Data</div>
         <div class="settings-card">
@@ -59,25 +52,18 @@ function renderSettings() {
               <div class="settings-item-label">Export to Excel</div>
               <div class="settings-item-desc">Download all data</div>
             </div>
-            <span style="color:var(--text-muted)">&rarr;</span>
+            <span style="color:var(--text-muted)">&darr;</span>
           </div>
-        </div>
-      </div>
-
-      <!-- Data Backup -->
-      <div class="settings-section">
-        <div class="settings-title">Data Backup</div>
-        <div class="settings-card">
           <div class="settings-item" style="cursor:pointer" onclick="exportJSON()">
             <div>
-              <div class="settings-item-label">Export as JSON</div>
+              <div class="settings-item-label">Backup (JSON)</div>
               <div class="settings-item-desc">Save all data to backup file</div>
             </div>
             <span style="color:var(--text-muted)">&darr;</span>
           </div>
           <div class="settings-item" style="cursor:pointer" onclick="document.getElementById('json-import-input').click()">
             <div>
-              <div class="settings-item-label">Import from JSON</div>
+              <div class="settings-item-label">Restore (JSON)</div>
               <div class="settings-item-desc">Restore data from backup file</div>
             </div>
             <span style="color:var(--text-muted)">&uarr;</span>
@@ -86,8 +72,7 @@ function renderSettings() {
         <input type="file" id="json-import-input" accept=".json" style="display:none" onchange="importJSON(this)">
       </div>
 
-
-      <!-- Database Status -->
+      <!-- Database -->
       <div class="settings-section">
         <div class="settings-title">Database</div>
         <div class="settings-card">
@@ -114,13 +99,6 @@ function renderSettings() {
             <span style="color:var(--text-muted)">&uarr;</span>
           </div>
           ` : ''}
-          <div class="settings-item" onclick="recheckDbConnection()" style="cursor:pointer">
-            <div>
-              <div class="settings-item-label">Test Connection</div>
-              <div class="settings-item-desc">Check database tables and permissions</div>
-            </div>
-            <span style="color:var(--text-muted)">&#9889;</span>
-          </div>
         </div>
       </div>
 
@@ -131,21 +109,21 @@ function renderSettings() {
           <div class="settings-item">
             <div>
               <div class="settings-item-label">Reset Orders & Debts</div>
-              <div class="settings-item-desc">Clear orders, debts, debt history, and recurring orders. Keeps customers, routes, map, catalog, pricing, and brands.</div>
+              <div class="settings-item-desc">Clears orders, debts, and debt history. Keeps customers, routes, and catalog.</div>
             </div>
             <button class="btn btn-danger btn-sm" onclick="resetOrdersAndDebts()">Reset</button>
           </div>
           <div class="settings-item">
             <div>
               <div class="settings-item-label">Reset All Data</div>
-              <div class="settings-item-desc">Delete everything (local + cloud) and start fresh</div>
+              <div class="settings-item-desc">Delete everything and start fresh</div>
             </div>
             <button class="btn btn-danger btn-sm" onclick="resetAllData()">Reset</button>
           </div>
           <div class="settings-item">
             <div>
               <div class="settings-item-label">Clear Local Cache</div>
-              <div class="settings-item-desc">Clear local storage only. Cloud data stays. Use if app feels stuck.</div>
+              <div class="settings-item-desc">Clear browser cache. Cloud data stays.</div>
             </div>
             <button class="btn btn-outline btn-sm" onclick="clearLocalCache()">Clear</button>
           </div>
@@ -413,17 +391,6 @@ async function forceSyncNow() {
   } else {
     showToast('Sync failed', 'error');
   }
-}
-
-async function recheckDbConnection() {
-  showToast('Testing connection...', 'info', 2000);
-  const ok = await checkDbTables();
-  if (ok) {
-    showToast('Database OK — tables and permissions verified', 'success');
-  } else {
-    showToast('Connection problem detected — check debug log for details', 'error', 5000);
-  }
-  renderSettings();
 }
 
 // ══════════════════════════════════════════════════════════════
