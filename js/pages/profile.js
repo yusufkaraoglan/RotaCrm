@@ -140,7 +140,7 @@ function renderProfile() {
   const standaloneDebt = [];
   dhRaw.forEach((h, i) => {
     if (h.type === 'visit' || h.amount <= 0) return;
-    const entry = { ...h, _idx: i };
+    const entry = { ...h };
     if (h.orderId && S.orders[h.orderId]) {
       if (!debtByOrder[h.orderId]) debtByOrder[h.orderId] = [];
       debtByOrder[h.orderId].push(entry);
@@ -186,20 +186,48 @@ function renderProfile() {
     });
   });
 
-  // Sort newest first, then by type priority for same-second entries
+  // Sort newest first, then by type priority for same-millisecond entries
   const _typePriority = { order: 0, debt: 1, writeoff: 2, payment: 3 };
   activity.sort((a, b) => {
-    const d = (b.date || '').localeCompare(a.date || '');
-    if (d !== 0) return d;
+    const da = a.date ? new Date(a.date).getTime() : 0;
+    const db = b.date ? new Date(b.date).getTime() : 0;
+    if (db !== da) return db - da;
     return (_typePriority[a.type] || 9) - (_typePriority[b.type] || 9);
   });
+
+  // Calculate running balance (walk newest→oldest, reverse-engineer from current debt)
+  const currentDebt = S.debts[stop.id] || 0;
+  let _runBal = currentDebt;
+  for (let i = 0; i < activity.length; i++) {
+    const a = activity[i];
+    a._balAfter = _runBal;
+    if (a.type === 'order') {
+      const impact = getOrderDebtImpact(a.order);
+      const payTotal = (a.debtEntries || []).filter(e => e.type === 'clear').reduce((s, e) => s + e.amount, 0);
+      _runBal = roundMoney(_runBal - impact + payTotal);
+    } else if (a.type === 'debt') {
+      _runBal = roundMoney(_runBal - a.entry.amount);
+    } else if (a.type === 'payment') {
+      _runBal = roundMoney(_runBal + a.entry.amount);
+    } else if (a.type === 'writeoff') {
+      _runBal = roundMoney(_runBal + a.entry.amount);
+    }
+  }
 
   html += `<div class="section-head"><h3>Activity</h3></div>`;
   if (activity.length === 0) {
     html += `<p class="text-muted" style="font-size:13px;padding:8px 0">No activity yet</p>`;
   }
   let _debtOwesShown = false; // Show "Owes" + "Collect Payment" only on the first (newest) entry
+  let _lastDateGroup = '';
   activity.slice(0, 30).forEach(a => {
+    // Date group header
+    const _dt = a.date ? new Date(a.date) : null;
+    const _dg = _dt ? _dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown';
+    if (_dg !== _lastDateGroup) {
+      html += `<div style="font-size:12px;font-weight:600;color:var(--text-sec);padding:${_lastDateGroup ? '10px' : '4px'} 0 4px">${_dg}</div>`;
+      _lastDateGroup = _dg;
+    }
     if (a.type === 'order') {
       const o = a.order;
       const badgeLabel = a.isVisit ? 'visit' : 'delivered';
@@ -230,6 +258,7 @@ function renderProfile() {
             <span style="font-size:12px;color:var(--success)">${escHtml(e.note || 'Payment received')}</span>
             <span style="font-size:12px;font-weight:600;color:var(--success)">-${formatCurrency(e.amount)}</span>
           </div>`).join('') : ''}
+          ${a._balAfter != null ? `<div style="font-size:11px;color:var(--text-sec);margin-top:2px">Balance: ${formatCurrency(a._balAfter)}</div>` : ''}
           <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px">
             <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" data-id="${escHtml(o.id)}" onclick="showEditDeliveredOrderModal(this.dataset.id)">Edit</button>
             <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" data-id="${escHtml(o.id)}" onclick="deleteOrder(this.dataset.id)">Delete</button>
@@ -238,16 +267,16 @@ function renderProfile() {
     } else if (a.type === 'payment') {
       const e = a.entry;
       html += `
-        <div class="card" style="padding:10px;margin-bottom:6px;border-left:3px solid var(--success)">
+        <div class="card" style="padding:10px;margin-bottom:6px;border-left:3px solid var(--success);background:var(--success-light)">
           <div class="flex-between">
-            <span style="font-size:13px">${escHtml(e.note || 'Payment received')}</span>
+            <span style="font-size:13px;font-weight:500">${escHtml(e.note || 'Payment received')}</span>
             <span style="font-size:13px;font-weight:600;color:var(--success)">-${formatCurrency(e.amount)}</span>
           </div>
           <div class="flex-between" style="margin-top:4px">
-            <div class="text-muted" style="font-size:11px">${formatDateTime(e.date)}</div>
+            <div style="font-size:11px;color:var(--text-sec)">${formatDateTime(e.date)}${a._balAfter != null ? ' · Bal: ' + formatCurrency(a._balAfter) : ''}</div>
             <div style="display:flex;gap:6px">
-              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},${e._idx}))">Edit</button>
-              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="btnLock(()=>removeDebtHistory(${stop.id},${e._idx}))">Remove</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" data-eid="${escHtml(e.id)}" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},this.dataset.eid))">Edit</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" data-eid="${escHtml(e.id)}" onclick="btnLock(()=>removeDebtHistory(${stop.id},this.dataset.eid))">Remove</button>
             </div>
           </div>
         </div>`;
@@ -257,9 +286,9 @@ function renderProfile() {
       const showDebtOwes = customerDebt > 0 && !_debtOwesShown;
       if (showDebtOwes) _debtOwesShown = true;
       html += `
-        <div class="card" style="padding:10px;margin-bottom:6px;border-left:3px solid var(--danger)">
+        <div class="card" style="padding:10px;margin-bottom:6px;border-left:3px solid var(--danger);background:var(--danger-light)">
           <div class="flex-between">
-            <span style="font-size:13px">${escHtml(e.note || 'Debt added')}</span>
+            <span style="font-size:13px;font-weight:500">${escHtml(e.note || 'Debt added')}</span>
             <span style="font-size:13px;font-weight:600;color:var(--danger)">+${formatCurrency(e.amount)}</span>
           </div>
           ${showDebtOwes ? `
@@ -268,10 +297,10 @@ function renderProfile() {
             <button class="btn btn-success btn-sm" style="font-size:11px;padding:3px 10px" onclick="showClearDebtModal()">Collect Payment</button>
           </div>` : ''}
           <div class="flex-between" style="margin-top:4px">
-            <div class="text-muted" style="font-size:11px">${formatDateTime(e.date)}</div>
+            <div style="font-size:11px;color:var(--text-sec)">${formatDateTime(e.date)}${a._balAfter != null ? ' · Bal: ' + formatCurrency(a._balAfter) : ''}</div>
             <div style="display:flex;gap:6px">
-              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},${e._idx}))">Edit</button>
-              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="btnLock(()=>removeDebtHistory(${stop.id},${e._idx}))">Remove</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" data-eid="${escHtml(e.id)}" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},this.dataset.eid))">Edit</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" data-eid="${escHtml(e.id)}" onclick="btnLock(()=>removeDebtHistory(${stop.id},this.dataset.eid))">Remove</button>
             </div>
           </div>
         </div>`;
@@ -280,14 +309,14 @@ function renderProfile() {
       html += `
         <div class="card" style="padding:10px;margin-bottom:6px;border-left:3px solid var(--text-muted)">
           <div class="flex-between">
-            <span style="font-size:13px">${escHtml(e.note || 'Debt written off')}</span>
+            <span style="font-size:13px;font-weight:500;text-decoration:line-through">${escHtml(e.note || 'Debt written off')}</span>
             <span style="font-size:13px;font-weight:600;color:var(--text-muted)">-${formatCurrency(e.amount)}</span>
           </div>
           <div class="flex-between" style="margin-top:4px">
-            <div class="text-muted" style="font-size:11px">${formatDateTime(e.date)}</div>
+            <div style="font-size:11px;color:var(--text-sec)">${formatDateTime(e.date)}${a._balAfter != null ? ' · Bal: ' + formatCurrency(a._balAfter) : ''}</div>
             <div style="display:flex;gap:6px">
-              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},${e._idx}))">Edit</button>
-              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" onclick="btnLock(()=>removeDebtHistory(${stop.id},${e._idx}))">Remove</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--primary);padding:2px 6px" data-eid="${escHtml(e.id)}" onclick="btnLock(()=>showEditDebtHistoryModal(${stop.id},this.dataset.eid))">Edit</button>
+              <button class="btn-ghost" style="font-size:11px;color:var(--danger);padding:2px 6px" data-eid="${escHtml(e.id)}" onclick="btnLock(()=>removeDebtHistory(${stop.id},this.dataset.eid))">Remove</button>
             </div>
           </div>
         </div>`;
@@ -829,14 +858,12 @@ function showAddDebtModal() {
 async function addDebt() {
   const amount = parseFloat(document.getElementById('debt-amount').value) || 0;
   if (amount <= 0) { appAlert('Please enter a valid amount.'); return; }
-  const note = document.getElementById('debt-note').value.trim() || 'Manual entry';
+  const note = document.getElementById('debt-note').value.trim() || 'Debt added';
   const dateInput = document.getElementById('debt-date');
   const debtDate = dateInput && dateInput.value ? new Date(dateInput.value).toISOString() : new Date().toISOString();
 
   S.debts[profileStopId] = (S.debts[profileStopId] || 0) + amount;
-  const debtEntry = { date: debtDate, amount, type: 'add', note };
-  if (!S.debtHistory[profileStopId]) S.debtHistory[profileStopId] = [];
-  S.debtHistory[profileStopId].unshift(debtEntry);
+  createDebtHistoryEntry(profileStopId, { date: debtDate, amount, type: 'add', note });
   await Promise.allSettled([save.debts(), save.debtHistory([profileStopId])]);
   DB.setDebt(profileStopId, S.debts[profileStopId]);
   closeModal();
@@ -1022,9 +1049,11 @@ async function removeAllDebt() {
   renderProfile();
 }
 
-function showEditDebtHistoryModal(stopId, idx) {
+function showEditDebtHistoryModal(stopId, entryId) {
   const dh = S.debtHistory[stopId];
-  if (!dh || !dh[idx]) return;
+  if (!dh) return;
+  const idx = dh.findIndex(e => e.id === entryId);
+  if (idx === -1) return;
   const h = dh[idx];
   const editDate = h.date ? new Date(h.date).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16);
   openModal(`
@@ -1042,13 +1071,15 @@ function showEditDebtHistoryModal(stopId, idx) {
       <label class="form-label">Note</label>
       <input class="input" id="edit-dh-note" value="${escHtml(h.note || '')}">
     </div>
-    <button class="btn btn-primary btn-block" onclick="saveEditDebtHistory(${stopId},${idx})">Save</button>
+    <button class="btn btn-primary btn-block" data-eid="${escHtml(entryId)}" onclick="saveEditDebtHistory(${stopId},this.dataset.eid)">Save</button>
   `);
 }
 
-async function saveEditDebtHistory(stopId, idx) {
+async function saveEditDebtHistory(stopId, entryId) {
   const dh = S.debtHistory[stopId];
-  if (!dh || !dh[idx]) return;
+  if (!dh) return;
+  const idx = dh.findIndex(e => e.id === entryId);
+  if (idx === -1) return;
   const oldAmount = dh[idx].amount;
   const oldType = dh[idx].type;
   const newAmount = parseFloat(document.getElementById('edit-dh-amount').value) || 0;
@@ -1069,10 +1100,12 @@ async function saveEditDebtHistory(stopId, idx) {
   renderProfile();
 }
 
-async function removeDebtHistory(stopId, idx) {
+async function removeDebtHistory(stopId, entryId) {
   if (!(await appConfirm('Are you sure you want to delete this debt record?'))) return;
   const dh = S.debtHistory[stopId];
-  if (!dh || !dh[idx]) return;
+  if (!dh) return;
+  const idx = dh.findIndex(e => e.id === entryId);
+  if (idx === -1) return;
   const h = dh[idx];
   // Reverse the debt effect
   if (h.type === 'add') {
