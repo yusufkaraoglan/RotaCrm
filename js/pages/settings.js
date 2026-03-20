@@ -222,8 +222,13 @@ async function importJSON(input) {
     if (d.recurringOrders) { S.recurringOrders = d.recurringOrders; importPromises.push(save.recurringOrders()); }
     if (d.brands) { S.brands = d.brands; importPromises.push(save.brands()); }
     if (d.brandList) { S.brandList = d.brandList; importPromises.push(save.brandList()); }
-    await Promise.allSettled(importPromises);
-    appAlert('Data restored successfully.');
+    const importResults = await Promise.allSettled(importPromises);
+    const importFailed = importResults.filter(r => r.status === 'rejected').length;
+    if (importFailed > 0) {
+      appAlert(`Data restored with ${importFailed} error(s). Some data may not have been saved to the cloud.`);
+    } else {
+      appAlert('Data restored successfully.');
+    }
     renderSettings();
   } catch (e) {
     appAlert('Could not read file: ' + e.message);
@@ -373,7 +378,9 @@ async function _uploadAllToSupabase() {
     stock: c.stock ?? null, track_stock: c.trackStock !== false,
     sort_order: c.sort_order || 0
   })));
-  await Promise.all(step1);
+  const step1Results = await Promise.allSettled(step1);
+  const step1Failed = step1Results.filter(r => r.status === 'rejected').length;
+  if (step1Failed > 0) console.warn(`Upload step 1: ${step1Failed} failed`);
 
   // Step 2: everything that references customers
   const step2 = [];
@@ -388,7 +395,9 @@ async function _uploadAllToSupabase() {
   });
   Object.entries(S.customerPricing || {}).forEach(([cid, pm]) => step2.push(DB.setCustomerPricing(cid, pm || {})));
   Object.entries(S.recurringOrders || {}).forEach(([cid, data]) => step2.push(DB.setRecurringOrder(cid, data)));
-  await Promise.all(step2);
+  const step2Results = await Promise.allSettled(step2);
+  const step2Failed = step2Results.filter(r => r.status === 'rejected').length;
+  if (step2Failed > 0) console.warn(`Upload step 2: ${step2Failed} failed`);
 }
 
 async function clearLocalCache() {

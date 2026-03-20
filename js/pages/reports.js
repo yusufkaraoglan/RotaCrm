@@ -566,7 +566,9 @@ function calcProductSalesReport() {
     });
 
     let cashPaid = 0, bankPaid = 0, unpaidTotal = 0;
-    if (o.payMethod === 'cash') {
+    if (o.payMethod === 'visit') {
+      // Visit orders are not real payments — skip payment calculation
+    } else if (o.payMethod === 'cash') {
       const paid = (o.cashPaid !== undefined) ? o.cashPaid : total;
       cashPaid = Math.min(paid, total);
       unpaidTotal = Math.max(0, total - paid);
@@ -843,7 +845,7 @@ function renderDeliveryHistoryContent() {
           <div style="padding:4px 12px">`;
 
       Object.entries(byCustomer).forEach(([cid, cOrders]) => {
-        const stop = getStop(cid);
+        const stop = getStop(parseInt(cid));
         if (!stop) return;
         const custTotal = cOrders.filter(o => o.payMethod !== 'visit').reduce((s, o) => s + calcOrderTotal(o), 0);
         const allVisit = cOrders.every(o => o.payMethod === 'visit');

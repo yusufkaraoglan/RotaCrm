@@ -239,7 +239,10 @@ const save = {
   geo: () => { return save.stops(); },
   orders: (changedOrderIds) => {
     return _persist('orders', { ...S.orders }, () => {
-      if (!changedOrderIds || !Array.isArray(changedOrderIds)) return Promise.resolve();
+      if (!changedOrderIds || !Array.isArray(changedOrderIds)) {
+        console.warn('save.orders() called without changedOrderIds — Supabase write skipped');
+        return Promise.resolve();
+      }
       return Promise.allSettled(changedOrderIds.map(id =>
         S.orders[id] ? DB.saveOrder(S.orders[id]) : DB.deleteOrder(id)
       ));
@@ -269,9 +272,7 @@ const save = {
     }));
     return _persist('products', mapped, () =>
       Promise.allSettled(mapped.map(p =>
-        dbInsert('products', p, { upsert: true, onConflict: 'name' }).catch(e => {
-          if (typeof dbLog === 'function') dbLog(`save product FAILED: ${p.name} - ${e.message}`);
-        })
+        DB.saveProduct(p)
       ))
     );
   },
@@ -293,8 +294,9 @@ const save = {
     );
   },
   brandList: () => {
-    return _persist('brand_list', [...S.brandList], () =>
-      DB.setSetting('brand_list', S.brandList)
+    const copy = [...S.brandList];
+    return _persist('brand_list', copy, () =>
+      DB.setSetting('brand_list', copy)
     );
   },
   recurringOrders: () => {
@@ -505,7 +507,7 @@ function _renderDebugPanel() {
     document.body.appendChild(panel);
   }
   panel.innerHTML = '<b>DB Log</b> <button onclick="_debugVisible=false;this.parentElement.remove()" style="float:right;color:#f00;background:none;border:none;font-size:14px">✕</button><br>'
-    + (_debugLog.length ? _debugLog.map(l => `<div style="border-bottom:1px solid #333;padding:2px 0">${l}</div>`).join('') : '<i>No logs yet</i>');
+    + (_debugLog.length ? _debugLog.map(l => `<div style="border-bottom:1px solid #333;padding:2px 0">${escHtml(l)}</div>`).join('') : '<i>No logs yet</i>');
   panel.scrollTop = panel.scrollHeight;
 }
 
@@ -546,7 +548,7 @@ async function init() {
   if (typeof runRouteSeed === 'function') runRouteSeed();
 
   // Auto-create recurring orders for today
-  autoCreateRecurringOrders();
+  await autoCreateRecurringOrders();
 
   // Restore last page (loaded from Supabase in loadStateFromDB)
   const savedPage = cacheGet('_lastPage', 'route');
@@ -577,11 +579,17 @@ async function init() {
         const customers = cacheGet('customers', null);
         const orders = cacheGet('orders', null);
         const debts = cacheGet('debts', null);
+        const assignments = cacheGet('assignments', null);
+        const routeOrder = cacheGet('route_order', null);
+        const pricing = cacheGet('customer_pricing', null);
         const newHash = JSON.stringify([
           customers ? customers.length : 0,
           orders ? Object.keys(orders).length : 0,
           debts ? JSON.stringify(debts) : '{}',
-          customers ? customers.map(c => c.name + c.note).join('') : ''
+          customers ? customers.map(c => c.name + c.note + (c.address||'')).join('') : '',
+          assignments ? JSON.stringify(assignments) : '{}',
+          routeOrder ? JSON.stringify(routeOrder) : '{}',
+          pricing ? JSON.stringify(pricing) : '{}'
         ]);
         if (newHash !== _lastSyncHash) {
           _lastSyncHash = newHash;

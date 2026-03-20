@@ -338,6 +338,15 @@ const DB = {
   },
 
   async deleteCustomer(id) {
+    // Cascade delete related data
+    await Promise.allSettled([
+      dbDelete('assignments', { customer_id: id }),
+      dbDelete('debts', { customer_id: id }),
+      dbDelete('debt_history', { customer_id: id }),
+      dbDelete('customer_pricing', { customer_id: id }),
+      dbDelete('recurring_orders', { customer_id: id }),
+    ]);
+    delete _memCacheTs['customers'];
     return await dbDelete('customers', { id });
   },
 
@@ -466,6 +475,8 @@ const DB = {
   },
 
   async deleteOrder(orderId) {
+    await dbDelete('order_items', { order_id: orderId });
+    delete _memCacheTs['orders'];
     return await dbDelete('orders', { id: orderId });
   },
 
@@ -499,11 +510,13 @@ const DB = {
 
   async addDebtHistoryEntry(customerId, entry) {
     const encodedNote = (entry.note || '') + (entry.type ? '|||' + entry.type : '');
-    await dbInsert('debt_history', {
+    const result = await dbInsert('debt_history', {
       customer_id: customerId, amount: entry.amount,
       note: encodedNote, order_id: entry.orderId || null,
       created_at: entry.date || new Date().toISOString()
     });
+    delete _memCacheTs['debt_history'];
+    return result;
   },
 
   async replaceDebtHistory(customerId, entries) {
@@ -531,11 +544,13 @@ const DB = {
   async deleteDebtHistoryEntry(entryId) {
     if (entryId == null) return;
     await dbDelete('debt_history', { id: entryId });
+    delete _memCacheTs['debt_history'];
   },
 
   async deleteDebtHistoryByOrderId(orderId) {
     if (!orderId) return;
     await dbDelete('debt_history', { order_id: orderId });
+    delete _memCacheTs['debt_history'];
   },
 
   // -- Customer Pricing --

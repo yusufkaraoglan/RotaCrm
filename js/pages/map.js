@@ -332,7 +332,7 @@ function exportExcel() {
     ordData.push([
       o.id,
       s ? s.n : 'Unknown',
-      o.items.map(i => `${i.qty}x ${i.name}`).join(', '),
+      (o.items||[]).map(i => `${i.qty}x ${i.name}`).join(', '),
       calcOrderTotal(o),
       o.status,
       o.payMethod || '',
@@ -378,7 +378,7 @@ function shareRouteSummary() {
     const rev = weekOrders.reduce((s, o) => s + calcOrderTotal(o), 0);
     totalRev += rev;
     const status = isDelivered ? '✅' : (pending.length > 0 ? '📦' : '⬜');
-    text += `${idx + 1}. ${status} ${stop.n} — ${stop.c}, ${stop.p}`;
+    text += `${idx + 1}. ${status} ${stop.n} — ${stop.c || ''}, ${stop.p || ''}`;
     if (pending.length > 0 && !isDelivered) text += ` (${pending.length} orders)`;
     if (rev > 0) text += ` — ${formatCurrency(rev)}`;
     if (debt > 0) text += ` [Debt: ${formatCurrency(debt)}]`;
@@ -389,7 +389,7 @@ function shareRouteSummary() {
   if (navigator.share) {
     navigator.share({ title: 'Route Summary', text });
   } else {
-    navigator.clipboard.writeText(text).then(() => appAlert('Route summary copied to clipboard.'));
+    navigator.clipboard.writeText(text).then(() => appAlert('Route summary copied to clipboard.')).catch(() => appAlert('Could not copy to clipboard.'));
   }
 }
 

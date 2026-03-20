@@ -380,11 +380,16 @@ function initRouteDragDrop() {
 }
 
 function applyRouteDrop(srcId, targetId, dayId) {
-  // Get current full list
+  // Get current full list using same locked-first ordering as renderRoute
   const assigned = [];
   Object.entries(S.assign).forEach(([sid, did]) => { if (did === dayId) assigned.push(parseInt(sid)); });
   const ro = S.routeOrder[dayId] || [];
-  const sorted = [...new Set([...ro.filter(id => assigned.includes(id)), ...assigned])];
+  const allSorted = [...new Set([...ro.filter(id => assigned.includes(id)), ...assigned])];
+  // Apply same lock ordering as display
+  const lockedStops = [];
+  (routeLockedStops || []).forEach(id => { if (allSorted.includes(id)) lockedStops.push(id); });
+  const unlockedStops = allSorted.filter(id => !(routeLockedStops || []).includes(id));
+  const sorted = [...lockedStops, ...unlockedStops];
   const srcIdx = sorted.indexOf(srcId);
   const dstIdx = sorted.indexOf(targetId);
   if (srcIdx < 0 || dstIdx < 0) return;
@@ -559,7 +564,7 @@ function showDeliveryModal(stopId, singleOrderId) {
       </div>
       <div style="margin-top:12px">
         <label class="form-label">Delivery Date & Time</label>
-        <input class="input" type="datetime-local" id="delivery-datetime" value="${new Date().toISOString().slice(0,16)}" style="font-size:14px">
+        <input class="input" type="datetime-local" id="delivery-datetime" value="${(() => { const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}T${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`; })()}" style="font-size:14px">
       </div>
       <div style="margin-top:12px">
         <label class="form-label">Delivery Note (optional)</label>

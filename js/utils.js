@@ -44,22 +44,27 @@ function repairDebtHistoryTypes(dhMap) {
   return dhMap;
 }
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
-function formatCurrency(n) { return '\u00A3' + (isNaN(n) ? 0 : (n || 0)).toFixed(2); }
+function formatCurrency(n) { const v = isNaN(n) ? 0 : (n || 0); return '\u00A3' + (Object.is(v, -0) ? 0 : v).toFixed(2); }
 
 function formatDate(d) {
   if (!d) return '';
   const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '';
   return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function formatDateTime(d) {
   if (!d) return '';
   const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '';
   return dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) + ' ' +
          dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 function normalizePostcode(postcode) {
   return String(postcode || '').trim().toUpperCase();
@@ -211,7 +216,7 @@ function getCurrentWeek() {
   const ref = new Date(2026, 2, 2); // 2 March 2026 = Week A
   const diffDays = Math.floor((now - ref) / 86400000);
   const weekNum = Math.floor(diffDays / 7);
-  return (weekNum % 2 === 0) ? 'A' : 'B';
+  return (Math.abs(weekNum) % 2 === 0) ? 'A' : 'B';
 }
 
 function getTodayDayIndex() {
@@ -413,7 +418,7 @@ function getWeekMondayStr(date) {
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   const mon = new Date(d.getFullYear(), d.getMonth(), diff);
-  return mon.toISOString().slice(0, 10);
+  return `${mon.getFullYear()}-${String(mon.getMonth()+1).padStart(2,'0')}-${String(mon.getDate()).padStart(2,'0')}`;
 }
 
 function isDeliveredThisWeek(stopId) {

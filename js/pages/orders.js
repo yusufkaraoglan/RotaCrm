@@ -104,10 +104,10 @@ function renderOrderResults() {
             <div class="order-card-v2-name" onclick="showProfile(${o.customerId})" style="cursor:pointer">${stop ? escHtml(stop.n) : 'Unknown'}</div>
             ${dayObj ? `<span class="badge" style="background:${dayObj.color}20;color:${dayObj.color};font-size:10px;font-weight:600;flex-shrink:0">${dayObj.week}-${dayObj.label.slice(0,3)}</span>` : ''}
           </div>
-          <div class="order-card-v2-items">${o.items.map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>
+          <div class="order-card-v2-items">${(o.items||[]).map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>
           <div class="order-card-v2-footer">
             <span class="order-card-v2-price">${formatCurrency(total)}</span>
-            ${isDelivered ? `<span style="font-size:11px;color:var(--text-muted)">${o.payMethod || ''} · ${formatDate(o.deliveredAt)}</span>` : ''}
+            ${isDelivered ? `<span style="font-size:11px;color:var(--text-muted)">${escHtml(o.payMethod || '')} · ${formatDate(o.deliveredAt)}</span>` : ''}
             <div class="order-card-v2-actions">
               ${o.status === 'pending' ? `
                 <button class="btn btn-success btn-sm" data-id="${escHtml(o.id)}" onclick="showDeliveryFromOrder(this.dataset.id)">Deliver</button>
@@ -200,9 +200,15 @@ function initOrderDragDrop() {
     const filteredLocked = locked.filter(id => id !== draggedId);
     const targetIdx = filteredLocked.indexOf(targetId);
     if (targetIdx >= 0) {
+      // Drop onto a locked order — insert before it
       filteredLocked.splice(targetIdx, 0, draggedId);
     } else {
-      filteredLocked.push(draggedId);
+      // Drop onto an unlocked order — lock the dragged item at the right position
+      // Find where target appears in the visible order and insert dragged before it
+      const targetLockedIdx = filteredLocked.length; // append after all locked items
+      filteredLocked.splice(targetLockedIdx, 0, draggedId);
+      // Also lock the target to preserve its position
+      filteredLocked.push(targetId);
     }
     S.ordersLockedOrders = filteredLocked;
     DB.setSetting('ordersLockedOrders', filteredLocked);
@@ -302,18 +308,18 @@ function closeOrderForm() {
 async function saveOrder() {
   if (_btnLock) return;
   _btnLock = true;
-  setTimeout(() => _btnLock = false, 2000);
+  const unlock = () => { _btnLock = false; };
 
-  if (tempOrderCustomerId == null || isNaN(parseInt(tempOrderCustomerId))) { appAlert('Please select a customer.'); return; }
+  if (tempOrderCustomerId == null || isNaN(parseInt(tempOrderCustomerId))) { appAlert('Please select a customer.'); unlock(); return; }
   const items = tempOrderItems.filter(i => i.name && i.qty > 0);
-  if (items.length === 0) { appAlert('Please add at least one product.'); return; }
+  if (items.length === 0) { appAlert('Please add at least one product.'); unlock(); return; }
 
   const existingOrder = editingOrderId ? S.orders[editingOrderId] : null;
   const previousItems = existingOrder ? (existingOrder.items || []) : [];
   const stockIssues = validateTrackedStockChange(previousItems, items);
   if (stockIssues.length > 0) {
     appAlert('Insufficient stock: ' + stockIssues.join(', '));
-    return;
+    unlock(); return;
   }
 
   const note = document.getElementById('order-note')?.value || '';
@@ -354,6 +360,7 @@ async function saveOrder() {
   const savedOrderId = editingOrderId || newOrderId;
   editingOrderId = null;
   await save.orders([savedOrderId]);
+  unlock();
   closeOrderForm();
   closeModal();
   if (curPage === 'orders') renderOrders();

@@ -371,13 +371,13 @@ function filterNewOrderCPicker(q) {
   const list = document.getElementById('cpick-list');
   if (!list) return;
   const query = q.toLowerCase().trim();
-  let filtered = STOPS;
-  if (query) filtered = STOPS.filter(s =>
+  let filtered = [...STOPS];
+  if (query) filtered = filtered.filter(s =>
     s.n.toLowerCase().includes(query) ||
     (s.c||'').toLowerCase().includes(query) ||
     (s.p||'').toLowerCase().includes(query)
   );
-  filtered.sort((a, b) => a.n.localeCompare(b.n));
+  filtered.sort((a, b) => (a.n||'').localeCompare(b.n||''));
   list.innerHTML = filtered.map(s => {
     const dayId = S.assign[s.id];
     const dayObj = dayId ? DAYS.find(d => d.id === dayId) : null;
@@ -420,9 +420,10 @@ async function saveNewOrderPage() {
 
   const existingOrder = editingOrderId ? S.orders[editingOrderId] : null;
   const isDelivered = editingOrderId && existingOrder && existingOrder.status === 'delivered';
+  // Capture previous items BEFORE mutation for stock delta calculation
+  const previousItems = (isDelivered && existingOrder) ? (existingOrder.items || []).map(i => ({...i})) : [];
   // Only validate stock for delivered orders (pending orders don't affect stock)
   if (isDelivered) {
-    const previousItems = existingOrder ? (existingOrder.items || []) : [];
     const stockIssues = validateTrackedStockChange(previousItems, items);
     if (stockIssues.length > 0) {
       appAlert('Insufficient stock: ' + stockIssues.join(', '));
@@ -455,7 +456,6 @@ async function saveNewOrderPage() {
 
   // Only deduct stock if editing a DELIVERED order (pending orders don't affect stock)
   if (isDelivered) {
-    const previousItems = existingOrder ? (existingOrder.items || []) : [];
     const stockChange = applyTrackedStockChange(previousItems, items);
     if (stockChange.changed) {
       await save.catalog();

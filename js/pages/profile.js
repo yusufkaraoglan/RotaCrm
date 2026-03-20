@@ -102,7 +102,7 @@ function renderProfile() {
           .sort((a,b) => new Date(b.deliveredAt) - new Date(a.deliveredAt))[0];
         return lastDelivered ? `
         <div style="margin:8px 0;display:flex;align-items:center;gap:8px">
-          <button class="btn btn-sm" style="background:var(--primary);color:#fff;display:flex;align-items:center;gap:6px;flex-shrink:0;padding:6px 12px" onclick="quickReorder(${stop.id},'${lastDelivered.id}')">
+          <button class="btn btn-sm" style="background:var(--primary);color:#fff;display:flex;align-items:center;gap:6px;flex-shrink:0;padding:6px 12px" data-stop="${stop.id}" data-order="${escHtml(lastDelivered.id)}" onclick="quickReorder(parseInt(this.dataset.stop),this.dataset.order)">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             Repeat
           </button>
@@ -123,12 +123,12 @@ function renderProfile() {
             <div class="order-card-date">${formatDateTime(o.createdAt)}${o.deliveryDate ? ` · Delivery: ${o.deliveryDate}` : ''}</div>
             <span class="badge badge-warning">pending</span>
           </div>
-          <div class="order-card-items">${o.items.map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>
+          <div class="order-card-items">${(o.items||[]).map(i => `${i.qty}x ${escHtml(i.name)}`).join(', ')}</div>
           <div class="order-card-footer">
             <span class="order-card-total">${formatCurrency(calcOrderTotal(o))}</span>
             <div style="display:flex;gap:6px">
-              <button class="btn btn-success btn-sm" onclick="showDeliveryFromOrder('${o.id}')">Deliver</button>
-              <button class="btn btn-outline btn-sm" onclick="openEditOrderPage('${o.id}')">Edit</button>
+              <button class="btn btn-success btn-sm" data-id="${escHtml(o.id)}" onclick="showDeliveryFromOrder(this.dataset.id)">Deliver</button>
+              <button class="btn btn-outline btn-sm" data-id="${escHtml(o.id)}" onclick="openEditOrderPage(this.dataset.id)">Edit</button>
               <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="deleteOrder('${o.id}')">Delete</button>
             </div>
           </div>
@@ -387,7 +387,7 @@ function showEditDeliveredOrderModal(orderId) {
   }
 
   modalHtml += `
-    <button class="btn btn-primary btn-block mt-2" onclick="saveEditDeliveredOrder('${orderId}')">Save</button>`;
+    <button class="btn btn-primary btn-block mt-2" data-id="${escHtml(orderId)}" onclick="saveEditDeliveredOrder(this.dataset.id)">Save</button>`;
   openModal(modalHtml);
   if (!isVisit) updateEditDeliveredCashHint();
 }
@@ -638,7 +638,7 @@ function showCustomerProductsModal() {
   openModal(html);
 }
 
-function saveCustomerProducts() {
+async function saveCustomerProducts() {
   const products = [];
   S.catalog.forEach((c, i) => {
     const el = document.getElementById('cprod-' + i);
@@ -649,7 +649,7 @@ function saveCustomerProducts() {
   } else {
     delete S.customerProducts[profileStopId];
   }
-  save.customerProducts();
+  await save.customerProducts();
   closeModal();
   renderProfile();
 }
@@ -755,13 +755,13 @@ function showBrandModal() {
   openModal(html);
 }
 
-function setBrand(name) {
+async function setBrand(name) {
   if (name) {
     S.brands[profileStopId] = name;
   } else {
     delete S.brands[profileStopId];
   }
-  save.brands();
+  await save.brands();
   closeModal();
   renderProfile();
 }
@@ -851,7 +851,7 @@ function showCollectOrderPayment(orderId) {
   if (!o) return;
   const debtAmount = Math.min(getRemainingOrderDebt(o), S.debts[profileStopId] || 0);
   if (debtAmount <= 0) { appAlert('No outstanding debt for this order.'); return; }
-  const items = o.items.map(i => i.qty + 'x ' + i.name).join(', ');
+  const items = (o.items||[]).map(i => i.qty + 'x ' + i.name).join(', ');
   const now = new Date().toISOString().slice(0, 16);
   openModal(`<div class="modal-handle"></div>
     <div class="modal-title">Collect Payment</div>
@@ -875,7 +875,7 @@ function showCollectOrderPayment(orderId) {
         <div class="pay-opt" onclick="selectClearMethod('bank',this)">Bank</div>
       </div>
     </div>
-    <button class="btn btn-success btn-block" onclick="btnLock(()=>clearOrderDebt('${orderId}'))">Collect Payment</button>
+    <button class="btn btn-success btn-block" data-id="${escHtml(orderId)}" onclick="btnLock(()=>clearOrderDebt(this.dataset.id))">Collect Payment</button>
   `);
 }
 
@@ -891,7 +891,7 @@ async function clearOrderDebt(orderId) {
 
   // Reduce debt balance and create payment history entry
   S.debts[profileStopId] = Math.max(0, roundMoney((S.debts[profileStopId] || 0) - amount));
-  const items = o.items.map(i => i.qty + 'x ' + i.name).join(', ');
+  const items = (o.items||[]).map(i => i.qty + 'x ' + i.name).join(', ');
   createDebtHistoryEntry(profileStopId, {
     date: payDate, amount, type: 'clear',
     note: 'Payment received (' + clearDebtMethod + ') — ' + items,
@@ -931,8 +931,8 @@ function showClearDebtModal() {
       <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">Unpaid Orders</div>`;
     unpaidOrders.forEach(o => {
       const owed = Math.min(getRemainingOrderDebt(o), debt);
-      const items = o.items.map(i => i.qty + 'x ' + i.name).join(', ');
-      html += `<div class="card" style="padding:8px;margin-bottom:4px;cursor:pointer;border:1px solid var(--border)" onclick="closeModal();showCollectOrderPayment('${o.id}')">
+      const items = (o.items||[]).map(i => i.qty + 'x ' + i.name).join(', ');
+      html += `<div class="card" style="padding:8px;margin-bottom:4px;cursor:pointer;border:1px solid var(--border)" data-id="${escHtml(o.id)}" onclick="closeModal();showCollectOrderPayment(this.dataset.id)">
         <div class="flex-between">
           <span style="font-size:12px">${escHtml(items)}</span>
           <span style="font-size:12px;font-weight:600;color:var(--danger)">${formatCurrency(owed)}</span>

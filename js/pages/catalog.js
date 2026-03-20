@@ -387,7 +387,7 @@ function addCatalogItem() {
   const noStock = document.getElementById('cat-nostock')?.checked;
   if (!name) { appAlert('Product name is required.'); return; }
   if (S.catalog.some(c => c.name === name)) { appAlert('This product already exists.'); return; }
-  S.catalog.push({ name, unit, price, stock: noStock ? null : stock, trackStock: noStock ? false : true });
+  S.catalog.push({ name, unit, price, stock: noStock ? null : stock, trackStock: noStock ? false : true, sort_order: S.catalog.length });
   save.catalog();
   closeModal();
   if (curPage === 'catalog') renderCatalog();
@@ -395,8 +395,10 @@ function addCatalogItem() {
 }
 
 async function removeCatalogItem(idx) {
-  if (!(await appConfirm('Remove ' + S.catalog[idx].name + '?'))) return;
-  const name = S.catalog[idx].name;
+  const c = S.catalog[idx];
+  if (!c) return;
+  if (!(await appConfirm('Remove ' + escHtml(c.name) + '?'))) return;
+  const name = c.name;
   S.catalog.splice(idx, 1);
   save.catalog();
   DB.deleteProduct(name).catch(() => {});

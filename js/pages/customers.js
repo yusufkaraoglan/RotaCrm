@@ -72,7 +72,7 @@ function renderCustomerResults() {
     const q = S.customersSearch.toLowerCase();
     stops = stops.filter(s => (s.n||'').toLowerCase().includes(q) || (s.c||'').toLowerCase().includes(q) || (s.p||'').toLowerCase().includes(q));
   }
-  stops.sort((a, b) => a.n.localeCompare(b.n));
+  stops.sort((a, b) => (a.n||'').localeCompare(b.n||''));
 
   // Pre-compute pending counts per customer
   const pendingCounts = {};
@@ -94,7 +94,7 @@ function renderCustomerResults() {
           <div class="customer-avatar">${getCustomerInitials(s.n)}</div>
           <div class="customer-info">
             <div class="customer-name">${escHtml(s.n)}</div>
-            <div class="customer-area">${escHtml(s.c)} &middot; ${escHtml(s.p)}</div>
+            <div class="customer-area">${escHtml(s.c||'')} &middot; ${escHtml(s.p||'')}</div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
             ${dayObj ? `<span class="badge" style="background:${dayObj.color}20;color:${dayObj.color};font-size:10px">${dayObj.week}/${dayObj.label.slice(0,3)}</span>` : '<span class="badge badge-outline" style="font-size:10px">None</span>'}
