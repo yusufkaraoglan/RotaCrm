@@ -542,6 +542,9 @@ async function init() {
   // Seed customers (one-time import, safe to remove after first run)
   if (typeof runCustomerSeed === 'function') runCustomerSeed();
 
+  // Seed routes from printed route sheets (one-time, safe to re-run)
+  if (typeof runRouteSeed === 'function') runRouteSeed();
+
   // Auto-create recurring orders for today
   autoCreateRecurringOrders();
 
