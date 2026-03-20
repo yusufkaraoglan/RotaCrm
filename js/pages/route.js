@@ -875,8 +875,12 @@ function showDayCashSummary() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ROUTE OPTIMIZATION (Nearest Neighbor)
+// ROUTE OPTIMIZATION (Nearest Neighbor — Home → Stops → Home)
 // ══════════════════════════════════════════════════════════════
+
+// Home base: 33 Mexborough Square, Aylesham, Kent CT3 3NE
+const HOME_LAT = 51.2320;
+const HOME_LNG = 1.2030;
 
 function _haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371;
@@ -913,34 +917,63 @@ async function optimizeRouteOrder() {
     return;
   }
 
-  // Find starting point: last locked stop's location, or first geocoded stop
-  let startLat, startLng;
+  // Save old order for distance comparison
+  const ro = S.routeOrder[dayId] || [];
+  const oldOrder = [...new Set([...ro.filter(id => assigned.includes(id)), ...assigned])];
+
+  // Starting point: after last locked stop, or HOME
+  let startLat = HOME_LAT, startLng = HOME_LNG;
   if (locked.length > 0) {
     const lastLocked = locked[locked.length - 1];
     const g = S.geo[lastLocked];
     if (g && g.lat && g.lng) { startLat = g.lat; startLng = g.lng; }
   }
-  if (!startLat) {
-    const g = S.geo[withGeo[0]];
-    startLat = g.lat; startLng = g.lng;
-  }
 
-  // Nearest-neighbor algorithm
+  // Nearest-neighbor algorithm: Home → nearest → nearest → ... → (closest to home last)
   const remaining = new Set(withGeo);
   const optimized = [];
   let curLat = startLat, curLng = startLng;
 
   while (remaining.size > 0) {
-    let nearest = null, nearestDist = Infinity;
-    remaining.forEach(id => {
-      const g = S.geo[id];
-      const dist = _haversineDistance(curLat, curLng, g.lat, g.lng);
-      if (dist < nearestDist) { nearestDist = dist; nearest = id; }
-    });
-    remaining.delete(nearest);
-    optimized.push(nearest);
-    const g = S.geo[nearest];
-    curLat = g.lat; curLng = g.lng;
+    if (remaining.size === 1) {
+      // Last stop — just add it
+      const lastId = [...remaining][0];
+      optimized.push(lastId);
+      remaining.delete(lastId);
+    } else {
+      // Pick nearest to current position
+      let nearest = null, nearestDist = Infinity;
+      remaining.forEach(id => {
+        const g = S.geo[id];
+        const dist = _haversineDistance(curLat, curLng, g.lat, g.lng);
+        if (dist < nearestDist) { nearestDist = dist; nearest = id; }
+      });
+      remaining.delete(nearest);
+      optimized.push(nearest);
+      const g = S.geo[nearest];
+      curLat = g.lat; curLng = g.lng;
+    }
+  }
+
+  // Post-optimization: swap last few stops to minimize return-home distance
+  // Try moving the stop closest to home to the last position
+  if (optimized.length >= 3) {
+    let bestLastIdx = optimized.length - 1;
+    let bestReturnDist = _haversineDistance(S.geo[optimized[bestLastIdx]].lat, S.geo[optimized[bestLastIdx]].lng, HOME_LAT, HOME_LNG);
+    // Check last 5 stops as candidates for the final position
+    const checkRange = Math.min(5, optimized.length);
+    for (let i = optimized.length - checkRange; i < optimized.length; i++) {
+      const g = S.geo[optimized[i]];
+      const dist = _haversineDistance(g.lat, g.lng, HOME_LAT, HOME_LNG);
+      if (dist < bestReturnDist) {
+        bestReturnDist = dist;
+        bestLastIdx = i;
+      }
+    }
+    if (bestLastIdx !== optimized.length - 1) {
+      const [moved] = optimized.splice(bestLastIdx, 1);
+      optimized.push(moved);
+    }
   }
 
   // Final order: locked (in their order) + optimized + non-geocoded at end
@@ -949,24 +982,32 @@ async function optimizeRouteOrder() {
   save.routeOrder();
   rerenderRouteKeepScroll();
 
-  const savedKm = _estimateRouteSaving(assigned, newOrder, dayId);
-  showToast(`Route optimized!${savedKm ? ' ~' + savedKm + ' km shorter' : ''}`, 'success', 3000);
+  // Calculate distance savings
+  const oldDist = _calcRouteDistance(oldOrder);
+  const newDist = _calcRouteDistance(newOrder);
+  const diff = oldDist - newDist;
+  const savedMsg = diff > 0.5 ? ` ~${diff.toFixed(1)} km shorter` : '';
+  const totalMsg = newDist > 0 ? ` (${newDist.toFixed(0)} km total)` : '';
+  showToast(`Route optimized!${savedMsg}${totalMsg}`, 'success', 4000);
 }
 
-function _estimateRouteSaving(oldOrder, newOrder, dayId) {
-  const ro = S.routeOrder[dayId] || oldOrder;
-  const calcDist = (order) => {
-    let total = 0;
-    for (let i = 0; i < order.length - 1; i++) {
-      const a = S.geo[order[i]], b = S.geo[order[i + 1]];
-      if (a && b && a.lat && b.lat) total += _haversineDistance(a.lat, a.lng, b.lat, b.lng);
-    }
-    return total;
-  };
-  const oldDist = calcDist(oldOrder);
-  const newDist = calcDist(newOrder);
-  const diff = oldDist - newDist;
-  return diff > 0.5 ? diff.toFixed(1) : '';
+function _calcRouteDistance(order) {
+  let total = 0;
+  // Home to first stop
+  if (order.length > 0 && S.geo[order[0]] && S.geo[order[0]].lat) {
+    total += _haversineDistance(HOME_LAT, HOME_LNG, S.geo[order[0]].lat, S.geo[order[0]].lng);
+  }
+  // Between stops
+  for (let i = 0; i < order.length - 1; i++) {
+    const a = S.geo[order[i]], b = S.geo[order[i + 1]];
+    if (a && b && a.lat && b.lat) total += _haversineDistance(a.lat, a.lng, b.lat, b.lng);
+  }
+  // Last stop to home
+  if (order.length > 0) {
+    const last = S.geo[order[order.length - 1]];
+    if (last && last.lat) total += _haversineDistance(last.lat, last.lng, HOME_LAT, HOME_LNG);
+  }
+  return total;
 }
 
 // ══════════════════════════════════════════════════════════════

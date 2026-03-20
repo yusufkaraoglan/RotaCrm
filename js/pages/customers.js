@@ -6,11 +6,26 @@ function renderCustomers(fullRender) {
   const isSearchUpdate = !fullRender && document.getElementById('customers-results');
 
   if (!isSearchUpdate) {
+    // Pre-compute filter counts
+    const cntAll = STOPS.length;
+    const cntA = STOPS.filter(s => { const d = S.assign[s.id]; return d && d.startsWith('wA'); }).length;
+    const cntB = STOPS.filter(s => { const d = S.assign[s.id]; return d && d.startsWith('wB'); }).length;
+    const cntNone = STOPS.filter(s => !S.assign[s.id]).length;
+    const brandCounts = {};
+    let cntNoBrand = 0;
+    STOPS.forEach(s => {
+      const b = S.brands[s.id];
+      if (b) brandCounts[b] = (brandCounts[b] || 0) + 1;
+      else cntNoBrand++;
+    });
+
+    const _cc = n => `<span style="font-size:10px;opacity:.7;margin-left:3px">${n}</span>`;
+
     let html = `
       <header class="topbar">
         <h1>Customers</h1>
         <div class="topbar-actions">
-          <span class="badge badge-outline">${STOPS.length}</span>
+          <span class="badge badge-outline">${cntAll}</span>
           <button class="btn btn-primary btn-sm" onclick="showAddCustomerModal()">+ Add</button>
         </div>
       </header>
@@ -20,18 +35,18 @@ function renderCustomers(fullRender) {
           <input type="text" placeholder="Search customer..." value="${escHtml(S.customersSearch)}" oninput="S.customersSearch=this.value;_debouncedCustomerSearch()">
         </div>
         <div class="chip-group">
-          <button class="chip ${S.customersFilter==='all'?'active':''}" onclick="S.customersFilter='all';renderCustomers(true)">All</button>
-          <button class="chip ${S.customersFilter==='A'?'active':''}" onclick="S.customersFilter='A';renderCustomers(true)">Week A</button>
-          <button class="chip ${S.customersFilter==='B'?'active':''}" onclick="S.customersFilter='B';renderCustomers(true)">Week B</button>
-          <button class="chip ${S.customersFilter==='none'?'active':''}" onclick="S.customersFilter='none';renderCustomers(true)">Unassigned</button>
+          <button class="chip ${S.customersFilter==='all'?'active':''}" onclick="S.customersFilter='all';renderCustomers(true)">All${_cc(cntAll)}</button>
+          <button class="chip ${S.customersFilter==='A'?'active':''}" onclick="S.customersFilter='A';renderCustomers(true)">Week A${_cc(cntA)}</button>
+          <button class="chip ${S.customersFilter==='B'?'active':''}" onclick="S.customersFilter='B';renderCustomers(true)">Week B${_cc(cntB)}</button>
+          <button class="chip ${S.customersFilter==='none'?'active':''}" onclick="S.customersFilter='none';renderCustomers(true)">Unassigned${_cc(cntNone)}</button>
         </div>
         ${S.brandList && S.brandList.length > 0 ? `
         <div class="chip-group" style="margin-top:6px">
-          <button class="chip ${!S.customersBrandFilter?'active':''}" onclick="S.customersBrandFilter='';renderCustomers(true)">All Brands</button>
+          <button class="chip ${!S.customersBrandFilter?'active':''}" onclick="S.customersBrandFilter='';renderCustomers(true)">All Brands${_cc(cntAll)}</button>
           ${S.brandList.map(b => `
-            <button class="chip ${S.customersBrandFilter===b?'active':''}" data-brand="${escHtml(b)}" onclick="S.customersBrandFilter=this.dataset.brand;renderCustomers(true)">${escHtml(b)}</button>
+            <button class="chip ${S.customersBrandFilter===b?'active':''}" data-brand="${escHtml(b)}" onclick="S.customersBrandFilter=this.dataset.brand;renderCustomers(true)">${escHtml(b)}${_cc(brandCounts[b] || 0)}</button>
           `).join('')}
-          <button class="chip ${S.customersBrandFilter==='none'?'active':''}" onclick="S.customersBrandFilter='none';renderCustomers(true)">No Brand</button>
+          <button class="chip ${S.customersBrandFilter==='none'?'active':''}" onclick="S.customersBrandFilter='none';renderCustomers(true)">No Brand${_cc(cntNoBrand)}</button>
         </div>` : ''}
         <div id="customers-results"></div>
       </div>`;
