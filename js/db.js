@@ -19,10 +19,56 @@ const DB_HEADERS = {
 let _dbReady = true;
 
 // ── Offline Queue ──────────────────────────────────────────
-// Stores pending operations when offline
+// Stores pending operations when offline, persisted to IndexedDB
 const offlineQueue = [];
 let isSyncing = false;
 let _isFlushing = false; // prevents re-enqueue during flush
+
+// IndexedDB persistence for offline queue
+const _IDB_NAME = 'costadoro_offline';
+const _IDB_STORE = 'queue';
+
+function _openIDB() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') { reject(new Error('No IndexedDB')); return; }
+    const req = indexedDB.open(_IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(_IDB_STORE, { keyPath: '_idbId', autoIncrement: true }); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function _saveQueueToIDB() {
+  try {
+    const db = await _openIDB();
+    const tx = db.transaction(_IDB_STORE, 'readwrite');
+    const store = tx.objectStore(_IDB_STORE);
+    store.clear();
+    offlineQueue.forEach(op => store.add({ ...op }));
+    await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject; });
+    db.close();
+  } catch (e) { console.warn('_saveQueueToIDB:', e.message); }
+}
+
+async function _loadQueueFromIDB() {
+  try {
+    const db = await _openIDB();
+    const tx = db.transaction(_IDB_STORE, 'readonly');
+    const store = tx.objectStore(_IDB_STORE);
+    const req = store.getAll();
+    const items = await new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = reject; });
+    db.close();
+    if (items && items.length > 0) {
+      items.forEach(item => { delete item._idbId; offlineQueue.push(item); });
+      console.log('Loaded', items.length, 'pending operations from IndexedDB');
+    }
+  } catch (e) { console.warn('_loadQueueFromIDB:', e.message); }
+}
+
+// Load persisted queue on startup
+_loadQueueFromIDB().then(() => {
+  if (offlineQueue.length > 0 && navigator.onLine) flushOfflineQueue();
+});
 
 // ── Low-level REST helpers ─────────────────────────────────
 
@@ -85,7 +131,7 @@ async function dbInsert(table, data, opts = {}) {
     if (typeof dbLog === 'function') dbLog(`INSERT ${table} FAILED: ${e.message}`);
     else console.error(`dbInsert ${table}:`, e.message);
     // Queue for retry — but not if we're already retrying from the queue
-    if (!_isFlushing) offlineQueue.push({ action: 'insert', table, data, opts });
+    if (!_isFlushing) { offlineQueue.push({ action: 'insert', table, data, opts }); _saveQueueToIDB(); }
     return null;
   }
 }
@@ -108,7 +154,7 @@ async function dbUpdate(table, match, data) {
   } catch (e) {
     if (typeof dbLog === 'function') dbLog(`UPDATE ${table} FAILED: ${e.message}`);
     else console.error(`dbUpdate ${table} FAILED:`, e.message);
-    if (!_isFlushing) offlineQueue.push({ action: 'update', table, match, data });
+    if (!_isFlushing) { offlineQueue.push({ action: 'update', table, match, data }); _saveQueueToIDB(); }
     return null;
   }
 }
@@ -135,7 +181,7 @@ async function dbDelete(table, match) {
   }
   if (typeof dbLog === 'function') dbLog(`DELETE ${table} FAILED: ${lastErr.message}`);
   else console.error(`dbDelete ${table} FAILED:`, lastErr.message);
-  if (!_isFlushing) offlineQueue.push({ action: 'delete', table, match });
+  if (!_isFlushing) { offlineQueue.push({ action: 'delete', table, match }); _saveQueueToIDB(); }
   return null;
 }
 
@@ -174,6 +220,7 @@ async function flushOfflineQueue() {
   } finally {
     _isFlushing = false;
     isSyncing = false;
+    _saveQueueToIDB(); // Persist remaining queue (or clear if empty)
   }
 }
 
@@ -588,6 +635,17 @@ const DB = {
 // Invalidates cache timestamps so DB.get* methods re-fetch from Supabase.
 // Each getter already handles the empty-vs-cached protection via _fetchOrCache.
 
+let _lastSyncTime = null;
+
+function getLastSyncTimeLabel() {
+  if (!_lastSyncTime) return 'Never';
+  const diff = Math.floor((Date.now() - _lastSyncTime) / 1000);
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return new Date(_lastSyncTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 async function syncAll() {
   try {
     // Invalidate all cache timestamps so getters fetch fresh data
@@ -601,6 +659,8 @@ async function syncAll() {
       DB.getRouteOrder(), DB.getOrders(), DB.getDebts(),
       DB.getDebtHistory(), DB.getCustomerPricing(), DB.getRecurringOrders()
     ]);
+    _lastSyncTime = Date.now();
+    _updateSyncIndicator();
     return true;
   } catch (e) {
     console.error('syncAll error:', e.message);
@@ -608,3 +668,23 @@ async function syncAll() {
     return false;
   }
 }
+
+function _updateSyncIndicator() {
+  const el = document.getElementById('sync-status');
+  if (el) {
+    const online = navigator.onLine;
+    const qLen = offlineQueue.length;
+    if (!online) {
+      el.innerHTML = '<span style="color:var(--danger)">Offline</span>';
+    } else if (qLen > 0) {
+      el.innerHTML = `<span style="color:var(--warning)">${qLen} pending</span>`;
+    } else {
+      el.innerHTML = `<span style="color:var(--text-sec)">Synced ${getLastSyncTimeLabel()}</span>`;
+    }
+  }
+}
+
+// Update sync indicator every 30 seconds
+setInterval(_updateSyncIndicator, 30000);
+window.addEventListener('online', _updateSyncIndicator);
+window.addEventListener('offline', _updateSyncIndicator);

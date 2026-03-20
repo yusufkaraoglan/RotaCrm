@@ -221,8 +221,17 @@ function renderCustomersTab(data) {
 }
 
 function renderDebtsTab() {
-  const debtors = Object.entries(S.debts).filter(([_, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-  const totalDebt = debtors.reduce((s, [_, v]) => s + v, 0);
+  const debtors = Object.entries(S.debts).filter(([_, v]) => v > 0).map(([id, amount]) => {
+    const ageDays = getDebtAgeDays(parseInt(id));
+    return { id, amount, ageDays };
+  }).sort((a, b) => b.amount - a.amount);
+  const totalDebt = debtors.reduce((s, d) => s + d.amount, 0);
+
+  // Aging buckets
+  const over90 = debtors.filter(d => d.ageDays >= 90);
+  const over60 = debtors.filter(d => d.ageDays >= 60 && d.ageDays < 90);
+  const over30 = debtors.filter(d => d.ageDays >= 30 && d.ageDays < 60);
+  const under30 = debtors.filter(d => d.ageDays < 30);
 
   let html = `
     <div class="report-hero-card" style="background:linear-gradient(135deg, #FEF3F2, #FFF0EC)">
@@ -231,18 +240,45 @@ function renderDebtsTab() {
       <div class="report-hero-sub">${debtors.length} customer${debtors.length !== 1 ? 's' : ''} with debt</div>
     </div>`;
 
+  // Aging summary
+  if (debtors.length > 0) {
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+      <div class="card" style="padding:8px;text-align:center;border-top:3px solid #7f1d1d">
+        <div style="font-size:14px;font-weight:700;color:#7f1d1d">${formatCurrency(over90.reduce((s,d)=>s+d.amount,0))}</div>
+        <div style="font-size:10px;color:var(--text-sec)">90+ days (${over90.length})</div>
+      </div>
+      <div class="card" style="padding:8px;text-align:center;border-top:3px solid var(--danger)">
+        <div style="font-size:14px;font-weight:700;color:var(--danger)">${formatCurrency(over60.reduce((s,d)=>s+d.amount,0))}</div>
+        <div style="font-size:10px;color:var(--text-sec)">60-89 days (${over60.length})</div>
+      </div>
+      <div class="card" style="padding:8px;text-align:center;border-top:3px solid var(--warning)">
+        <div style="font-size:14px;font-weight:700;color:var(--warning)">${formatCurrency(over30.reduce((s,d)=>s+d.amount,0))}</div>
+        <div style="font-size:10px;color:var(--text-sec)">30-59 days (${over30.length})</div>
+      </div>
+      <div class="card" style="padding:8px;text-align:center;border-top:3px solid var(--info)">
+        <div style="font-size:14px;font-weight:700;color:var(--info)">${formatCurrency(under30.reduce((s,d)=>s+d.amount,0))}</div>
+        <div style="font-size:10px;color:var(--text-sec)">&lt;30 days (${under30.length})</div>
+      </div>
+    </div>`;
+  }
+
   if (debtors.length === 0) {
     html += '<div class="empty-state" style="padding:20px"><p>No customers with debt</p></div>';
   } else {
     html += '<div class="report-section">';
-    debtors.forEach(([id, amount]) => {
-      const s = getStop(parseInt(id));
+    debtors.forEach(d => {
+      const s = getStop(parseInt(d.id));
+      let ageColor = 'var(--info)', ageLabel = '<30d';
+      if (d.ageDays >= 90) { ageColor = '#7f1d1d'; ageLabel = '90d+'; }
+      else if (d.ageDays >= 60) { ageColor = 'var(--danger)'; ageLabel = '60d+'; }
+      else if (d.ageDays >= 30) { ageColor = 'var(--warning)'; ageLabel = '30d+'; }
       html += `
-        <div class="report-row-card" onclick="showProfile(${id})" style="cursor:pointer">
+        <div class="report-row-card" onclick="showProfile(${d.id})" style="cursor:pointer">
           <div class="report-row-info">
             <div class="report-row-name">${s ? escHtml(s.n) : 'Unknown'}</div>
+            <div class="report-row-sub"><span style="color:${ageColor};font-weight:600">${ageLabel}</span></div>
           </div>
-          <div class="report-row-value text-danger">${formatCurrency(amount)}</div>
+          <div class="report-row-value text-danger">${formatCurrency(d.amount)}</div>
         </div>`;
     });
     html += '</div>';

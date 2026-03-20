@@ -428,6 +428,30 @@ function isDeliveredThisWeek(stopId) {
 
 function getDayObj(dayId) { return DAYS.find(d => d.id === dayId); }
 
+function getDebtAgeDays(stopId) {
+  const dh = S.debtHistory[stopId];
+  if (!dh || !Array.isArray(dh)) return 0;
+  // Find oldest unpaid 'add' entry that hasn't been fully cleared
+  const addEntries = dh.filter(e => e.type === 'add').sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  if (addEntries.length === 0) return 0;
+  const oldest = addEntries[0];
+  if (!oldest.date) return 0;
+  const ageDays = Math.floor((Date.now() - new Date(oldest.date).getTime()) / 86400000);
+  return Math.max(0, ageDays);
+}
+
+function getDebtAgeBadge(stopId, debt) {
+  if (!debt || debt <= 0) return '';
+  const days = getDebtAgeDays(stopId);
+  let color, label;
+  if (days >= 90) { color = '#7f1d1d'; label = '90d+'; }
+  else if (days >= 60) { color = 'var(--danger)'; label = '60d+'; }
+  else if (days >= 30) { color = 'var(--warning)'; label = '30d+'; }
+  else if (days >= 14) { color = '#d97706'; label = Math.floor(days) + 'd'; }
+  else return `<span class="badge badge-danger">${formatCurrency(debt)}</span>`;
+  return `<span class="badge" style="background:${color};color:#fff">${formatCurrency(debt)} · ${label}</span>`;
+}
+
 function getCustomerInitials(name) {
   const safeName = name || '?';
   const parts = safeName.split(/\s+/);

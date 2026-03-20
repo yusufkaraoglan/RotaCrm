@@ -109,6 +109,20 @@ function renderSettings() {
         </div>
       </div>
 
+      <!-- Maintenance -->
+      <div class="settings-section">
+        <div class="settings-title">Maintenance</div>
+        <div class="settings-card">
+          <div class="settings-item" onclick="archiveOldOrders()" style="cursor:pointer">
+            <div>
+              <div class="settings-item-label">Archive Old Orders</div>
+              <div class="settings-item-desc">${_countOldOrders()} delivered orders older than 90 days</div>
+            </div>
+            <span style="color:var(--text-muted)">&#8635;</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Danger Zone -->
       <div class="settings-section">
         <div class="settings-title" style="color:var(--danger)">Danger Zone</div>
@@ -398,6 +412,44 @@ async function forceSyncNow() {
   } else {
     showToast('Sync failed', 'error');
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ORDER ARCHIVING
+// ══════════════════════════════════════════════════════════════
+
+function _countOldOrders() {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const cutoffStr = cutoff.toISOString();
+  return Object.values(S.orders).filter(o =>
+    o.status === 'delivered' && o.deliveredAt && o.deliveredAt < cutoffStr
+  ).length;
+}
+
+async function archiveOldOrders() {
+  const count = _countOldOrders();
+  if (count === 0) {
+    appAlert('No old orders to archive. Only delivered orders older than 90 days are archived.');
+    return;
+  }
+
+  if (!(await appConfirm(`Archive ${count} delivered order${count > 1 ? 's' : ''} older than 90 days?<br><br>These orders will be removed from the app to improve performance. They remain in the cloud database.`, true))) return;
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const cutoffStr = cutoff.toISOString();
+
+  const toArchive = Object.values(S.orders).filter(o =>
+    o.status === 'delivered' && o.deliveredAt && o.deliveredAt < cutoffStr
+  );
+
+  const archivedIds = toArchive.map(o => o.id);
+  archivedIds.forEach(id => delete S.orders[id]);
+
+  await save.orders(archivedIds);
+  showToast(`${archivedIds.length} orders archived.`, 'success');
+  renderSettings();
 }
 
 // ══════════════════════════════════════════════════════════════
