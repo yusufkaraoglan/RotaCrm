@@ -166,6 +166,7 @@ function buildRouteListHtml(filtered, dayObj, allSorted) {
         <div class="route-card-body" onclick="showProfile(${stopId})" style="cursor:pointer">
           <div class="route-card-name">${escHtml(stop.n)}</div>
           <div class="route-card-sub">${escHtml(stop.c)} &middot; ${escHtml(stop.p)}</div>
+          ${(S.brands[stopId] || (S.customerProducts[stopId] && S.customerProducts[stopId].length > 0)) ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:2px">${S.brands[stopId] ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:var(--primary);color:#fff;font-weight:600">${escHtml(S.brands[stopId])}</span>` : ''}${(S.customerProducts[stopId] || []).map(p => `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:var(--purple-light);color:var(--purple)">${escHtml(p)}</span>`).join('')}</div>` : ''}
           <div class="route-card-badges">
             ${pending.length > 0 ? `<span class="badge badge-warning">${pending.length} pending</span>` : ''}
             ${delivered ? `<span class="badge badge-success">${isVisited ? 'Visit' : 'Delivered'}</span>` : ''}
