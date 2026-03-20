@@ -290,29 +290,31 @@ function shareRouteSummary() {
   const ro = S.routeOrder[dayId] || [];
   const sorted = [...new Set([...ro.filter(id => assigned.includes(id)), ...assigned])];
   const dateStr = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const thisMonday = getWeekMondayStr(new Date());
 
   let text = `📋 Costadoro Route\n${dateStr} (Week ${week})\n\n`;
   let totalRev = 0;
+  let deliveredCount = 0;
   sorted.forEach((stopId, idx) => {
     const stop = getStop(stopId);
     if (!stop) return;
     const pending = getStopOrders(stopId, 'pending');
-    const delivered = getStopOrders(stopId, 'delivered').filter(o => {
-      const d = o.deliveredAt ? new Date(o.deliveredAt).toDateString() : '';
-      return d === new Date().toDateString();
-    });
-    const isDelivered = delivered.length > 0;
+    const weekOrders = getStopOrders(stopId, 'delivered').filter(o =>
+      o.deliveredAt && getWeekMondayStr(o.deliveredAt) === thisMonday
+    );
+    const isDelivered = weekOrders.length > 0;
+    if (isDelivered) deliveredCount++;
     const debt = S.debts[stopId] || 0;
-    const todayRev = delivered.reduce((s, o) => s + calcOrderTotal(o), 0);
-    totalRev += todayRev;
+    const rev = weekOrders.reduce((s, o) => s + calcOrderTotal(o), 0);
+    totalRev += rev;
     const status = isDelivered ? '✅' : (pending.length > 0 ? '📦' : '⬜');
     text += `${idx + 1}. ${status} ${stop.n} — ${stop.c}, ${stop.p}`;
     if (pending.length > 0 && !isDelivered) text += ` (${pending.length} orders)`;
-    if (todayRev > 0) text += ` — ${formatCurrency(todayRev)}`;
+    if (rev > 0) text += ` — ${formatCurrency(rev)}`;
     if (debt > 0) text += ` [Debt: ${formatCurrency(debt)}]`;
     text += '\n';
   });
-  text += `\n📊 ${sorted.filter(id => getStopOrders(id, 'delivered').some(o => o.deliveredAt && new Date(o.deliveredAt).toDateString() === new Date().toDateString())).length}/${sorted.length} delivered | Total: ${formatCurrency(totalRev)}`;
+  text += `\n📊 ${deliveredCount}/${sorted.length} delivered | Total: ${formatCurrency(totalRev)}`;
 
   if (navigator.share) {
     navigator.share({ title: 'Route Summary', text });
@@ -321,36 +323,221 @@ function shareRouteSummary() {
   }
 }
 
-function exportRouteExcel() {
-  const wb = XLSX.utils.book_new();
+// ── Export Modal ──────────────────────────────────────────────
+function showExportRouteModal() {
+  const week = S.routeWeek;
+  const days = DAYS.filter(d => d.week === week);
+  const dayObj = days[S.routeDay];
+  const dayLabel = dayObj ? dayObj.label : 'Today';
 
-  ['A', 'B'].forEach(week => {
-    const days = DAYS.filter(d => d.week === week);
-    const data = [['#', 'Customer', 'City', 'Postcode', 'Day', 'Debt']];
+  openModal(`
+    <div class="modal-handle"></div>
+    <div class="modal-title">Export Route</div>
 
-    days.forEach(day => {
+    <div style="font-size:13px;font-weight:600;color:var(--text-sec);margin-bottom:8px">Scope</div>
+    <div id="export-scope-btns" style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-outline" style="flex:1" onclick="selectExportScope('day',this)" data-scope="day">${dayLabel} only</button>
+      <button class="btn btn-outline" style="flex:1" onclick="selectExportScope('week',this)" data-scope="week">Week ${week}</button>
+      <button class="btn btn-outline" style="flex:1" onclick="selectExportScope('all',this)" data-scope="all">All Weeks</button>
+    </div>
+
+    <div style="font-size:13px;font-weight:600;color:var(--text-sec);margin-bottom:8px">Format</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-success" style="flex:1" onclick="btnLock(()=>doExportRoute('excel'))">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Excel
+      </button>
+      <button class="btn btn-primary" style="flex:1" onclick="btnLock(()=>doExportRoute('pdf'))">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        PDF
+      </button>
+    </div>
+  `);
+  // Default: current day selected
+  const firstBtn = document.querySelector('#export-scope-btns button[data-scope="day"]');
+  if (firstBtn) selectExportScope('day', firstBtn);
+}
+
+let _exportScope = 'day';
+function selectExportScope(scope, el) {
+  _exportScope = scope;
+  document.querySelectorAll('#export-scope-btns button').forEach(b => {
+    b.classList.remove('btn-primary');
+    b.classList.add('btn-outline');
+  });
+  el.classList.remove('btn-outline');
+  el.classList.add('btn-primary');
+}
+
+function doExportRoute(format) {
+  if (format === 'excel') exportRouteExcel(_exportScope);
+  else exportRoutePdf(_exportScope);
+  closeModal();
+}
+
+// ── Route data helper ────────────────────────────────────────
+function getRouteDataForScope(scope) {
+  const week = S.routeWeek;
+  let weeks;
+  if (scope === 'all') weeks = ['A', 'B'];
+  else weeks = [week];
+
+  const result = [];
+  weeks.forEach(w => {
+    const days = DAYS.filter(d => d.week === w);
+    const daysToProcess = (scope === 'day')
+      ? [days[S.routeDay]].filter(Boolean)
+      : days;
+
+    daysToProcess.forEach(day => {
       const assigned = [];
       Object.entries(S.assign).forEach(([sid, did]) => {
         if (did === day.id) assigned.push(parseInt(sid));
       });
       const ro = S.routeOrder[day.id] || [];
       const sorted = [...new Set([...ro.filter(id => assigned.includes(id)), ...assigned])];
-
-      sorted.forEach((stopId, idx) => {
+      const stops = sorted.map(stopId => {
         const stop = getStop(stopId);
-        if (!stop) return;
-        data.push([idx + 1, stop.n, stop.c, stop.p, day.label, S.debts[stopId] || 0]);
-      });
+        if (!stop) return null;
+        return { stopId, stop, debt: S.debts[stopId] || 0 };
+      }).filter(Boolean);
 
-      if (sorted.length > 0) data.push([]); // empty row between days
+      result.push({ week: w, day, stops });
+    });
+  });
+  return result;
+}
+
+// ── Excel Export ─────────────────────────────────────────────
+function exportRouteExcel(scope) {
+  scope = scope || 'all';
+  const routeData = getRouteDataForScope(scope);
+  const wb = XLSX.utils.book_new();
+
+  if (scope === 'day') {
+    // Single day: one sheet
+    const rd = routeData[0];
+    if (!rd) return;
+    const data = [['#', 'Customer', 'Address', 'City', 'Postcode', 'Debt']];
+    rd.stops.forEach((s, idx) => {
+      data.push([idx + 1, s.stop.n, s.stop.a || '', s.stop.c, s.stop.p, s.debt]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{ wch: 4 }, { wch: 28 }, { wch: 25 }, { wch: 14 }, { wch: 10 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, `Week ${rd.week} - ${rd.day.label}`);
+  } else {
+    // Group by week
+    const weekGroups = {};
+    routeData.forEach(rd => {
+      if (!weekGroups[rd.week]) weekGroups[rd.week] = [];
+      weekGroups[rd.week].push(rd);
     });
 
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    ws['!cols'] = [{ wch: 4 }, { wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Week ' + week);
+    Object.entries(weekGroups).forEach(([week, days]) => {
+      const data = [];
+      days.forEach(rd => {
+        // Day header row
+        data.push([`${rd.day.label} (${rd.stops.length} customers)`]);
+        data.push(['#', 'Customer', 'Address', 'City', 'Postcode', 'Debt']);
+        rd.stops.forEach((s, idx) => {
+          data.push([idx + 1, s.stop.n, s.stop.a || '', s.stop.c, s.stop.p, s.debt]);
+        });
+        data.push([]); // empty row between days
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!cols'] = [{ wch: 4 }, { wch: 28 }, { wch: 25 }, { wch: 14 }, { wch: 10 }, { wch: 10 }];
+
+      // Bold day header rows
+      let rowIdx = 0;
+      days.forEach(rd => {
+        const cell = ws[XLSX.utils.encode_cell({ r: rowIdx, c: 0 })];
+        if (cell) { cell.s = { font: { bold: true, sz: 13 } }; }
+        rowIdx += rd.stops.length + 3; // header + col header + stops + empty
+      });
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Week ' + week);
+    });
+  }
+
+  const scopeLabel = scope === 'day' ? routeData[0]?.day.label.toLowerCase() : scope === 'week' ? 'week' + S.routeWeek : 'all';
+  XLSX.writeFile(wb, `route_${scopeLabel}_${todayStr()}.xlsx`);
+}
+
+// ── PDF Export ───────────────────────────────────────────────
+function exportRoutePdf(scope) {
+  scope = scope || 'all';
+  const routeData = getRouteDataForScope(scope);
+  if (routeData.length === 0) { appAlert('No route data to export.'); return; }
+
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  // Build HTML for PDF
+  let body = '';
+  routeData.forEach(rd => {
+    body += `<div style="margin-bottom:24px">
+      <h2 style="margin:0 0 4px;font-size:16px;color:#333;border-bottom:2px solid ${rd.day.color};padding-bottom:4px">
+        Week ${rd.week} — ${rd.day.label}
+        <span style="font-weight:400;font-size:13px;color:#888;margin-left:8px">${rd.stops.length} customers</span>
+      </h2>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px">
+        <thead>
+          <tr style="background:#f5f5f5;text-align:left">
+            <th style="padding:6px 8px;width:30px">#</th>
+            <th style="padding:6px 8px">Customer</th>
+            <th style="padding:6px 8px">City</th>
+            <th style="padding:6px 8px">Postcode</th>
+            <th style="padding:6px 8px;text-align:right">Debt</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    rd.stops.forEach((s, idx) => {
+      const bgColor = idx % 2 === 0 ? '#fff' : '#fafafa';
+      body += `
+          <tr style="background:${bgColor}">
+            <td style="padding:5px 8px;color:#888">${idx + 1}</td>
+            <td style="padding:5px 8px;font-weight:500">${escHtml(s.stop.n)}</td>
+            <td style="padding:5px 8px">${escHtml(s.stop.c || '')}</td>
+            <td style="padding:5px 8px">${escHtml(s.stop.p || '')}</td>
+            <td style="padding:5px 8px;text-align:right;${s.debt > 0 ? 'color:#d32f2f;font-weight:600' : 'color:#888'}">${s.debt > 0 ? formatCurrency(s.debt) : '—'}</td>
+          </tr>`;
+    });
+
+    body += `</tbody></table></div>`;
   });
 
-  XLSX.writeFile(wb, 'route_export_' + todayStr() + '.xlsx');
+  // Build scope title
+  let scopeTitle;
+  if (scope === 'day') scopeTitle = `Week ${routeData[0].week} — ${routeData[0].day.label}`;
+  else if (scope === 'week') scopeTitle = `Week ${S.routeWeek}`;
+  else scopeTitle = 'All Weeks';
+
+  const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Costadoro Route</title>
+    <style>
+      @page { margin: 15mm; size: A4; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; margin: 0; padding: 0; }
+      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    </style>
+  </head><body>
+    <div style="text-align:center;margin-bottom:20px">
+      <h1 style="margin:0;font-size:22px;color:#1a1a1a">Costadoro Routes</h1>
+      <div style="font-size:13px;color:#888;margin-top:4px">${scopeTitle} — ${dateStr}</div>
+    </div>
+    ${body}
+    <div style="text-align:center;font-size:11px;color:#aaa;margin-top:20px;border-top:1px solid #eee;padding-top:8px">
+      Generated on ${dateStr}
+    </div>
+  </body></html>`;
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) { appAlert('Pop-up blocked. Please allow pop-ups for PDF export.'); return; }
+  printWindow.document.write(htmlContent);
+  printWindow.document.close();
+  printWindow.onload = () => {
+    printWindow.print();
+  };
 }
 
 // ══════════════════════════════════════════════════════════════
