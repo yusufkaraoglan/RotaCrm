@@ -584,11 +584,12 @@ function exportRoutePdf(scope) {
   else scopeTitle = 'All Weeks';
 
   const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>Costadoro Route</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Costadoro Route - ${scopeTitle}</title>
     <style>
       @page { margin: 15mm; size: A4; }
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; margin: 0; padding: 0; }
-      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; margin: 0; padding: 20px; max-width: 800px; margin: 0 auto; }
+      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 0; } .no-print { display: none !important; } }
     </style>
   </head><body>
     <div style="text-align:center;margin-bottom:20px">
@@ -599,28 +600,20 @@ function exportRoutePdf(scope) {
     <div style="text-align:center;font-size:11px;color:#aaa;margin-top:20px;border-top:1px solid #eee;padding-top:8px">
       Generated on ${dateStr}
     </div>
+    <div class="no-print" style="text-align:center;margin-top:16px">
+      <button onclick="window.print()" style="padding:10px 24px;background:#E85D3A;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">
+        Save as PDF
+      </button>
+    </div>
   </body></html>`;
 
-  // Use hidden iframe to avoid pop-up blockers
-  let frame = document.getElementById('pdf-print-frame');
-  if (frame) frame.remove();
-  frame = document.createElement('iframe');
-  frame.id = 'pdf-print-frame';
-  frame.style.cssText = 'position:fixed;top:-10000px;left:-10000px;width:0;height:0;border:none';
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument || frame.contentWindow.document;
-  doc.open();
-  doc.write(htmlContent);
-  doc.close();
-  setTimeout(() => {
-    try {
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
-    } catch (err) {
-      appAlert('PDF export failed: ' + err.message);
-    }
-    setTimeout(() => frame.remove(), 2000);
-  }, 300);
+  const blob = new Blob([htmlContent], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 // ══════════════════════════════════════════════════════════════
