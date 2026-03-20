@@ -1,6 +1,8 @@
 'use strict';
 // REPORTS PAGE
 // ══════════════════════════════════════════════════════════════
+let _dhShowWeeks = 8;
+
 function renderReports() {
   const body = document.querySelector('#page-reports .page-body');
   const scrollPos = body ? body.scrollTop : 0;
@@ -90,8 +92,14 @@ function renderReports() {
 function renderOverviewTab(data) {
   const hasProductFilter = S.reportProducts.length > 0;
   const productRevenue = hasProductFilter
-    ? Object.entries(data.products).reduce((s, [_, d]) => s + d.revenue, 0)
+    ? roundMoney(Object.entries(data.products).reduce((s, [_, d]) => s + d.revenue, 0))
     : data.totalRevenue;
+
+  const noData = data.deliveryCount === 0 && data.visitCount === 0;
+  const payTotal = roundMoney(data.payments.cash + data.payments.bank + data.payments.unpaid);
+  const cashPct = payTotal > 0 ? Math.round(data.payments.cash / payTotal * 100) : 0;
+  const bankPct = payTotal > 0 ? Math.round(data.payments.bank / payTotal * 100) : 0;
+  const unpaidPct = payTotal > 0 ? 100 - cashPct - bankPct : 0;
 
   return `
     ${renderProductFilterDropdown('Filter by Product')}
@@ -102,6 +110,12 @@ function renderOverviewTab(data) {
       <div class="report-hero-sub">${data.deliveryCount} deliveries &middot; ${data.visitCount} visits</div>
       ${hasProductFilter ? `<div class="report-hero-sub" style="font-size:11px;margin-top:4px">${S.reportProducts.map(p => escHtml(p)).join(', ')}</div>` : ''}
     </div>
+
+    ${noData ? `<div class="card" style="text-align:center;padding:30px;margin-bottom:16px">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="var(--text-muted)" stroke-width="1.5" style="margin-bottom:8px"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="5" width="4" height="16" rx="1"/><rect x="17" y="8" width="4" height="13" rx="1"/></svg>
+      <p style="color:var(--text-muted);font-size:13px">No deliveries in this period</p>
+      <p style="color:var(--text-sec);font-size:12px;margin-top:4px">Try changing the date range above</p>
+    </div>` : ''}
 
     <div class="metric-grid">
       <div class="metric-card">
@@ -148,19 +162,19 @@ function renderOverviewTab(data) {
             <div class="pay-breakdown-label">
               <span class="pay-dot" style="background:var(--success)"></span>Cash
             </div>
-            <span class="pay-breakdown-amount" style="color:var(--success)">${formatCurrency(data.payments.cash)}</span>
+            <span class="pay-breakdown-amount" style="color:var(--success)">${formatCurrency(data.payments.cash)} <span style="font-size:11px;opacity:.7">${cashPct}%</span></span>
           </div>
           <div class="pay-breakdown-row">
             <div class="pay-breakdown-label">
               <span class="pay-dot" style="background:var(--info)"></span>Bank
             </div>
-            <span class="pay-breakdown-amount" style="color:var(--info)">${formatCurrency(data.payments.bank)}</span>
+            <span class="pay-breakdown-amount" style="color:var(--info)">${formatCurrency(data.payments.bank)} <span style="font-size:11px;opacity:.7">${bankPct}%</span></span>
           </div>
           <div class="pay-breakdown-row">
             <div class="pay-breakdown-label">
               <span class="pay-dot" style="background:var(--danger)"></span>Unpaid
             </div>
-            <span class="pay-breakdown-amount" style="color:var(--danger)">${formatCurrency(data.payments.unpaid)}</span>
+            <span class="pay-breakdown-amount" style="color:var(--danger)">${formatCurrency(data.payments.unpaid)} <span style="font-size:11px;opacity:.7">${unpaidPct}%</span></span>
           </div>
         </div>
       </div>
@@ -168,7 +182,7 @@ function renderOverviewTab(data) {
 
     <div class="report-section">
       <h3>Top Products</h3>
-      <div class="card chart-card"><canvas id="productsChart"></canvas></div>
+      ${Object.keys(data.products).length === 0 ? '<div class="card" style="text-align:center;padding:20px"><p class="text-muted">No product data for this period</p></div>' : '<div class="card chart-card"><canvas id="productsChart"></canvas></div>'}
     </div>`;
 }
 
@@ -220,11 +234,18 @@ function renderCustomersTab(data) {
   return html;
 }
 
+let _debtSortBy = 'amount'; // 'amount' | 'age' | 'name'
+function setDebtSort(by) { _debtSortBy = by; renderReports(); }
+
 function renderDebtsTab() {
   const debtors = Object.entries(S.debts).filter(([_, v]) => v > 0).map(([id, amount]) => {
     const ageDays = getDebtAgeDays(parseInt(id));
-    return { id, amount, ageDays };
-  }).sort((a, b) => b.amount - a.amount);
+    const stop = getStop(parseInt(id));
+    return { id, amount, ageDays, name: stop ? stop.n : 'Unknown' };
+  });
+  if (_debtSortBy === 'age') debtors.sort((a, b) => b.ageDays - a.ageDays);
+  else if (_debtSortBy === 'name') debtors.sort((a, b) => a.name.localeCompare(b.name));
+  else debtors.sort((a, b) => b.amount - a.amount);
   const totalDebt = debtors.reduce((s, d) => s + d.amount, 0);
 
   // Aging buckets
@@ -265,6 +286,11 @@ function renderDebtsTab() {
   if (debtors.length === 0) {
     html += '<div class="empty-state" style="padding:20px"><p>No customers with debt</p></div>';
   } else {
+    html += `<div style="display:flex;gap:4px;margin-bottom:8px">
+      <button class="date-btn ${_debtSortBy==='amount'?'active':''}" onclick="setDebtSort('amount')">By Amount</button>
+      <button class="date-btn ${_debtSortBy==='age'?'active':''}" onclick="setDebtSort('age')">By Age</button>
+      <button class="date-btn ${_debtSortBy==='name'?'active':''}" onclick="setDebtSort('name')">By Name</button>
+    </div>`;
     html += '<div class="report-section">';
     debtors.forEach(d => {
       const s = getStop(parseInt(d.id));
@@ -288,12 +314,10 @@ function renderDebtsTab() {
 
 function renderExportTab() {
   let html = '';
-  html += renderProductFilterDropdown('Select Products');
+  html += renderProductFilterDropdown('Filter Products (optional)');
 
-  if (S.reportProducts.length === 0) {
-    html += '<div class="card" style="text-align:center;padding:30px"><p class="text-muted">Select products above to generate report</p></div>';
-    return html;
-  }
+  // If no products selected, show all orders (not just product-filtered ones)
+  const showAllOrders = S.reportProducts.length === 0;
 
   const report = calcProductSalesReport();
   if (report.rows.length === 0) {
@@ -447,11 +471,11 @@ function calcReportData() {
     );
   }
 
-  const totalRevenue = filtered.filter(o => o.payMethod !== 'visit').reduce((s, o) => s + calcOrderTotal(o), 0);
+  const totalRevenue = roundMoney(filtered.filter(o => o.payMethod !== 'visit').reduce((s, o) => s + calcOrderTotal(o), 0));
   const deliveryCount = filtered.filter(o => o.payMethod !== 'visit').length;
   const visitCount = filtered.filter(o => o.payMethod === 'visit').length;
-  const avgOrder = deliveryCount > 0 ? totalRevenue / deliveryCount : 0;
-  const totalDebt = Object.values(S.debts).reduce((s, d) => s + (d || 0), 0);
+  const avgOrder = deliveryCount > 0 ? roundMoney(totalRevenue / deliveryCount) : 0;
+  const totalDebt = roundMoney(Object.values(S.debts).reduce((s, d) => s + (d || 0), 0));
 
   const products = {};
   filtered.forEach(o => {
@@ -459,7 +483,7 @@ function calcReportData() {
       if (S.reportProducts.length > 0 && !S.reportProducts.includes(item.name)) return;
       if (!products[item.name]) products[item.name] = { qty: 0, revenue: 0 };
       products[item.name].qty += item.qty;
-      products[item.name].revenue += item.qty * item.price;
+      products[item.name].revenue = roundMoney(products[item.name].revenue + item.qty * item.price);
     });
   });
 
@@ -468,12 +492,12 @@ function calcReportData() {
     const total = calcOrderTotal(o);
     if (o.payMethod === 'cash') {
       const paid = (o.cashPaid !== undefined) ? o.cashPaid : total;
-      payments.cash += Math.min(paid, total);
-      payments.unpaid += Math.max(0, total - paid);
+      payments.cash = roundMoney(payments.cash + Math.min(paid, total));
+      payments.unpaid = roundMoney(payments.unpaid + Math.max(0, total - paid));
     } else if (o.payMethod === 'bank') {
-      payments.bank += total;
+      payments.bank = roundMoney(payments.bank + total);
     } else if (o.payMethod !== 'visit') {
-      payments.unpaid += total;
+      payments.unpaid = roundMoney(payments.unpaid + total);
     }
   });
 
@@ -497,13 +521,15 @@ function calcReportData() {
 
 function calcProductSalesReport() {
   const orders = Object.values(S.orders);
+  const hasFilter = S.reportProducts.length > 0;
   let filtered = orders.filter(o => {
     if (o.status !== 'delivered' || !o.deliveredAt) return false;
     if (o.payMethod === 'visit' && (!o.items || o.items.length === 0)) return false;
     const d = o.deliveredAt.slice(0, 10);
     if (S.reportStart && d < S.reportStart) return false;
     if (S.reportEnd && d > S.reportEnd) return false;
-    return (o.items || []).some(item => S.reportProducts.includes(item.name));
+    if (hasFilter) return (o.items || []).some(item => S.reportProducts.includes(item.name));
+    return true;
   });
 
   filtered.sort((a, b) => (a.deliveredAt || '').localeCompare(b.deliveredAt || ''));
@@ -518,7 +544,7 @@ function calcProductSalesReport() {
     const total = calcOrderTotal(o);
     const prodMap = {};
     (o.items || []).forEach(item => {
-      if (S.reportProducts.includes(item.name)) {
+      if (!hasFilter || S.reportProducts.includes(item.name)) {
         prodMap[item.name] = (prodMap[item.name] || 0) + item.qty;
       }
     });
@@ -544,10 +570,10 @@ function calcProductSalesReport() {
       return { parts, type: primaryType, unpaidAmount: unpaidTotal };
     })();
 
-    totalCash += cashPaid;
-    totalBank += bankPaid;
-    totalUnpaid += unpaidTotal;
-    grandTotal += total;
+    totalCash = roundMoney(totalCash + cashPaid);
+    totalBank = roundMoney(totalBank + bankPaid);
+    totalUnpaid = roundMoney(totalUnpaid + unpaidTotal);
+    grandTotal = roundMoney(grandTotal + total);
 
     rows.push({
       name: stop.n,
@@ -555,8 +581,11 @@ function calcProductSalesReport() {
       dateTime: formatDateTime(o.deliveredAt),
       dateOnly: formatDate(o.deliveredAt),
       payDisplay,
+      cashPaid: roundMoney(cashPaid),
+      bankPaid: roundMoney(bankPaid),
+      unpaidAmount: roundMoney(unpaidTotal),
       productsSummary: Object.entries(prodMap).map(([n, q]) => `${q} ${n}`).join(', '),
-      total
+      total: roundMoney(total)
     });
   });
 
@@ -567,21 +596,27 @@ function calcProductSalesReport() {
     if (!stop) return;
     history.forEach(entry => {
       if (entry.type !== 'clear') return;
-      const d = entry.date ? entry.date.slice(0, 10) : '';
+      if (!entry.date) return; // Skip entries with no date
+      const d = entry.date.slice(0, 10);
       if (S.reportStart && d < S.reportStart) return;
       if (S.reportEnd && d > S.reportEnd) return;
-      const payMethod = entry.note?.includes('bank') ? 'bank' : entry.note?.includes('cash') ? 'cash' : 'bank';
+      const noteLC = (entry.note || '').toLowerCase();
+      const payMethod = noteLC.includes('(bank)') ? 'bank' : noteLC.includes('(cash)') ? 'cash' : 'bank';
       const parts = [{ text: formatCurrency(entry.amount), type: payMethod }];
-      if (payMethod === 'cash') totalCash += entry.amount;
-      else totalBank += entry.amount;
+      if (payMethod === 'cash') totalCash = roundMoney(totalCash + entry.amount);
+      else totalBank = roundMoney(totalBank + entry.amount);
+      const amt = roundMoney(entry.amount);
       rows.push({
         name: stop.n,
         rawDate: entry.date || '',
         dateTime: formatDateTime(entry.date),
         dateOnly: formatDate(entry.date),
         payDisplay: { parts, type: payMethod, unpaidAmount: 0 },
+        cashPaid: payMethod === 'cash' ? amt : 0,
+        bankPaid: payMethod === 'bank' ? amt : 0,
+        unpaidAmount: 0,
         productsSummary: 'Outstanding payment received',
-        total: entry.amount,
+        total: amt,
         isDebtPayment: true
       });
     });
@@ -682,14 +717,14 @@ function exportProductReportExcel() {
 
   const data = [['Customer', 'Date', 'Total', 'Cash', 'Bank', 'Unpaid', 'Products']];
   report.rows.forEach(r => {
-    const cashAmt = r.payDisplay.parts.filter(p => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
-    const bankAmt = r.payDisplay.parts.filter(p => p.method === 'bank').reduce((s, p) => s + p.amount, 0);
-    const unpaidAmt = r.payDisplay.unpaidAmount || 0;
-    const totalAmt = cashAmt + bankAmt + unpaidAmt;
+    const cashAmt = r.cashPaid || 0;
+    const bankAmt = r.bankPaid || 0;
+    const unpaidAmt = r.unpaidAmount || 0;
+    const totalAmt = roundMoney(cashAmt + bankAmt + unpaidAmt);
     data.push([r.name, r.dateTime || '', totalAmt, cashAmt || '', bankAmt || '', unpaidAmt || '', r.isDebtPayment ? 'Outstanding payment received' : r.productsSummary]);
   });
   data.push([]);
-  data.push(['TOTAL', '', report.totalCash + report.totalBank + report.totalUnpaid, report.totalCash, report.totalBank, report.totalUnpaid]);
+  data.push(['TOTAL', '', roundMoney(report.totalCash + report.totalBank + report.totalUnpaid), report.totalCash, report.totalBank, report.totalUnpaid]);
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(data);
@@ -732,7 +767,9 @@ function renderDeliveryHistoryContent() {
   if (sortedWeeks.length === 0) {
     html += `<div class="empty-state"><p>No delivery history yet</p></div>`;
   } else {
-    sortedWeeks.forEach(monday => {
+    const maxWeeks = _dhShowWeeks || 8;
+    const visibleWeeks = sortedWeeks.slice(0, maxWeeks);
+    visibleWeeks.forEach(monday => {
       const orders = weeks[monday];
       const wLabel = weekLabel(monday);
       const isCurrent = monday === thisMonday;
@@ -817,6 +854,9 @@ function renderDeliveryHistoryContent() {
 
       html += `</div></div>`;
     });
+    if (sortedWeeks.length > maxWeeks) {
+      html += `<button class="btn btn-outline btn-block" onclick="_dhShowWeeks=${maxWeeks + 8};reportTab='history';renderReports()" style="margin:8px 0">Load More (${sortedWeeks.length - maxWeeks} weeks remaining)</button>`;
+    }
   }
 
   return html;

@@ -431,13 +431,24 @@ function getDayObj(dayId) { return DAYS.find(d => d.id === dayId); }
 function getDebtAgeDays(stopId) {
   const dh = S.debtHistory[stopId];
   if (!dh || !Array.isArray(dh)) return 0;
-  // Find oldest unpaid 'add' entry that hasn't been fully cleared
-  const addEntries = dh.filter(e => e.type === 'add').sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  if (addEntries.length === 0) return 0;
-  const oldest = addEntries[0];
-  if (!oldest.date) return 0;
-  const ageDays = Math.floor((Date.now() - new Date(oldest.date).getTime()) / 86400000);
-  return Math.max(0, ageDays);
+  // Walk through history chronologically tracking running balance
+  // The age is measured from the earliest point where balance went positive
+  // and stayed positive until now
+  const sorted = [...dh].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  let balance = 0;
+  let positiveFromDate = null;
+  sorted.forEach(e => {
+    if (!e.date) return;
+    if (e.type === 'add') {
+      if (balance <= 0) positiveFromDate = e.date; // balance just went positive
+      balance = roundMoney(balance + (e.amount || 0));
+    } else if (e.type === 'clear' || e.type === 'adjust') {
+      balance = roundMoney(balance - (e.amount || 0));
+      if (balance <= 0) positiveFromDate = null; // debt fully cleared
+    }
+  });
+  if (!positiveFromDate || balance <= 0) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(positiveFromDate).getTime()) / 86400000));
 }
 
 function getDebtAgeBadge(stopId, debt) {

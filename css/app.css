@@ -217,7 +217,7 @@ body.modal-open .page{touch-action:none}
 .pf-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:16px;font-size:12px;font-weight:500;background:var(--primary);color:#fff}
 .pf-chip-x{cursor:pointer;font-size:14px;line-height:1;opacity:.8;margin-left:2px}
 .pf-chip-x:hover{opacity:1}
-.pf-dropdown{position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50;max-height:320px;display:flex;flex-direction:column;overflow:hidden}
+.pf-dropdown{position:fixed;left:16px;right:16px;margin-top:4px;background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50;max-height:min(320px,50vh);display:flex;flex-direction:column;overflow:hidden}
 .pf-search{border:none;border-bottom:1px solid var(--border);padding:10px 14px;font-size:14px;outline:none;background:transparent;color:var(--text);width:100%;box-sizing:border-box}
 .pf-search::placeholder{color:var(--text-muted)}
 .pf-actions{display:flex;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border)}
@@ -396,7 +396,8 @@ body.modal-open .page{touch-action:none}
 .catalog-stock-pill{display:inline-flex;align-items:center;justify-content:center;min-width:28px;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:700;color:#fff}
 
 /* === REPORTS V2 === */
-.report-tabs-bar{display:flex;gap:2px;padding:6px 12px;background:var(--card);border-bottom:1px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;flex-shrink:0}
+.report-tabs-bar{display:flex;gap:2px;padding:6px 12px;background:var(--card);border-bottom:1px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;flex-shrink:0;position:relative}
+.report-tabs-bar::after{content:'';position:absolute;right:0;top:0;bottom:0;width:24px;background:linear-gradient(to right,transparent,var(--card));pointer-events:none}
 .report-tabs-bar::-webkit-scrollbar{display:none}
 .report-tabs-bar{-ms-overflow-style:none;scrollbar-width:none}
 .report-tab-btn{display:flex;align-items:center;gap:4px;padding:8px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;color:var(--text-sec);white-space:nowrap;transition:all .15s;flex-shrink:0}
