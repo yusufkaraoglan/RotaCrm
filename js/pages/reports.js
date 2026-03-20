@@ -6,6 +6,11 @@ let _dhShowWeeks = 8;
 function renderReports() {
   const body = document.querySelector('#page-reports .page-body');
   const scrollPos = body ? body.scrollTop : 0;
+
+  // Preserve tab bar scroll position across re-renders
+  const tabBar = document.querySelector('#page-reports .report-tabs-bar');
+  const tabScrollPos = tabBar ? tabBar.scrollLeft : 0;
+
   const data = calcReportData();
 
   let html = `
@@ -71,6 +76,17 @@ function renderReports() {
 
   const newBody = document.querySelector('#page-reports .page-body');
   if (newBody) newBody.scrollTop = scrollPos;
+
+  // Restore tab bar scroll & scroll active tab into view
+  const newTabBar = document.querySelector('#page-reports .report-tabs-bar');
+  if (newTabBar) {
+    if (tabScrollPos > 0) {
+      newTabBar.scrollLeft = tabScrollPos;
+    } else {
+      const activeBtn = newTabBar.querySelector('.report-tab-btn.active');
+      if (activeBtn) activeBtn.scrollIntoView({ behavior: 'instant', inline: 'center', block: 'nearest' });
+    }
+  }
 
   // Focus search input if dropdown is open
   if (productFilterOpen) {
