@@ -220,30 +220,87 @@ function importExcel(file) {
       const wb = XLSX.read(e.target.result, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      if (!data.length) { appAlert('Empty file.'); return; }
 
-      let added = 0;
+      // Detect header row and build column map
+      const colMap = { name: 0, address: 1, city: 2, postcode: 3 }; // defaults
+      let startRow = 0;
+      const headerAliases = {
+        name: ['name', 'customer', 'customer name'],
+        address: ['address', 'street', 'street address'],
+        city: ['city', 'area', 'town'],
+        postcode: ['postcode', 'post code', 'zip', 'zip code', 'postal code'],
+        contact: ['contact', 'contact name', 'contact person'],
+        phone: ['phone', 'mobile', 'telephone', 'tel', 'mobile phone'],
+        email: ['email', 'e-mail', 'mail'],
+        brand: ['brand'],
+        day: ['assigned', 'assigned day', 'day', 'route day'],
+        notes: ['notes', 'note', 'comment', 'comments']
+      };
+      if (data[0] && typeof data[0][0] === 'string' && data[0][0].toLowerCase().trim().match(/^(name|customer)/)) {
+        startRow = 1;
+        const hdr = data[0].map(h => String(h || '').toLowerCase().trim());
+        // Reset colMap and detect from headers
+        Object.keys(colMap).forEach(k => colMap[k] = -1);
+        for (const [field, aliases] of Object.entries(headerAliases)) {
+          const idx = hdr.findIndex(h => aliases.includes(h));
+          if (idx >= 0) colMap[field] = idx;
+        }
+        // Name column is required
+        if (colMap.name < 0) { appAlert('Could not find "Name" column in header row.'); return; }
+      }
+
+      const _col = (row, key) => colMap[key] >= 0 ? String(row[colMap[key]] || '').trim() : '';
+
+      let added = 0, updated = 0;
       let maxId = STOPS.reduce((m, s) => Math.max(m, s.id), 0);
-      const startRow = (data[0] && typeof data[0][0] === 'string' && data[0][0].toLowerCase().includes('name')) ? 1 : 0;
+      const savePromises = [];
 
       for (let i = startRow; i < data.length; i++) {
         const row = data[i];
-        if (!row || !row[0]) continue;
-        const name = String(row[0]).trim().toUpperCase();
-        if (STOPS.some(s => s.n.toUpperCase() === name)) continue;
-        maxId++;
-        STOPS.push({
-          id: maxId,
-          n: name,
-          a: String(row[1] || '').trim(),
-          c: String(row[2] || '').trim(),
-          p: String(row[3] || '').trim().toUpperCase()
-        });
-        added++;
+        if (!row || !_col(row, 'name')) continue;
+        const name = _col(row, 'name').toUpperCase();
+        const existing = STOPS.find(s => s.n.toUpperCase() === name);
+
+        if (existing) {
+          // Update empty fields on existing customer
+          let changed = false;
+          if (!existing.a && _col(row, 'address')) { existing.a = _col(row, 'address'); changed = true; }
+          if (!existing.c && _col(row, 'city')) { existing.c = _col(row, 'city'); changed = true; }
+          if (!existing.p && _col(row, 'postcode')) { existing.p = normalizePostcode(_col(row, 'postcode')); changed = true; }
+          if (!existing.cn && _col(row, 'contact')) { existing.cn = _col(row, 'contact'); changed = true; }
+          if (!existing.ph && _col(row, 'phone')) { existing.ph = _col(row, 'phone'); changed = true; }
+          if (!existing.em && _col(row, 'email')) { existing.em = _col(row, 'email'); changed = true; }
+          if (!S.brands[existing.id] && _col(row, 'brand')) { S.brands[existing.id] = _col(row, 'brand'); }
+          if (!S.cnotes[existing.id] && _col(row, 'notes')) { S.cnotes[existing.id] = _col(row, 'notes'); }
+          if (changed) updated++;
+        } else {
+          maxId++;
+          const newStop = {
+            id: maxId,
+            n: name,
+            a: _col(row, 'address'),
+            c: _col(row, 'city'),
+            p: normalizePostcode(_col(row, 'postcode')),
+            cn: _col(row, 'contact'),
+            ph: _col(row, 'phone'),
+            em: _col(row, 'email')
+          };
+          STOPS.push(newStop);
+          if (_col(row, 'brand')) S.brands[newStop.id] = _col(row, 'brand');
+          if (_col(row, 'notes')) S.cnotes[newStop.id] = _col(row, 'notes');
+          added++;
+        }
       }
 
-      save.stops();
+      savePromises.push(save.stops());
+      if (Object.keys(colMap).some(k => ['brand'].includes(k) && colMap[k] >= 0)) savePromises.push(save.brands());
+      if (colMap.notes >= 0) savePromises.push(save.cnotes());
+      Promise.allSettled(savePromises);
       closeModal();
-      appAlert(`Import complete: ${added} new customers added.`);
+      let msg = `Import complete: ${added} new customers added.`;
+      if (updated > 0) msg += ` ${updated} existing customers updated.`;
+      appAlert(msg);
       if (curPage === 'customers') renderCustomers();
       else if (curPage === 'settings') renderSettings();
     } catch (err) {
@@ -257,14 +314,15 @@ function exportExcel() {
   const wb = XLSX.utils.book_new();
 
   // Customers sheet
-  const custData = [['Name', 'Address', 'City', 'Postcode', 'Assigned Day', 'Debt']];
+  const custData = [['Name', 'Address', 'City', 'Postcode', 'Contact Name', 'Phone', 'Email', 'Brand', 'Assigned Day', 'Debt', 'Notes']];
   STOPS.forEach(s => {
     const dayId = S.assign[s.id];
     const dayObj = dayId ? getDayObj(dayId) : null;
     const dayLabel = dayObj ? `Week ${dayObj.week} - ${dayObj.label}` : '';
-    custData.push([s.n, s.a, s.c, s.p, dayLabel, S.debts[s.id] || 0]);
+    custData.push([s.n, s.a, s.c, s.p, s.cn || '', s.ph || '', s.em || '', S.brands[s.id] || '', dayLabel, S.debts[s.id] || 0, S.cnotes[s.id] || '']);
   });
   const ws1 = XLSX.utils.aoa_to_sheet(custData);
+  ws1['!cols'] = [{wch:28},{wch:30},{wch:16},{wch:10},{wch:20},{wch:16},{wch:24},{wch:14},{wch:16},{wch:10},{wch:30}];
   XLSX.utils.book_append_sheet(wb, ws1, 'Customers');
 
   // Orders sheet
